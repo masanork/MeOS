@@ -29,6 +29,7 @@
 #include <m5os/wall_time.h>
 #include <m5os/hal_i2c.h>
 #include "hardware.h"
+#include "sd.h"
 #include <m5os/audio.h>
 #include <m5os/microphone.h>
 #include <m5os/vfs.h>
@@ -938,6 +939,7 @@ static const command_t s_commands[] = {
 #endif
     { "devices", cmd_devices, "board devices: detected, untested, or unsupported (read-only)" },
     { "power",   cmd_power,   "battery voltage/current, estimated level and charger state (read-only)" },
+    { "sd", shell_sd, "sd [status|probe|mount|unmount] read-only microSD" },
     { "storage", cmd_storage, "root backing, persistence and microSD support (read-only)" },
 #endif
     { "history", cmd_history, "show command history (or use Up/Down arrows)" },
