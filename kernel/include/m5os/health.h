@@ -6,7 +6,7 @@ typedef struct { uint32_t handle,owner,timeout_ms; uint64_t last_us; char name[1
 uint32_t health_register(const char *name,uint32_t owner,uint32_t timeout_ms);
 bool health_renew(uint32_t handle);
 void health_release_owner(uint32_t owner); /* only after successful driver teardown */
-uint32_t health_expired(uint64_t now_us); /* first stale handle, or 0 */
+uint32_t health_expired(void); /* first stale handle, or 0 */
 unsigned health_snapshot(health_info_t *out,unsigned max);
 void health_start(void);
 int health_command(int argc,char **argv);

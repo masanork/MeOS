@@ -65,7 +65,8 @@ https://download.epsondevice.com/td/pdf/app/RX8130CE_en.pdf
 ## Progress and optional reset watchdog
 
 Explicit progress leases have non-reused handles, bounded timeouts and owner
-cleanup. Ordinary waiting tasks need not subscribe. The app cleanup service is
+cleanup. Expiry samples monotonic time while holding the same IRQ lock as
+renewal, so a concurrent heartbeat cannot appear to come from the future. Ordinary waiting tasks need not subscribe. The app cleanup service is
 monitored. A high-priority sleeping supervisor checks leases and scheduler ticks.
 Only its task context feeds MWDT0; the timer interrupt never does. Software
 inspection is enabled by default; hardware arming is disabled by default.

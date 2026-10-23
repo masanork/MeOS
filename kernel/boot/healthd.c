@@ -11,7 +11,7 @@ static void supervisor(void *unused) {
     (void)unused;uint32_t last=sched_ticks();
     for(;;) {
         task_sleep(100);
-        uint32_t ticks=sched_ticks(),bad=health_expired(hal_time_now_us());
+        uint32_t ticks=sched_ticks(),bad=health_expired();
         if(M5OS_WATCHDOG_ENABLED) {
             if(!s_armed) {
                 if(!hal_watchdog_start(2000))kernel_panic("watchdog unavailable or already owned");
@@ -36,7 +36,7 @@ void health_start(void) {
 }
 int health_command(int argc,char **argv) {
     (void)argc;(void)argv;health_info_t leases[HEALTH_MAX];unsigned n=health_snapshot(leases,HEALTH_MAX);
-    uint64_t now=hal_time_now_us();uint32_t bad=health_expired(now);
+    uint64_t now=hal_time_now_us();uint32_t bad=health_expired();
     kprintf("watchdog: %s; stale lease %u (0=none)\n",s_armed?"armed":"disabled",bad);
     for(unsigned i=0;i<n;i++)kprintf("%u %s owner %u timeout %u ms age %u ms\n",leases[i].handle,leases[i].name,
         leases[i].owner,leases[i].timeout_ms,now>=leases[i].last_us?(unsigned)((now-leases[i].last_us)/1000):0);
