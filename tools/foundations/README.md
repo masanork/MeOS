@@ -36,7 +36,8 @@ matching forced termination. All calculations occur under the scheduler lock.
 
 Callbacks are registered and sealed at boot. Hardware callbacks precede window,
 file and WebAssembly cleanup. All hooks run even if one fails. Any failure
-keeps app memory quarantined and schedules a retry; leases are released and
+keeps app memory quarantined and schedules a retry (`apps -l` exposes the last
+cleanup error); leases are released and
 owner memory reclaimed only after success. Reserved-app abort and task-launch
 failure use this same rule. Callbacks must be idempotent; current legacy void
 cleanup adapters report success after their existing stop routine returns.

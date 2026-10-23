@@ -516,6 +516,7 @@ static int cmd_apps(int argc, char **argv)
             SH_PRINTF("%-4u %-8s %-8s %-4u %s  %-5u  %u B held\n", a[i].app_id, a[i].name, app_state_name(a[i].state), a[i].owner_task, perms, a[i].tasks, a[i].mem_bytes);
         else
             SH_PRINTF("%-4u %-8s %-8s %-4u %s  %-5u  %u B reclaimed\n", a[i].app_id, a[i].name, app_state_name(a[i].state), a[i].owner_task, perms, a[i].tasks, a[i].reclaimed_bytes);
+        if(a[i].cleanup_error) SH_PRINTF("     cleanup retry pending: %d; owner memory retained\n",a[i].cleanup_error);
     }
     return 0;
 }

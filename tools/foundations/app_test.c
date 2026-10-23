@@ -41,7 +41,7 @@ static void entry(void *p){(void)p;}
 int main(void){
     app_init();assert(appd);
     app_t *a=app_reserve("partial",APP_PERM_ALL);assert(a);
-    app_abort(a);assert(a->state==APP_KILLED&&a->cleanup_pending&&!freed[a->app_id]);
+    app_abort(a);assert(a->state==APP_KILLED&&a->cleanup_pending&&a->cleanup_error==ERR_IO&&!freed[a->app_id]);
     app_t *b=app_reserve("launch-failure",APP_PERM_ALL);assert(b&&b!=a);
     assert(app_launch(b,entry,NULL,1,4096)==ERR_NOMEM);
     assert(b->state==APP_KILLED&&b->cleanup_pending&&!freed[b->app_id]);
@@ -49,6 +49,7 @@ int main(void){
     if(!setjmp(finished))appd(NULL);
     assert(a->cleaned&&b->cleaned&&!a->cleanup_pending&&!b->cleanup_pending);
     assert(freed[a->app_id]==1&&freed[b->app_id]==1&&a->reclaimed_bytes==128);
+    assert(!a->cleanup_error&&!b->cleanup_error);
     assert(!depth&&!locked);
     puts("app: partial/failed-launch cleanup quarantines memory until retry succeeds, then reclaims exactly once PASS");
 }

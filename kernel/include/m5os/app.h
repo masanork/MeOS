@@ -41,6 +41,7 @@ typedef struct app {
     uint32_t     permissions;
     bool         cleanup_pending;
     bool         cleaned;
+    int          cleanup_error; /* last failed teardown; 0 after successful reclaim */
     uint32_t     reclaimed_bytes;
 } app_t;
 
@@ -62,6 +63,7 @@ typedef struct {
     uint32_t    permissions;
     uint32_t    mem_bytes;       /* umalloc'd bytes currently held */
     uint32_t    reclaimed_bytes; /* freed by the kernel when it ended */
+    int         cleanup_error;
     uint32_t    tasks;           /* live tasks belonging to it */
 } app_info_t;
 

@@ -126,7 +126,9 @@ int app_launch(app_t *a, void (*task_entry)(void *), void *arg, uint8_t priority
 
 void app_abort(app_t *a)
 {
-    if(app_cleanup_run(a->app_id)!=ERR_OK) {
+    int cleanup=app_cleanup_run(a->app_id);
+    a->cleanup_error=cleanup;
+    if(cleanup!=ERR_OK) {
         uint32_t irq=arch_irq_disable();
         a->state=APP_KILLED; a->cleanup_pending=true;
         arch_irq_restore(irq); return;
@@ -176,6 +178,7 @@ int app_list(app_info_t *out, int max)
         o->permissions = a->permissions;
         o->mem_bytes = (uint32_t)kmem_owned_bytes(a->app_id);
         o->reclaimed_bytes = a->reclaimed_bytes;
+        o->cleanup_error = a->cleanup_error;
         o->tasks = 0;
         for (int t = 0; t < nt; t++) if (ti[t].app_id == a->app_id && ti[t].state != TASK_TERMINATED) o->tasks++;
     }
@@ -203,6 +206,7 @@ static void appd_task(void *arg)
 
             task_kill_app(a);                          /* children still running */
             int cleanup=app_cleanup_run(a->app_id);
+            a->cleanup_error=cleanup;
             if(cleanup!=ERR_OK) {
                 /* A failed stop must not turn into a use-after-free. Retry later. */
                 irq=arch_irq_disable(); a->cleanup_pending=true; arch_irq_restore(irq);
