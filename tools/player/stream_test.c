@@ -8,7 +8,8 @@
 struct reader{const unsigned char *data;size_t size,pos,limit;unsigned reads,fail_at;};
 static int read_input(void *ctx,void *out,size_t len){
     struct reader *r=ctx;if(++r->reads==r->fail_at)return ERR_IO;
-    if(len>r->limit)len=r->limit;if(len>r->size-r->pos)len=r->size-r->pos;
+    if(len>r->limit)len=r->limit;
+    if(len>r->size-r->pos)len=r->size-r->pos;
     memcpy(out,r->data+r->pos,len);r->pos+=len;return (int)len;
 }
 static int seek_input(void *ctx,uint32_t offset){struct reader *r=ctx;r->pos=offset>r->size?r->size:offset;return (int)r->pos;}
@@ -19,7 +20,8 @@ static int run(const unsigned char *data,size_t size,size_t limit,FILE *output,u
         assert(rc<=257);frames+=(unsigned)rc;assert(frames<24000*10);
         if(output)assert(fwrite(pcm,4,(size_t)rc,output)==(size_t)rc);
     }
-    if(rate)*rate=mp3_stream_rate(s);if(channels)*channels=mp3_stream_channels(s);
+    if(rate)*rate=mp3_stream_rate(s);
+    if(channels)*channels=mp3_stream_channels(s);
     free(s);return rc<0?rc:(int)frames;
 }
 int main(int argc,char **argv){
