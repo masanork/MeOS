@@ -10,6 +10,7 @@
 #include <m5os/arch.h>
 #include <m5os/task.h>
 #include <m5os/mutex.h>
+#include <m5os/peripheral.h>
 #include <m5os/kmalloc.h>
 #include <m5os/kprintf.h>
 #include "hal/i2s_ll.h"
@@ -28,6 +29,8 @@ static cache_desc_t s_desc[BLOCKS];
 static int16_t *s_pcm;
 static void *s_allocation;
 static mutex_t s_playback_lock = MUTEX_INIT;
+static const char s_resource_owner;
+static const peripheral_t s_resources[] = { PERIPHERAL_I2S0, PERIPHERAL_AHB_DMA_TX2 };
 static bool s_hw, s_busy, s_task, s_claimed;
 static uint32_t s_owner, s_blocks, s_errors;
 static unsigned s_next;
@@ -73,6 +76,7 @@ static bool hardware(void)
     ahb_dma_ll_tx_enable_descriptor_burst(&AHB_DMA, CH, true);
     ahb_dma_ll_tx_enable_data_burst(&AHB_DMA, CH, false);
     ahb_dma_ll_tx_connect_to_periph(&AHB_DMA, CH, GDMA_TRIG_PERIPH_I2S, SOC_GDMA_TRIG_PERIPH_I2S0);
+    s_hw = true; /* teardown can now stop our configured DMA after app termination */
     arch_irq_restore(irq);
     pin(30, I2S0_MCLK_PAD_OUT_IDX); pin(27, I2S0_O_BCK_PAD_OUT_IDX);
     pin(29, I2S0_O_WS_PAD_OUT_IDX); pin(26, I2S0_O_SD_PAD_OUT_IDX);
@@ -121,10 +125,23 @@ static void worker(void *arg)
         mutex_unlock(&s_playback_lock);
     }
 }
+static void release_hardware(void)
+{
+    if (s_hw) {
+        i2s_ll_tx_stop(&I2S0); ahb_dma_ll_tx_stop(&AHB_DMA, CH);
+        ahb_dma_ll_tx_reset_channel(&AHB_DMA, CH);
+        ahb_dma_ll_tx_disconnect_from_periph(&AHB_DMA, CH);
+        s_hw = false;
+    }
+    peripheral_release_owner(&s_resource_owner);
+}
 bool audio_open(uint32_t owner, audio_render_t render, void *arg)
 {
     uint32_t irq = arch_irq_disable();
     if (s_claimed || !owner || !render) { arch_irq_restore(irq); kprintf("audio: open rejected claimed=%u owner=%u\n",s_claimed,owner); return false; }
+    if (!peripheral_claim(s_resources, 2, &s_resource_owner)) {
+        arch_irq_restore(irq); kputs("audio: I2S0/DMA reserved\n"); return false;
+    }
     s_claimed = true; s_owner = owner;
     arch_irq_restore(irq);
     unsigned stage=1;
@@ -158,7 +175,9 @@ bool audio_open(uint32_t owner, audio_render_t render, void *arg)
 fail:
     kprintf("audio: initialization failed at stage %u\n",stage);
     if (stage > 1) { amp(false); reg(25,0x24); reg(4,0xc0); reg(2,0xff); }
-    s_claimed = false; s_owner = 0; return false;
+    irq = arch_irq_disable();
+    release_hardware(); s_claimed = false; s_owner = 0;
+    arch_irq_restore(irq); return false;
 }
 void audio_close(uint32_t owner)
 {
@@ -167,10 +186,7 @@ void audio_close(uint32_t owner)
     amp(false); reg(25,0x24); task_sleep(10); reg(4,0xc0); reg(2,0xff);
     uint32_t irq = arch_irq_disable();
     s_busy = false;
-    if (s_hw) {
-        i2s_ll_tx_stop(&I2S0); ahb_dma_ll_tx_stop(&AHB_DMA, CH);
-        ahb_dma_ll_tx_reset_channel(&AHB_DMA, CH);
-    }
+    release_hardware();
     s_render = NULL;
     void *p = s_allocation; s_allocation = NULL; s_pcm = NULL; s_owner = 0; s_claimed = false;
     arch_irq_restore(irq); kfree(p);
