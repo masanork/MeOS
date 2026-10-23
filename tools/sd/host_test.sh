@@ -8,8 +8,8 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
 "$OUT/spi_test"
 python3 tools/sd/make_images.py "$OUT"
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
-    -Ikernel/include -Ithird_party/fatfs \
-    tools/sd/fat_test.c fs/fat/fat_ro.c third_party/fatfs/ff.c -o "$OUT/fat_test"
+    -DM5OS_BOARD_TAB5=1 -Ikernel/include -Ithird_party/fatfs \
+    tools/sd/fat_test.c fs/fat/fat_ro.c third_party/fatfs/ff.c third_party/fatfs/ffunicode.c -o "$OUT/fat_test"
 for IMAGE in "$OUT"/*.img; do "$OUT/fat_test" "$IMAGE"; done
 # Write and format APIs must not even be present in the linked binary.
 if nm "$OUT/fat_test" | rg ' [Tt] _?(f_write|f_mkfs|f_unlink|f_mkdir|f_truncate)$'; then

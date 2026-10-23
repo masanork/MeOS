@@ -8,7 +8,7 @@ import sys
 out = pathlib.Path(sys.argv[1])
 
 def make(bits, mbr=False):
-    total, reserved, fatsz, roots = {12: (2000, 1, 6, 32), 16: (10000, 1, 40, 32), 32: (70000, 32, 550, 0)}[bits]
+    total, reserved, fatsz, roots = {12: (2000, 1, 6, 64), 16: (10000, 1, 40, 64), 32: (70000, 32, 550, 0)}[bits]
     base = 2048 if mbr else 0
     image = bytearray((base + total) * 512)
     b = memoryview(image)[base * 512:(base + 1) * 512]
@@ -65,7 +65,33 @@ def make(bits, mbr=False):
     entry(cluster(directory), b'.          ', 0x10, directory, 0)
     entry(cluster(directory) + 32, b'..         ', 0x10, 0, 0)
     entry(cluster(directory) + 64, b'NEST    TXT', 0x20, nested, 7)
-    name = f'fat{bits}' + ('-mbr' if mbr else '')
+    # Long-name records, including Unicode, spaces, surrogate pairs and maximum names.
+    if bits == 32:
+        root_chain=[2,100,101,102]
+        for i,c in enumerate(root_chain):setfat(c,root_chain[i+1] if i+1<len(root_chain) else eoc)
+    def slot(index):
+        return cluster(root_chain[index//16])+index%16*32 if bits==32 else root+index*32
+    def checksum(alias):
+        value=0
+        for b in alias:value=(((value&1)<<7)+(value>>1)+b)&255
+        return value
+    def lfn(index,text,alias):
+        raw=text.encode('utf-16-le');units=list(struct.unpack('<'+'H'*(len(raw)//2),raw))
+        if len(units)%13:units+=[0]+[0xffff]*((12-len(units)%13)%13)
+        chunks=[units[i:i+13] for i in range(0,len(units),13)]
+        for sequence in range(len(chunks),0,-1):
+            off=slot(index);index+=1;image[off:off+32]=bytes(32)
+            image[off]=sequence|(0x40 if sequence==len(chunks) else 0)
+            image[off+11]=0x0f;image[off+13]=checksum(alias)
+            for position,value in zip([1,3,5,7,9,14,16,18,20,22,24,28,30],chunks[sequence-1]):struct.pack_into('<H',image,off+position,value)
+        entry(slot(index),alias,0x20,first,1300)
+        return index+1
+    index=2
+    index=lfn(index,'長い日本語の録音ファイル名 2026年10月24日.mp3',b'RECORD~1MP3')
+    index=lfn(index,'a'*251+'.mp3',b'ASCII_~1MP3')
+    index=lfn(index,'録'*251+'.mp3',b'JAPANE~1MP3')
+    index=lfn(index,'音楽🎵.mp3',b'MUSIC_~1MP3')
+    name = f'fat{bits}'  + ('-mbr' if mbr else '')
     (out / (name + '.img')).write_bytes(image)
     # A directory cluster that links to itself and has no terminating entry.
     # The adapter's operation budget must reject the otherwise endless traversal.

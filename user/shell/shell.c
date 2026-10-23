@@ -31,6 +31,7 @@
 #include "hardware.h"
 #include "sd.h"
 #include <m5os/audio.h>
+#include <m5os/player.h>
 #include <m5os/microphone.h>
 #include <m5os/vfs.h>
 #include <m5os/task.h>
@@ -55,7 +56,7 @@
 #endif
 #endif
 
-#define LINE_MAX     128
+#define LINE_MAX     (VFS_PATH_MAX+32)
 #define ARG_MAX      16
 #define OUT_BUF      160
 #define CAT_CHUNK    128
@@ -143,6 +144,13 @@ static int cmd_i2c(int argc,char **argv) {
     (void)argc; (void)argv;hal_i2c_stats_t stats;hal_i2c_get_stats(&stats);
     kprintf("I2C transactions: ok %u, NACK %u, timeout %u, invalid %u\n",stats.ok,stats.nack,stats.timeout,stats.invalid);return 0;
 }
+#if M5OS_BOARD_TAB5
+static int cmd_play(int argc,char **argv) {
+    char path[VFS_PATH_MAX];
+    if(argc!=2 || !resolve(argv[1],path)){sh_puts("usage: play \"/sd/path/track.mp3\"\n");return 1;}
+    int rc=mp3_play_file(path);if(rc<0)SH_PRINTF("play: error %d\n",rc);return rc<0?1:0;
+}
+#endif
 static int cmd_crash(int argc,char **argv) { (void)argc; (void)argv; crash_print_previous(); return 0; }
 
 static int cmd_ps(int argc, char **argv)
@@ -894,7 +902,11 @@ static int cmd_storage(int argc, char **argv)
 #define CH_CTRL_N    0x0E
 #define CH_CTRL_P    0x10
 
+#if M5OS_BOARD_TAB5
+static char (*s_history)[LINE_MAX]; /* long command history belongs in PSRAM */
+#else
 static char s_history[HIST_MAX][LINE_MAX];
+#endif
 static int  s_hist_count = 0;
 
 static bool str_eq(const char *a, const char *b) { while (*a && *a == *b) { a++; b++; } return *a == *b; }
@@ -916,6 +928,9 @@ static void history_add(const char *line)
     while (line[i] == ' ' || line[i] == '\t') i++;
     if (!line[i]) return;
     if (s_hist_count > 0 && str_eq(line, s_history[(s_hist_count - 1) % HIST_MAX])) return;
+#if M5OS_BOARD_TAB5
+    if(!s_history)return;
+#endif
     str_copy_len(s_history[s_hist_count % HIST_MAX], line, LINE_MAX);
     s_hist_count++;
 }
@@ -935,6 +950,7 @@ static const command_t s_commands[] = {
 #if M5OS_BOARD_TAB5
 #if M5OS_BOARD_TAB5
     { "mic", microphone_command, "mic test [SECONDS] bounded microphone input test" },
+    { "play", cmd_play, "play PATH       MP3 player (Q stops)" },
     { "audio", audio_command, "audio test      low-volume speaker test" },
 #endif
     { "devices", cmd_devices, "board devices: detected, untested, or unsupported (read-only)" },
@@ -1262,6 +1278,9 @@ static void execute(char *line)
 void shell_task(void *arg)
 {
     (void)arg;
+#if M5OS_BOARD_TAB5
+    if(!s_history)s_history=kmalloc_psram(HIST_MAX*sizeof *s_history);
+#endif
     s_out = vfs_open("/dev/uart", VFS_O_WRITE);
     s_in  = vfs_open("/dev/uart", VFS_O_READ);
     if (s_out < 0 || s_in < 0) { kprintf("shell: cannot open /dev/uart\n"); return; }

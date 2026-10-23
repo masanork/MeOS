@@ -310,8 +310,11 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
   or external power. The monitor must already be in continuous shunt+bus conversion mode; a missing,
   mismatched, unreadable or differently configured monitor produces an explicit unavailable result.
 * `storage` identifies the current root backing and its persistence. Tab5 still uses an 8 MiB RAM disk;
-  microSD/SDMMC and FAT/exFAT support are not implemented. The separate flash-backed WASM app store survives
-  reboot. No diagnostic command mounts, writes or formats a card.
+  `sd mount` mounts Tab5 microSD as read-only FAT12/16/32 at `/sd`, with UTF-8 VFAT long names.
+  exFAT, card writes and formatting are disabled. The separate flash-backed WASM app store survives reboot.
+* `play "/sd/path/track.mp3"` opens the Tab5 streaming MP3 player; the filer also opens MP3 files.
+  Space pauses, +/- adjusts volume, Q/Esc stops. See [player notes](tools/player/README.md) for limits
+  and the remaining physical-device validation.
 
 All bit-banged I2C transfers share a task mutex, including read-modify-write operations. Board startup
 before the scheduler remains supported. Fixed-system-bus helpers keep touch/camera/power access separate

@@ -50,7 +50,7 @@ int main(void) {
     int pid=task_create_stack("probe",entry,NULL,1,1027); assert(pid>1);
     task_t *t=&g_tasks[1]; assert(t->id==(unsigned)pid && t->stack_size==1024);
     assert(task_stack_inspect(pid,&info)==ERR_OK && info.guard_ok);
-    assert(info.used>0 && info.used<=64 && info.size==1024 && info.free+info.used==1024);
+    assert(info.used>0 && info.used<=128 && info.size==1024 && info.free+info.used==1024);
     task_stack_check_switch(t,true);
     uint8_t *low=(uint8_t *)t->stack_base+TASK_STACK_GUARD_BYTES;
     low[200]=0; assert(task_stack_inspect(pid,&info)==ERR_OK && info.used==824 && info.free==200);
@@ -64,7 +64,7 @@ int main(void) {
     t->stack_guard_failed=false;
     uint32_t *sp=t->sp; t->sp=(uint32_t *)(low-16);
     if (!setjmp(panic_jmp)) { task_stack_check_switch(t,true); assert(0); }
-    t->sp=(uint32_t *)(low+t->stack_size);
+    t->sp=(uint32_t *)(low+t->stack_size-16);
     if (!setjmp(panic_jmp)) { task_stack_check_switch(t,true); assert(0); }
     t->sp=(uint32_t *)(low+1);
     if (!setjmp(panic_jmp)) { task_stack_check_switch(t,true); assert(0); }

@@ -6,7 +6,7 @@ file(GLOB_RECURSE M5OS_SRCS
     ${M5OS_ROOT}/kernel/*.c   ${M5OS_ROOT}/kernel/*.S
     ${M5OS_ROOT}/drivers/*.c  ${M5OS_ROOT}/hal/*.c  ${M5OS_ROOT}/hal/*.S
     ${M5OS_ROOT}/fs/*.c       ${M5OS_ROOT}/user/*.c ${M5OS_ROOT}/apps/*.c
-    ${M5OS_ROOT}/third_party/wasm3/*.c ${M5OS_ROOT}/third_party/quirc/*.c ${M5OS_ROOT}/third_party/fatfs/ff.c)
+    ${M5OS_ROOT}/third_party/wasm3/*.c ${M5OS_ROOT}/third_party/quirc/*.c ${M5OS_ROOT}/third_party/fatfs/ff.c ${M5OS_ROOT}/third_party/fatfs/ffunicode.c)
 # apps/m5ex/*.c and apps/sdk/*.c are SOURCES OF LOADABLE APPS, built separately by
 # tools/m5exbuild.py with their own link layout; the firmware only embeds the generated images.c.
 list(FILTER M5OS_SRCS EXCLUDE REGEX "/apps/sdk/|/apps/m5ex/[^i]|/apps/wasm/[^w]")
@@ -27,6 +27,10 @@ else()
     list(FILTER M5OS_SRCS EXCLUDE REGEX "_cardputer\\.c$|/hal/esp32p4/|${M5OS_NO_WASM_RE}|/third_party/fatfs/|/fs/fat/|/drivers/sd/sd_tab5\\.c$|/drivers/(keyboard|usbkbd|tab5kbd|ime)/|/drivers/lcd/(st7789|display_tab5)\\.c$|/drivers/camera/camera_tab5\\.c$|/drivers/wifi/wifi_tab5\\.c$|/m5ex/images_none\\.c$")
     set(M5OS_BOARD_DEF M5OS_BOARD_CORES3=1)
     set(M5OS_ARCH_REQUIRES xtensa)
+endif()
+
+if(NOT "$ENV{M5OS_BOARD}" STREQUAL "tab5")
+    list(FILTER M5OS_SRCS EXCLUDE REGEX "/user/player/mp3_stream\\.c$")
 endif()
 
 # Developer switch: M5OS_SELFTEST=1 idf.py build   -> run the regression tests at boot instead of the shell
@@ -69,5 +73,12 @@ target_link_libraries(${COMPONENT_LIB} INTERFACE
     "-Wl,--wrap=esp_startup_start_app")
 
 # quirc (third_party/quirc, ISC): QR-code reader for installing apps from the camera.  Vendored as is except for its allocator.
-file(GLOB M5OS_QUIRC_SRCS ${M5OS_ROOT}/third_party/quirc/*.c ${M5OS_ROOT}/third_party/fatfs/ff.c)
+file(GLOB M5OS_QUIRC_SRCS ${M5OS_ROOT}/third_party/quirc/*.c ${M5OS_ROOT}/third_party/fatfs/ff.c ${M5OS_ROOT}/third_party/fatfs/ffunicode.c)
 set_source_files_properties(${M5OS_QUIRC_SRCS} PROPERTIES COMPILE_OPTIONS "-w;-O2")
+
+# MP3 decoding is never run by the 4KB audio callback task. Scalar floating
+# point state is saved by the P4 scheduler/tick context; S3 playback is disabled.
+if("$ENV{M5OS_BOARD}" STREQUAL "tab5")
+    set_source_files_properties(${M5OS_ROOT}/user/player/mp3_stream.c
+        PROPERTIES COMPILE_OPTIONS "-O2;-fno-tree-vectorize;-march=rv32imafc_zicsr_zifencei")
+endif()

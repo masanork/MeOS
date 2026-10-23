@@ -57,7 +57,7 @@ static int result(FRESULT r)
 static void info(const FILINFO *fi, vfs_info_t *out)
 {
     memset(out, 0, sizeof *out);
-    strncpy(out->name, fi->fname, FS_NAME_MAX);
+    strncpy(out->name, fi->fname, VFS_NAME_MAX);
     out->type = (fi->fattrib & AM_DIR) ? FS_TYPE_DIR : FS_TYPE_FILE;
     out->size = fi->fsize;
 }

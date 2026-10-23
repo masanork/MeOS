@@ -40,7 +40,7 @@ static int listing(const vfs_info_t *i, void *ctx)
     vfs_info_t info;
     assert(fs->stat(NULL, "/HELLO.TXT", &info) == ERR_OK);
     assert(fat_unmount() == ERR_BUSY); /* Callback can re-enter: no lock deadlock or unmount. */
-    assert(!strcmp(i->name, "HELLO.TXT") || !strcmp(i->name, "DIR"));
+    assert(i->name[0] && strlen(i->name)<=VFS_NAME_MAX);
     return 0;
 }
 int main(int argc, char **argv)
@@ -55,6 +55,14 @@ int main(int argc, char **argv)
     vfs_info_t info;
     assert(fs->stat(NULL, "/", &info) == ERR_OK && info.type == FS_TYPE_DIR);
     assert(fs->stat(NULL, "/hello.txt", &info) == ERR_OK && info.size == 1300);
+    assert(fs->stat(NULL,"/長い日本語の録音ファイル名 2026年10月24日.mp3",&info)==ERR_OK && info.size==1300);
+    assert(fs->stat(NULL,"/RECORD~1.MP3",&info)==ERR_OK);
+    assert(fs->stat(NULL,"/音楽🎵.mp3",&info)==ERR_OK);
+    char longpath[VFS_PATH_MAX];longpath[0]='/';
+    memset(longpath+1,'a',251);memcpy(longpath+252,".mp3",5);
+    assert(fs->stat(NULL,longpath,&info)==ERR_OK);
+    for(unsigned i=0;i<251;i++)memcpy(longpath+1+i*3,"録",3);
+    memcpy(longpath+754,".mp3",5);assert(fs->stat(NULL,longpath,&info)==ERR_OK);
     assert(fs->stat(NULL, "/missing", &info) == ERR_NOENT);
     void *file = NULL;
     assert(fs->open(NULL, "/HELLO.TXT", VFS_O_READ | VFS_O_WRITE, &file) == ERR_PERM);
@@ -76,7 +84,7 @@ int main(int argc, char **argv)
     assert(fs->seek(file, -2000, FS_SEEK_CUR) == ERR_INVAL);
     assert(fs->write(file, buf, 1) == ERR_PERM);
     assert(fs->close(file) == ERR_OK);
-    assert(fs->readdir(NULL, "/", listing, NULL) == 2 && entries == 2);
+    assert(fs->readdir(NULL, "/", listing, NULL) == 6 && entries == 6);
     if (strstr(argv[1], "cycle")) {
         assert(fs->readdir(NULL, "/DIR", NULL, NULL) < 0);
     } else {

@@ -13,7 +13,7 @@ void shell_sd_status(void)
     kprintf("microSD: %s\n", s.detail);
     if (s.ready) kprintf("Card: %s, %u MiB (%u sectors)\n", s.high_capacity ? "SDHC/SDXC" : "SDSC", s.sectors / 2048u, s.sectors);
     if (s.probed) kprintf("Last R1: 0x%02x\n", s.last_r1);
-    kputs(fat_is_mounted() ? "FAT: mounted read-only at /sd (8.3 aliases)\n" : "FAT: not mounted\n");
+    kputs(fat_is_mounted() ? "FAT: mounted read-only at /sd (VFAT UTF-8 names)\n" : "FAT: not mounted\n");
     kputs("Transport: dedicated SPI pins; Wi-Fi SDMMC registers unchanged\n");
 }
 int shell_sd(int argc, char **argv)
@@ -37,7 +37,7 @@ int shell_sd(int argc, char **argv)
     else kprintf("sd: FAT mount failed (%d); unsupported/damaged filesystem or read error; no formatting\n", rc);
     return rc == ERR_OK ? 0 : 1;
 usage:
-    kputs("usage: sd [status|probe|mount|unmount] (read-only; FAT12/16/32, 8.3 names; no exFAT)\n");
+    kputs("usage: sd [status|probe|mount|unmount] (read-only; FAT12/16/32 + VFAT UTF-8 names; no exFAT)\n");
     return 1;
 }
 #endif
