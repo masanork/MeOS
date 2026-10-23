@@ -37,12 +37,17 @@ void hal_i2c_set_pins(int scl, int sda)
     bus_unlock(locked);
 }
 
-static void scl_hi_pin(int scl)
+static hal_i2c_result_t s_result;
+static hal_i2c_stats_t s_stats;
+static bool scl_hi_pin(int scl)
 {
     hal_gpio_od_release(scl);
-    for (int i = 0; i < I2C_STRETCH_LIMIT && !hal_gpio_read(scl); i++) {
-        hal_delay_us(1);                      /* clock stretching */
+    for(unsigned i=0;i<I2C_STRETCH_LIMIT;i++) {
+        if(hal_gpio_read(scl)) return true;
+        hal_delay_us(1);
     }
+    s_result=HAL_I2C_TIMEOUT;
+    return false;
 }
 static void scl_lo_pin(int scl) { hal_gpio_od_drive_low(scl); }
 static void sda_hi_pin(int sda) { hal_gpio_od_release(sda); }
@@ -52,6 +57,7 @@ static void tick(void)          { hal_delay_us(I2C_HALF_PERIOD_US); }
 void hal_i2c_init(void)
 {
     bool locked = bus_lock();
+    s_result=HAL_I2C_OK;
     hal_gpio_config_open_drain(s_scl);
     hal_gpio_config_open_drain(s_sda);
     sda_hi_pin(s_sda); scl_hi_pin(s_scl); tick();
@@ -71,7 +77,7 @@ void hal_i2c_init(void)
 
 static void start_pin(int scl, int sda)           /* SDA falls while SCL is high */
 {
-    sda_hi_pin(sda); scl_hi_pin(scl); tick();
+    sda_hi_pin(sda); if(!scl_hi_pin(scl)) return; tick();
     sda_lo_pin(sda); tick();
     scl_lo_pin(scl); tick();
 }
@@ -85,14 +91,17 @@ static void stop_pin(int scl, int sda)            /* SDA rises while SCL is high
 
 static bool write_byte_pin(int scl, int sda, uint8_t b) /* returns true on ACK */
 {
+    if(s_result!=HAL_I2C_OK) return false;
     for (int i = 7; i >= 0; i--) {
         if (b & (1u << i)) sda_hi_pin(sda); else sda_lo_pin(sda);
-        tick(); scl_hi_pin(scl); tick(); scl_lo_pin(scl);
+        tick(); if(!scl_hi_pin(scl)) return false; tick(); scl_lo_pin(scl);
     }
     sda_hi_pin(sda); tick();             /* release SDA: slave drives ACK */
-    scl_hi_pin(scl); tick();
+    if(!scl_hi_pin(scl)) return false;
+    tick();
     bool ack = !hal_gpio_read(sda);
     scl_lo_pin(scl); tick();
+    if(!ack) s_result=HAL_I2C_NACK;
     return ack;
 }
 
@@ -101,12 +110,12 @@ static uint8_t read_byte_pin(int scl, int sda, bool ack)
     uint8_t v = 0;
     sda_hi_pin(sda);
     for (int i = 0; i < 8; i++) {
-        tick(); scl_hi_pin(scl); tick();
+        tick(); if(!scl_hi_pin(scl)) return 0; tick();
         v = (uint8_t)((v << 1) | (hal_gpio_read(sda) ? 1 : 0));
         scl_lo_pin(scl);
     }
     if (ack) sda_lo_pin(sda); else sda_hi_pin(sda);
-    tick(); scl_hi_pin(scl); tick(); scl_lo_pin(scl); tick();
+    tick(); if(!scl_hi_pin(scl)) return 0; tick(); scl_lo_pin(scl); tick();
     sda_hi_pin(sda);
     return v;
 }
@@ -116,6 +125,8 @@ static uint8_t read_byte_pin(int scl, int sda, bool ack)
 static bool transfer(int scl, int sda, uint8_t addr, uint16_t reg, unsigned reg_bytes,
                      const uint8_t *tx, uint8_t *rx, size_t len)
 {
+    s_result=HAL_I2C_OK;
+    if(addr>0x7f || !len || (!tx && !rx)) { s_result=HAL_I2C_INVALID; s_stats.invalid++; return false; }
     start_pin(scl, sda);
     bool ok = write_byte_pin(scl, sda, (uint8_t)(addr << 1));
     if (ok && reg_bytes == 2) ok = write_byte_pin(scl, sda, (uint8_t)(reg >> 8));
@@ -123,12 +134,17 @@ static bool transfer(int scl, int sda, uint8_t addr, uint16_t reg, unsigned reg_
     if (ok && rx) {
         start_pin(scl, sda);
         ok = write_byte_pin(scl, sda, (uint8_t)((addr << 1) | 1));
-        for (size_t i = 0; ok && i < len; i++) rx[i] = read_byte_pin(scl, sda, i + 1 < len);
+        for (size_t i = 0; ok && i < len; i++) {
+            rx[i] = read_byte_pin(scl, sda, i + 1 < len); ok=s_result==HAL_I2C_OK;
+        }
     } else {
         for (size_t i = 0; ok && i < len; i++) ok = write_byte_pin(scl, sda, tx[i]);
     }
     stop_pin(scl, sda);
-    return ok;
+    if(s_result==HAL_I2C_OK) s_stats.ok++;
+    else if(s_result==HAL_I2C_TIMEOUT) s_stats.timeout++;
+    else if(s_result==HAL_I2C_NACK) s_stats.nack++;
+    return ok && s_result==HAL_I2C_OK;
 }
 
 bool hal_i2c_write_reg(uint8_t addr, uint8_t reg, uint8_t val)
@@ -203,4 +219,22 @@ bool hal_i2c_sys_update_reg(uint8_t addr, uint8_t reg, uint8_t mask, uint8_t val
     if (ok) { v = (v & ~mask) | (value & mask);
         ok = transfer(PIN_I2C_SCL, PIN_I2C_SDA, addr, reg, 1, &v, NULL, 1); }
     bus_unlock(locked); return ok;
+}
+
+hal_i2c_result_t hal_i2c_sys_read_regs_ex(uint8_t addr,uint8_t reg,uint8_t *buf,size_t len)
+{
+    bool locked=bus_lock();
+    transfer(PIN_I2C_SCL,PIN_I2C_SDA,addr,reg,1,NULL,buf,len);
+    hal_i2c_result_t result=s_result; bus_unlock(locked); return result;
+}
+hal_i2c_result_t hal_i2c_sys_write_reg_ex(uint8_t addr,uint8_t reg,uint8_t value)
+{
+    bool locked=bus_lock();
+    transfer(PIN_I2C_SCL,PIN_I2C_SDA,addr,reg,1,&value,NULL,1);
+    hal_i2c_result_t result=s_result; bus_unlock(locked); return result;
+}
+void hal_i2c_get_stats(hal_i2c_stats_t *out)
+{
+    if(!out) return;
+    bool locked=bus_lock(); *out=s_stats; bus_unlock(locked);
 }

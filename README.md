@@ -328,7 +328,7 @@ external-DC source detection and physical regression on the other boards remain 
 * Single-core execution (`CPU1` is not started).
 * Task stacks default to 4 KB (`kmalloc_internal`) without hardware stack guard pages (heavy tasks like `shell`, `wifid`, and `app` use 6–8 KB stacks via `task_create_stack`).
 * Do not use floating-point / PIE coprocessors across tasks on ESP32-S3 (lazy FPU context saving is not implemented).
-* Strict priority scheduling without mutex priority inheritance.
+* Strict priority scheduling with mutex priority inheritance; inheritance does not resolve deadlock cycles.
 * Japanese input: `edit` still moves its cursor per byte (it inserts UTF-8 but cannot step over a multi-byte character); choices are not saved across reboots; only the Tab5 builds the IME.
 * Tab5 console touch auto-detects GT911 (`0x14`, ILI9881C units) or ST712x (`0x55`, ST7121/ST7123 units).
   The ST712x protocol uses big-endian coordinates and per-slot valid bits; the GT911 ready/acknowledge
@@ -338,3 +338,43 @@ external-DC source detection and physical regression on the other boards remain 
   This does not add touch navigation to full-screen apps or implement the unsupported ST7123 LCD initialization.
   Driver regression tests (mock I2C, GT911 and ST712x): `sh tools/touch/host_test.sh`.
 * RISC-V M5EX SDK build toolchain is planned for a future update.
+
+## Kernel foundation diagnostics
+
+`ps` reports painted-stack usage estimates and guards. `crash` shows a validated
+previous MeOS panic when internal noinit RAM survived the reset; IDF exception
+register dumps remain separate. Boot logs include a firmware commit ID and reset
+reason. Panic output bypasses the normal console mutex and does not scan stacks.
+
+`i2c` shows transaction success/NACK/timeout/invalid counters without probing.
+Legacy boolean APIs remain supported; extended system-bus APIs return per-call
+status. SCL stretching timeouts fail the transfer, including STOP failures.
+
+`date` shows UTC derived from a manual or RTC anchor plus monotonic elapsed time.
+`date set YYYY-MM-DDTHH:MM:SSZ` changes the runtime anchor only; `date sync` reads
+the RTC. `rtc` reads the RX8130CE and `rtc set YYYY-MM-DDTHH:MM:SSZ` explicitly
+writes it. No automatic RTC writes, charging configuration, timezone or NTP sync
+is added. Invalid BCD/calendar/weekday, stopped/test mode and VLF are rejected.
+Partial calendar writes leave the RTC stopped/tainted until a successful set.
+Supported calendar range: 2000 through 2099.
+
+App cleanup is ordered and sealed during boot. DMA/workers stop before handles
+and memory are reclaimed. Failed hooks quarantine owner memory for retry.
+Mutex donation follows wait chains and is withdrawn on handoff/termination;
+normal task exit also releases held locks.
+
+`health` shows explicit progress leases. The app cleanup service renews a lease;
+sleeping tasks do not need to subscribe. A supervisor feeds the hardware watchdog
+only when scheduled task context and scheduler ticks progress. Hardware arming
+is OFF by default. An experimental Tab5 build can opt in with
+`M5OS_WATCHDOG=1 sh tools/build.sh tab5 reconfigure build`; it reserves MWDT0,
+uses a 2-second hardware reset timeout, and panics on expired progress leases.
+Do not enable this on an unqualified device expecting proven recovery behavior.
+The P4-specific implementation is not reused for S3; opting in on another board
+is a configure error. A total scheduler/interrupt stall may reset without a new
+MeOS panic record.
+
+Run `sh tools/host_checks.sh` for host regressions. GitHub Actions runs GCC/Clang
+host checks and ESP-IDF 5.4.4 Tab5 builds with watchdog disabled/enabled, retaining
+firmware, ELF, map and configuration artifacts. CI success is not physical
+RTC, reset retention, audio handoff or watchdog timeout qualification.

@@ -79,3 +79,6 @@ bool task_has_perm(uint32_t perm);
 
 /* Kernel-internal hook: `t` is ending (how = EXITED or KILLED). Called with interrupts masked. */
 void app_task_ended(task_t *t, app_state_t how);
+
+/* Abort a reserved/partially initialized app; failed cleanup quarantines memory. */
+void app_abort(app_t *app);

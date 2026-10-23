@@ -24,6 +24,10 @@
 
 #define FILER_PAUSE_SETTLE_MS 100u
 #include "shell.h"
+#include <m5os/crash.h>
+#include <m5os/health.h>
+#include <m5os/wall_time.h>
+#include <m5os/hal_i2c.h>
 #include "hardware.h"
 #include <m5os/audio.h>
 #include <m5os/microphone.h>
@@ -134,14 +138,20 @@ static int cmd_help(int argc, char **argv)
     return 0;
 }
 
+static int cmd_i2c(int argc,char **argv) {
+    (void)argc; (void)argv;hal_i2c_stats_t stats;hal_i2c_get_stats(&stats);
+    kprintf("I2C transactions: ok %u, NACK %u, timeout %u, invalid %u\n",stats.ok,stats.nack,stats.timeout,stats.invalid);return 0;
+}
+static int cmd_crash(int argc,char **argv) { (void)argc; (void)argv; crash_print_previous(); return 0; }
+
 static int cmd_ps(int argc, char **argv)
 {
     (void)argc; (void)argv;
     task_info_t t[PS_MAX];
     int n = task_snapshot(t, PS_MAX);
-    sh_puts("PID  NAME             PRI  STATE       APP  STACK used~/size  GUARD\n");
+    sh_puts("PID  NAME             PRI E/B STATE       APP  STACK used~/size  GUARD\n");
     for (int i = 0; i < n; i++) {
-        SH_PRINTF("%-4u %-16s %-4u %-11s ", t[i].id, t[i].name, t[i].priority, task_state_name(t[i].state));
+        SH_PRINTF("%-4u %-16s %u/%u  %-11s ", t[i].id, t[i].name, t[i].priority, t[i].base_priority, task_state_name(t[i].state));
         if (t[i].app_id) SH_PRINTF("%u  ", t[i].app_id);
         else sh_puts("-  ");
         task_stack_info_t stack;
@@ -930,6 +940,11 @@ static const command_t s_commands[] = {
     { "storage", cmd_storage, "root backing, persistence and microSD support (read-only)" },
 #endif
     { "history", cmd_history, "show command history (or use Up/Down arrows)" },
+    { "date", time_command, "UTC time: date [sync|set ISO8601Z]" },
+    { "rtc", rtc_command, "RTC read or explicit set ISO8601Z" },
+    { "i2c", cmd_i2c, "I2C transaction error counters (no probe)" },
+    { "health", health_command, "progress leases and watchdog state" },
+    { "crash", cmd_crash, "previous retained MeOS panic record" },
     { "ps",      cmd_ps,      "list tasks" },
     { "kill",    cmd_kill,    "kill PID        terminate one task (an app: its owner task)" },
     { "ls",      cmd_ls,      "ls [PATH]       list a directory (/dev lists devices)" },

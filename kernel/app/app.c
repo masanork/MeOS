@@ -1,5 +1,8 @@
 #include <m5os/wasm.h>
+#include <m5os/app_cleanup.h>
+#include <m5os/health.h>
 #include <m5os/app.h>
+#include <m5os/kernel.h>
 #include <m5os/arch.h>
 #include <m5os/errno.h>
 #include <m5os/kmalloc.h>
@@ -20,6 +23,7 @@ const app_def_t *apps_def_table(int *count);          /* apps/apps.c */
 
 static app_t    s_apps[APP_MAX];
 static uint32_t s_next_id = 1;
+static uint32_t s_health;
 
 /* ------------------------------------------------------------- permissions */
 
@@ -110,9 +114,8 @@ int app_launch(app_t *a, void (*task_entry)(void *), void *arg, uint8_t priority
     uint32_t irq = arch_irq_disable();             /* the task and the app's owner_task appear together */
     int pid = task_create_for_app(a->name, task_entry, arg, priority, stack_size, a);
     if (pid < 0) {
-        a->state = APP_FREE;
         arch_irq_restore(irq);
-        kmem_reclaim_owner(a->app_id);             /* whatever the loader allocated for it */
+        app_abort(a);                            /* stop partial driver state before reclaim */
         return pid;
     }
     a->entry = task_entry;
@@ -123,6 +126,12 @@ int app_launch(app_t *a, void (*task_entry)(void *), void *arg, uint8_t priority
 
 void app_abort(app_t *a)
 {
+    if(app_cleanup_run(a->app_id)!=ERR_OK) {
+        uint32_t irq=arch_irq_disable();
+        a->state=APP_KILLED; a->cleanup_pending=true;
+        arch_irq_restore(irq); return;
+    }
+    health_release_owner(a->app_id);
     kmem_reclaim_owner(a->app_id);
     uint32_t irq = arch_irq_disable();
     a->state = APP_FREE;
@@ -182,6 +191,7 @@ static void appd_task(void *arg)
 {
     (void)arg;
     for (;;) {
+        health_renew(s_health);
         task_sleep(APPD_PERIOD_MS);
         for (int i = 0; i < APP_MAX; i++) {
             app_t *a = &s_apps[i];
@@ -192,13 +202,13 @@ static void appd_task(void *arg)
             if (!work) continue;
 
             task_kill_app(a);                          /* children still running */
-            gui_release_owner(a->app_id);              /* its windows */
-            vfs_close_owned(a->app_id);                /* handles left open */
-#if M5OS_BOARD_TAB5
-            microphone_app_cleanup(a->app_id);
-            audio_close(a->app_id);                 /* stop callbacks before reclaiming app memory */
-#endif
-            wasm_app_cleanup(a->app_id);               /* the screen, if a WebAssembly app still held it */
+            int cleanup=app_cleanup_run(a->app_id);
+            if(cleanup!=ERR_OK) {
+                /* A failed stop must not turn into a use-after-free. Retry later. */
+                irq=arch_irq_disable(); a->cleanup_pending=true; arch_irq_restore(irq);
+                continue;
+            }
+            health_release_owner(a->app_id);
             a->reclaimed_bytes = (uint32_t)kmem_reclaim_owner(a->app_id);   /* umalloc'd memory */
             a->cleaned = true;
         }
@@ -207,5 +217,8 @@ static void appd_task(void *arg)
 
 void app_init(void)
 {
+    app_cleanup_register_builtins();
+    s_health=health_register("appd",0,5000);
+    if(!s_health)kernel_panic("cannot monitor app cleanup progress");
     task_create_for_app("appd", appd_task, NULL, APPD_PRIO, APPD_STACK, NULL);
 }

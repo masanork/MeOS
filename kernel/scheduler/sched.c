@@ -144,6 +144,7 @@ void task_exit(void)
     app_task_ended(s_current, APP_EXITED);
     msg_task_ended(s_current);
     s_current->state = TASK_TERMINATED;
+    mutex_release_all(s_current);
     sched_switch();
     kernel_panic("terminated task was rescheduled");
 }
@@ -210,6 +211,7 @@ int task_snapshot(task_info_t *out, int max)
         for (int k = 0; k < TASK_NAME_MAX; k++) out[n].name[k] = t->name[k];
         out[n].state = t->state;
         out[n].priority = t->priority;
+        out[n].base_priority = t->base_priority;
         out[n].stack_size = (uint32_t)t->stack_size;
         out[n].app_id = t->app ? t->app->app_id : 0;
         n++;
@@ -228,7 +230,8 @@ int task_kill(uint32_t pid)
         if (t == s_current || t->id == 1) { rc = ERR_INVAL; break; }
         app_task_ended(t, APP_KILLED);
         msg_task_ended(t);
-        mutex_release_all(t);               /* no deadlock on a dead owner */
+        t->state = TASK_TERMINATED;
+        mutex_release_all(t);               /* remove donation before handing off owned locks */
         t->wait_obj = NULL;
         t->state = TASK_TERMINATED;         /* the stack is freed by the next scheduler pass */
         rc = ERR_OK;
@@ -246,6 +249,7 @@ int task_kill_app(const struct app *a)
         task_t *t = &g_tasks[i];
         if (t->app != a || t == s_current) continue;
         if (t->state == TASK_UNUSED || t->state == TASK_TERMINATED) continue;
+        t->state = TASK_TERMINATED;
         mutex_release_all(t);
         msg_task_ended(t);
         t->wait_obj = NULL;

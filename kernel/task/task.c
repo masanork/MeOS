@@ -56,6 +56,7 @@ int task_create_for_app(const char *name, void (*entry)(void *), void *arg, uint
         }
         t->id         = s_next_pid++;
         copy_name(t->name, name);
+        t->base_priority = priority;
         t->priority   = priority;
         t->entry      = entry;
         t->arg        = arg;
@@ -64,6 +65,7 @@ int task_create_for_app(const char *name, void (*entry)(void *), void *arg, uint
         t->stack_guard_failed = false;
         t->app        = app;
         t->held       = NULL;
+        t->wait_mutex = NULL;
         t->wait_obj   = NULL;
         t->mbox       = NULL;
         t->wait_kind  = 0;

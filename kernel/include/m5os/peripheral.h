@@ -6,6 +6,7 @@ typedef enum {
     PERIPHERAL_I2S0,
     PERIPHERAL_AHB_DMA_TX2,
     PERIPHERAL_AHB_DMA_RX2,
+    PERIPHERAL_WATCHDOG0,
     PERIPHERAL_COUNT
 } peripheral_t;
 /* All-or-nothing, nonblocking, idempotent for the same stable driver token.

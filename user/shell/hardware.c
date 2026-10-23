@@ -89,7 +89,7 @@ void hardware_print_devices(void)
     power_read(&p);
     row("INA226", power_result_name(p.result), "system I2C 0x41; details: power");
     row("microSD", "unsupported", "Tab5 SDMMC driver absent; details: storage");
-    row("RTC", "unsupported", "RX8130CE; presence not probed");
+    row("RTC", "driver available", "RX8130CE; rtc reads; presence not probed here");
     row("IMU", "unsupported", "BMI270; presence not probed");
     row("audio", "output driver", "ES8388 output; ES7210 input bring-up: mic test");
     row("RS485", "unsupported", "no serial app or transceiver control");

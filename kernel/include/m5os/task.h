@@ -35,11 +35,13 @@ typedef struct task {
     uint32_t      id;            /* pid, 1-based, never reused                */
     char          name[TASK_NAME_MAX];
     task_state_t  state;
+    uint8_t       base_priority; /* configured priority, before mutex donation */
     uint8_t       priority;      /* higher number = more urgent               */
     uint64_t      wakeup_us;     /* valid while SLEEPING                      */
     void        (*entry)(void *);
     void         *arg;
     struct app   *app;           /* owning application, NULL for kernel tasks (children inherit) */
+    struct mutex *wait_mutex; /* distinct from mailbox wait_obj */
     struct mutex *held;          /* mutexes this task owns (so task_kill can release them) */
     void         *wait_obj;      /* what a BLOCKED task waits for (a mutex or a mailbox) */
     struct mailbox *mbox;        /* this task's message queue; created on first use, freed when the task is reclaimed */
@@ -80,6 +82,7 @@ typedef struct {
     char         name[TASK_NAME_MAX];
     task_state_t state;
     uint8_t      priority;
+    uint8_t      base_priority;
     uint32_t     stack_size;
     uint32_t     app_id;         /* 0 = kernel task */
 } task_info_t;

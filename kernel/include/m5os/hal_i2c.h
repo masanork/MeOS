@@ -23,3 +23,10 @@ bool hal_i2c_sys_read_regs(uint8_t addr7, uint8_t reg, uint8_t *buf, size_t len)
 bool hal_i2c_sys_write_reg(uint8_t addr7, uint8_t reg, uint8_t val);
 /* Atomic masked read-modify-write on the fixed system bus. */
 bool hal_i2c_sys_update_reg(uint8_t addr7, uint8_t reg, uint8_t mask, uint8_t value);
+
+typedef enum { HAL_I2C_OK, HAL_I2C_NACK, HAL_I2C_TIMEOUT, HAL_I2C_INVALID } hal_i2c_result_t;
+typedef struct { uint32_t ok, nack, timeout, invalid; } hal_i2c_stats_t;
+/* Per-call results; unlike a global last-error, these remain valid after unlock. */
+hal_i2c_result_t hal_i2c_sys_read_regs_ex(uint8_t addr,uint8_t reg,uint8_t *buf,size_t len);
+hal_i2c_result_t hal_i2c_sys_write_reg_ex(uint8_t addr,uint8_t reg,uint8_t value);
+void hal_i2c_get_stats(hal_i2c_stats_t *out);

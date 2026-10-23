@@ -93,11 +93,18 @@ static void stop(void) /* session lock held; also handles partial initialization
     arch_irq_restore(irq);
     if (allocation) { memset(allocation,0,RING_BYTES+63); kfree(allocation); }
 }
-void microphone_app_cleanup(uint32_t app_id)
+int microphone_app_cleanup(uint32_t app_id)
 {
-    mutex_lock(&s_lock);
+    /* Another app's bounded capture must not stall appd/its progress lease. */
+    if (!mutex_trylock(&s_lock)) {
+        uint32_t irq=arch_irq_disable();
+        bool owns=s_owner==app_id;
+        arch_irq_restore(irq);
+        return owns ? ERR_BUSY : ERR_OK;
+    }
     if (s_owner == app_id) stop();
     mutex_unlock(&s_lock);
+    return ERR_OK; /* DMA stopped; codec power-down uncertainty remains diagnostic */
 }
 static void summary(void)
 {
