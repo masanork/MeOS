@@ -8,6 +8,7 @@
 #include <m5os/gui.h>
 #if M5OS_BOARD_TAB5
 #include <m5os/audio.h>
+#include <m5os/microphone.h>
 #endif
 #include "../scheduler/sched_internal.h"
 
@@ -194,6 +195,7 @@ static void appd_task(void *arg)
             gui_release_owner(a->app_id);              /* its windows */
             vfs_close_owned(a->app_id);                /* handles left open */
 #if M5OS_BOARD_TAB5
+            microphone_app_cleanup(a->app_id);
             audio_close(a->app_id);                 /* stop callbacks before reclaiming app memory */
 #endif
             wasm_app_cleanup(a->app_id);               /* the screen, if a WebAssembly app still held it */

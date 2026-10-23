@@ -26,6 +26,7 @@
 #include "shell.h"
 #include "hardware.h"
 #include <m5os/audio.h>
+#include <m5os/microphone.h>
 #include <m5os/vfs.h>
 #include <m5os/task.h>
 #include <m5os/kprintf.h>
@@ -915,6 +916,7 @@ static const command_t s_commands[] = {
     { "help",    cmd_help,    "list commands" },
 #if M5OS_BOARD_TAB5
 #if M5OS_BOARD_TAB5
+    { "mic", microphone_command, "mic test [SECONDS] bounded microphone input test" },
     { "audio", audio_command, "audio test      low-volume speaker test" },
 #endif
     { "devices", cmd_devices, "board devices: detected, untested, or unsupported (read-only)" },
