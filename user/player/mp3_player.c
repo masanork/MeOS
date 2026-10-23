@@ -73,7 +73,7 @@ static void draw(struct player *p){
     ksnprintf(info,sizeof info,"%u Hz / %u channel(s) -> 24000 Hz mono",mp3_stream_rate(p->stream),mp3_stream_channels(p->stream));dq_text(2,7,info);
     ksnprintf(info,sizeof info,"%s  %u:%02u  volume %u%%  underruns %u",p->paused?"Paused":"Playing",
         p->played/AUDIO_RATE/60,(p->played/AUDIO_RATE)%60,p->volume,p->underruns);dq_text(2,9,info);
-    dq_text(2,12,"Space:pause  +/-:volume  Q/Esc:stop");
+    dq_text(2,12,"Space:pause  +/-:volume  I:status  Q/Esc:stop");
 }
 static void player_task(void *arg){
     struct player *p=arg;int error=ERR_OK;bool output=false,eof=false;
@@ -87,9 +87,15 @@ static void player_task(void *arg){
     for(;;){
         int key=dq_pollkey();
         if(key=='q'||key=='Q'||key==DQK_ESC)break;
-        if(key==' ')p->paused=!p->paused;
+        if(key==' '){
+            p->paused=!p->paused;
+            kprintf("mp3: %s at %u frames\n",p->paused?"paused":"resumed",p->played);
+        }
         if((key=='+'||key=='=')&&p->volume<100)p->volume+=5;
         if(key=='-'&&p->volume>=5)p->volume-=5;
+        if(key=='+'||key=='='||key=='-')kprintf("mp3: volume %u%%\n",p->volume);
+        if(key=='i'||key=='I')kprintf("mp3: %s, played %u frames, volume %u%%, underruns %u\n",
+            p->paused?"paused":"playing",p->played,p->volume,p->underruns);
         unsigned queued=p->write-p->read;
         if(!eof && queued<=RING-256){
             int n=mp3_stream_read(p->stream,pcm,256);
@@ -109,6 +115,9 @@ static void player_task(void *arg){
     }
 done:
     if(output)audio_close(p->app_id);
+    task_stack_info_t stack;
+    if(task_stack_inspect(task_current()->id,&stack)==ERR_OK)
+        kprintf("mp3: stack estimate %u/%u bytes, guard %s\n",(unsigned)stack.used,(unsigned)stack.size,stack.guard_ok?"OK":"FAILED");
     s_result=error;
     kprintf("mp3: stopped (%d), played %u frames, %u underruns\n",error,p->played,p->underruns);
     /* appd owns the final handle/display/memory cleanup, including forced stops. */

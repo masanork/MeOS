@@ -2,7 +2,7 @@
 
 Mount with `sd mount`, browse `/sd` with the filer, and press Enter/V on an MP3.
 The shell accepts `play "/sd/path/long name.mp3"`. Space pauses, +/- changes
-software volume, and Q/Esc stops. This firmware never writes or formats the card.
+software volume, I prints playback status, and Q/Esc stops. This firmware never writes or formats the card.
 
 FAT12/16/32 supports VFAT names up to 255 UTF-16 units, including supplementary
 characters, exposed as UTF-8. Paths must fit in 1024 bytes including NUL.
@@ -39,11 +39,27 @@ watchdog-off/on firmware builds. A physical Tab5 with a 2GB SDSC FAT card
 successfully listed long MP3 names and streamed a 44.1kHz stereo recording for
 279552 output frames (about 11.65 seconds). Q stopped playback and returned to
 the shell; audio reported 546 blocks, zero DMA errors/underruns, and the player
-reported zero ring underruns. The card remained mounted read-only. This proves
-the hardware data path ran; audible quality still requires the listener's report.
+reported zero ring underruns. The card remained mounted read-only. The listener confirmed audible playback from the internal speaker.
 
-Physical qualification remains incomplete: long recordings, pause/volume,
-repeated launches, forced app termination, decoder stack high-water and concurrent
-float tasks across ticks. Check SD/audio errors and ring underruns during sustained
-playback. Keep the card read-only throughout. Only the app partition was flashed;
-the previous app was backed up before the trial.
+A follow-up physical run verified pause/resume (112128 output frames remained
+unchanged across two paused status samples), software volume changes 50→40→45%,
+and three consecutive recording launches. Output totals were 1678336, 256000,
+and 257024 frames; the first corresponds to about 69.93 seconds of audio.
+All three stopped normally with zero ring/DMA underruns/errors. Decoder stack
+estimates were 18320/32768 bytes with intact guards. Each app reclaimed 53408
+bytes and ended with zero live tasks; heap statistics after the first and third
+runs matched (internal 116KB used, PSRAM 8279KB used, zero allocation failures).
+These are bounded smoke results, not an hours-long playback qualification.
+
+`python tools/player/device_test.py PORT "/sd/path/first.mp3" "/sd/path/second.mp3"`
+repeats the control/status checks and logs cleanup/heap diagnostics. It requires
+pyserial (available in the ESP-IDF Python environment), resets on some serial
+adapters, and assumes playback files last longer than the test intervals. Avoid
+other keyboard input during the automated run. It reads the existing card and
+never uploads, writes or formats files. Inspect the heap/app output as well as
+the final marker. Listener confirmation remains separate from software counters.
+
+Physical qualification remains incomplete: hours-long recordings, forced app
+termination and concurrent float tasks across ticks. Keep the card read-only
+throughout. Only the app partition was flashed; the previous app was backed up
+before the trial.

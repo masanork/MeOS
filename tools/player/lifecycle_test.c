@@ -32,6 +32,7 @@ int app_launch(app_t *a,void (*entry)(void *),void *arg,uint8_t priority,size_t 
     if(!setjmp(killed))entry(arg);
     current=&caller;assert(mp3_app_cleanup(a->app_id)==ERR_OK);reclaim();return ERR_OK;
 }
+int task_stack_inspect(uint32_t pid,task_stack_info_t *out){assert(pid==worker.id);*out=(task_stack_info_t){.size=32768,.used=16384,.free=16384,.guard_ok=true};return ERR_OK;}
 void task_sleep(uint32_t ms){assert(ms<=100);}
 int vfs_normalize(const char *path,char *out){if(strlen(path)>=VFS_PATH_MAX)return ERR_NAMETOOLONG;strcpy(out,path);return ERR_OK;}
 int vfs_open(const char *path,uint32_t flags){assert(strstr(path,".mp3") && flags==VFS_O_READ);return 5;}
