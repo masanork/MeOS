@@ -24,7 +24,10 @@ int vfs_mount(const char *p,const vfs_fs_t *fs,void *data) {(void)data;assert(!s
 int vfs_umount(const char *p) {assert(!strcmp(p,"/programs")&&mounted_fs);mounted_fs=NULL;return 0;}
 static const char *relative(const char *p) {assert(!strncmp(p,"/programs",9));return p[9]?p+9:"/";}
 int vfs_open(const char *p,uint32_t flags) {
-    if(!mounted_fs)return ERR_NOENT;unsigned i;for(i=0;i<8&&handles[i];i++) {}if(i==8)return ERR_BUSY;
+    if(!mounted_fs)return ERR_NOENT;
+    unsigned i;
+    for(i=0;i<8&&handles[i];i++) {}
+    if(i==8)return ERR_BUSY;
     int rc=mounted_fs->open(NULL,relative(p),flags,&handles[i]);return rc<0?rc:(int)i;
 }
 int vfs_close(int fd) {assert(fd>=0&&fd<8&&handles[fd]);int rc=mounted_fs->close(handles[fd]);handles[fd]=NULL;return rc;}

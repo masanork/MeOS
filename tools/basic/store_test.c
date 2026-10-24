@@ -10,7 +10,9 @@ static uint8_t flash[PROGRAM_STORE_BYTES],baseline[PROGRAM_STORE_BYTES];
 static unsigned mutations,fail_at;static int tear,fail_reads;
 static int read_io(void *ctx,uint32_t off,void *out,size_t n) {
     (void)ctx;assert(off<=sizeof flash && n<=sizeof flash-off);
-    if(fail_reads) return ERR_IO;if(n) memcpy(out,flash+off,n);return 0;
+    if(fail_reads) return ERR_IO;
+    if(n) memcpy(out,flash+off,n);
+    return 0;
 }
 static int write_io(void *ctx,uint32_t off,const void *data,size_t n) {
     (void)ctx;assert(!(off&3)&&!(n&3)&&off<=sizeof flash&&n<=sizeof flash-off);
