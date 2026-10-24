@@ -1,6 +1,11 @@
 #include <m5os/board_config.h>
 #if defined(M5OS_BOARD_TAB5)
 #include <m5os/sdroot.h>
+#include <m5os/vfs.h>
+#include <m5os/mutex.h>
+#ifndef LFS_THREADSAFE
+#define LFS_THREADSAFE
+#endif
 #include <m5os/sdcard.h>
 #include <m5os/fat.h>
 #include <m5os/hal_gpio.h>
@@ -15,6 +20,9 @@
 #define ROOT_SECTORS 16384u /* 8 MiB logical M5FS, sparse zero-filled RO base */
 #define BANK_BYTES (12u*1024u*1024u) /* full 8 MiB snapshot + transaction headroom */
 #define ERASE_BYTES 4096u
+static mutex_t lfs_mutex=MUTEX_INIT;
+static int lock_lfs(const struct lfs_config *c){(void)c;mutex_lock(&lfs_mutex);return 0;}
+static int unlock_lfs(const struct lfs_config *c){(void)c;mutex_unlock(&lfs_mutex);return 0;}
 static blockdev_t *sd;
 static lfs_t lfs;
 static struct lfs_config cfg;
@@ -54,7 +62,7 @@ static int prepare(void) {
         if(attempt<2)hal_delay_us(100000);
     }
     if(!sd)return ERR_NODEV;
-    cfg=(struct lfs_config){.read=disk_read,.prog=disk_prog,.erase=disk_erase,.sync=disk_sync,
+    cfg=(struct lfs_config){.lock=lock_lfs,.unlock=unlock_lfs,.read=disk_read,.prog=disk_prog,.erase=disk_erase,.sync=disk_sync,
         .read_size=512,.prog_size=512,.block_size=ERASE_BYTES,.block_count=sd->block_count/8,
         .block_cycles=500,.cache_size=512,.lookahead_size=sizeof lookahead,
         .read_buffer=read_cache,.prog_buffer=prog_cache,.lookahead_buffer=lookahead};
@@ -166,4 +174,68 @@ static int save(const fs_tx_ops_t *ops,void *ctx){
     return ops->close(fd);
 }
 int sdroot_save_probe(const char *text){return active?fs_transaction(save,(void *)text):ERR_NODEV;}
+/* Separate bulk files share littlefs, never the base image or COW bank paths. */
+struct asset_file { lfs_file_t file; struct lfs_file_config cfg; unsigned char cache[512]; };
+static int asset_error(int n){
+    if(n>=0)return n;
+    switch(n){case LFS_ERR_NOENT:return ERR_NOENT;case LFS_ERR_EXIST:return ERR_EXIST;
+    case LFS_ERR_NOSPC:return ERR_NOSPC;case LFS_ERR_NOMEM:return ERR_NOMEM;
+    case LFS_ERR_NOTDIR:return ERR_NOTDIR;case LFS_ERR_ISDIR:return ERR_ISDIR;
+    case LFS_ERR_NOTEMPTY:return ERR_NOTEMPTY;case LFS_ERR_INVAL:return ERR_INVAL;
+    default:return ERR_IO;}
+}
+static int asset_path(const char *rel,char out[256]){
+    /* VFS supplies normalized absolute relative paths. Reject traversal also at
+     * this boundary, so internal root-store files cannot ever be addressed. */
+    if(!active)return ERR_NODEV;
+    if(!rel||rel[0]!='/'||strlen(rel)>240)return ERR_INVAL;
+    const char *p=rel;
+    while(*p){while(*p=='/')p++;const char *start=p;while(*p&&*p!='/')p++;
+        size_t n=(size_t)(p-start);if((n==1&&start[0]=='.')||(n==2&&start[0]=='.'&&start[1]=='.'))return ERR_INVAL;
+    }
+    strcpy(out,"/assets");strcat(out,rel);return 0;
+}
+static int asset_open(void *ctx,const char *rel,uint32_t flags,void **out){
+    (void)ctx;char path[256];int rc=asset_path(rel,path);if(rc)return rc;
+    if(!(flags&(VFS_O_READ|VFS_O_WRITE)))return ERR_INVAL;
+    int mode=(flags&VFS_O_WRITE)?((flags&VFS_O_READ)?LFS_O_RDWR:LFS_O_WRONLY):LFS_O_RDONLY;
+    if(flags&VFS_O_CREATE)mode|=LFS_O_CREAT;
+    if(flags&VFS_O_TRUNC)mode|=LFS_O_TRUNC;
+    if(flags&VFS_O_APPEND)mode|=LFS_O_APPEND;
+    struct asset_file *f=kcalloc(1,sizeof *f);if(!f)return ERR_NOMEM;f->cfg.buffer=f->cache;
+    rc=lfs_file_opencfg(&lfs,&f->file,path,mode,&f->cfg);
+    if(rc){kfree(f);return asset_error(rc);}*out=f;return 0;
+}
+static int asset_close(void *file){struct asset_file *f=file;int rc=lfs_file_close(&lfs,&f->file);kfree(f);return asset_error(rc);}
+static int asset_read(void *file,void *buf,size_t n){return asset_error(lfs_file_read(&lfs,&((struct asset_file *)file)->file,buf,n));}
+static int asset_write(void *file,const void *buf,size_t n){return asset_error(lfs_file_write(&lfs,&((struct asset_file *)file)->file,buf,n));}
+static int asset_seek(void *file,int32_t offset,int whence){return asset_error(lfs_file_seek(&lfs,&((struct asset_file *)file)->file,offset,whence));}
+static int asset_stat(void *ctx,const char *rel,vfs_info_t *out){
+    (void)ctx;char path[256];int rc=asset_path(rel,path);if(rc)return rc;
+    struct lfs_info info;rc=lfs_stat(&lfs,path,&info);if(rc)return asset_error(rc);
+    memset(out,0,sizeof *out);strcpy(out->name,info.name);out->size=info.size;
+    out->type=info.type==LFS_TYPE_DIR?FS_TYPE_DIR:FS_TYPE_FILE;return 0;
+}
+static int asset_mkdir(void *ctx,const char *rel){(void)ctx;char path[256];int rc=asset_path(rel,path);return rc?rc:asset_error(lfs_mkdir(&lfs,path));}
+static int asset_unlink(void *ctx,const char *rel){(void)ctx;char path[256];int rc=asset_path(rel,path);if(rc)return rc;if(!strcmp(path,"/assets/"))return ERR_PERM;return asset_error(lfs_remove(&lfs,path));}
+static int asset_readdir(void *ctx,const char *rel,int (*cb)(const vfs_info_t *,void *),void *arg){
+    (void)ctx;char path[256];int rc=asset_path(rel,path);if(rc)return rc;
+    lfs_dir_t dir;rc=lfs_dir_open(&lfs,&dir,path);if(rc)return asset_error(rc);
+    struct lfs_info info;int count=0;
+    while((rc=lfs_dir_read(&lfs,&dir,&info))>0){
+        if(!strcmp(info.name,".")||!strcmp(info.name,".."))continue;
+        vfs_info_t entry={0};strcpy(entry.name,info.name);entry.size=info.size;
+        entry.type=info.type==LFS_TYPE_DIR?FS_TYPE_DIR:FS_TYPE_FILE;count++;
+        if(cb(&entry,arg))break;
+    }
+    int close=lfs_dir_close(&lfs,&dir);return rc<0?asset_error(rc):close<0?asset_error(close):count;
+}
+static const vfs_fs_t assets_vfs={.name="sd-assets",.open=asset_open,.close=asset_close,
+    .read=asset_read,.write=asset_write,.seek=asset_seek,.stat=asset_stat,
+    .mkdir=asset_mkdir,.unlink=asset_unlink,.readdir=asset_readdir};
+int sdroot_assets_mount(void){
+    if(!active)return ERR_NODEV;
+    int rc=lfs_mkdir(&lfs,"/assets");if(rc&&rc!=LFS_ERR_EXIST)return asset_error(rc);
+    return vfs_mount("/assets",&assets_vfs,NULL);
+}
 #endif

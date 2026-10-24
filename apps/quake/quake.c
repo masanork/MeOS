@@ -177,8 +177,11 @@ int quake_command(int argc,char **argv) {
     if(argc>=2&&!strcmp(argv[1],"receive"))return quake_receive(argc,argv);
     if(argc==2&&!strcmp(argv[1],"verify"))return quake_verify();
     controls_only=argc==2&&!strcmp(argv[1],"controls");
-    if(argc>2||(argc==2&&!controls_only&&strcmp(argv[1],"/sd"))){kputs("usage: quake [/sd|controls]\n");return 1;}
-    vfs_info_t info;if(!controls_only&&vfs_stat("/sd/id1/pak0.pak",&info)<0){kputs("quake: mount SD with /id1/pak0.pak first\n");return 1;}
+    if(argc>2||(argc==2&&!controls_only&&strcmp(argv[1],"/sd")&&strcmp(argv[1],"/assets/quake"))){kputs("usage: quake [/sd|/assets/quake|controls]\n");return 1;}
+    const char *base=argc==2&&!controls_only?argv[1]:quake_storage_base();
+    ksnprintf(quake_basedir,sizeof quake_basedir,"%s",base);
+    char path[128];ksnprintf(path,sizeof path,"%s/id1/pak0.pak",base);
+    vfs_info_t info;if(!controls_only&&vfs_stat(path,&info)<0){kprintf("quake: missing %s; use quake receive BYTES CRC32hex\n",path);return 1;}
     pending=true;uint32_t id;int rc=app_start("quake",&id);if(rc<0)pending=false;return rc<0;
 }
 #else

@@ -136,3 +136,23 @@ The debug frame capture shortcut is serial P.
 
 Use `quake controls` for an asset-free physical input/layout preview. It uses the
 same input routing, shows the latest key edge, and exits via EXIT or Ctrl-C.
+
+## Game data on the native SD-root card
+
+A Tab5 using the littlefs/COW M5FS root also mounts `/assets`. This is a separate
+bulk-file directory on the same littlefs volume; it does not consume the 8 MiB
+logical M5FS root or expose `base.img` / delta banks. All littlefs public calls
+share a kernel mutex, including root-store operations. There is no formatting or
+root-volume resizing. FAT SD use remains available when no native root is active.
+
+`quake receive BYTES CRC32hex` selects `/assets/quake/id1/pak0.pak` when the native
+SD root is active, or the original `/sd/id1/pak0.pak` on FAT. Native destination
+directories are created on demand. The bounded transfer refuses an existing
+file, checks incoming CRC and removes its new destination on an ordinary error.
+After an interrupted/power-lost transfer, inspect and remove any incomplete file
+before retrying; upload is not a resumable or atomic publication protocol.
+`quake verify` re-reads the stored file and prints its size and CRC. Plain `quake`
+selects the matching storage base automatically; `/sd` and `/assets/quake` can
+also be chosen explicitly. Gameplay remains read-only. This provides storage for
+the base PAK; specific third-party mods and registered data are separate inputs
+and have not been qualified. No game files are included in the repository.

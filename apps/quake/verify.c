@@ -5,7 +5,9 @@
 #include <m5os/task.h>
 #include <m5os/kprintf.h>
 int quake_verify(void) {
-    int fd=vfs_open("/sd/id1/pak0.pak",VFS_O_READ);
+    extern const char *quake_storage_base(void);
+    char path[96];ksnprintf(path,sizeof path,"%s/id1/pak0.pak",quake_storage_base());
+    int fd=vfs_open(path,VFS_O_READ);
     if(fd<0){kprintf("QVERIFY failed open %d\n",fd);return 1;}
     uint8_t block[4096];uint32_t size=0,sum=0;int n;
     while((n=vfs_read(fd,block,sizeof block))>0){sum=crc32_update(sum,block,(size_t)n);size+=(uint32_t)n;task_yield();}

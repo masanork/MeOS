@@ -10,7 +10,7 @@ FILE *quake_fopen(const char *path,const char *mode) {
     if(strcmp(mode,"r") && strcmp(mode,"rb")) return NULL;
     size_t path_len=strlen(path);
     if(path_len>=4 && !strcmp(path+path_len-4,".sav")) return NULL; /* save parser is not enabled */
-    if(vfs_normalize(path,normalized)<0 || strncmp(normalized,"/sd/",4)) return NULL;
+    if(vfs_normalize(path,normalized)<0 || (strncmp(normalized,"/sd/",4)&&strncmp(normalized,"/assets/quake/",14))) return NULL;
     vfs_info_t info;
     if(vfs_stat(normalized,&info)<0 || info.type!=FS_TYPE_FILE || info.size>INT32_MAX) return NULL;
     for(unsigned i=0;i<12;i++) if(!files[i].live) {

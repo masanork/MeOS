@@ -152,4 +152,4 @@ endif()
 # littlefs is used through explicit static caches; never calls newlib allocation/logging.
 file(GLOB M5OS_LITTLEFS_SRCS ${M5OS_ROOT}/third_party/littlefs/*.c)
 set_source_files_properties(${M5OS_LITTLEFS_SRCS} PROPERTIES COMPILE_DEFINITIONS
-    "LFS_NO_MALLOC;LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR;LFS_NO_ASSERT" COMPILE_OPTIONS "-O2")
+    "LFS_THREADSAFE;LFS_NO_MALLOC;LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR;LFS_NO_ASSERT" COMPILE_OPTIONS "-O2")

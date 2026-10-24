@@ -114,3 +114,12 @@ The sanitized machine-readable receipt is
 and explicitly leaves physical power-cut and full concurrent-app integration
 unqualified. No bootloader, partition table, eFuse or secure-boot setting was
 changed. The device is left running the SD-root trial firmware.
+
+### Bulk asset namespace
+
+The Quake experiment adds `/assets`, backed by an isolated `/assets` directory
+on the existing littlefs volume. The M5FS logical root remains 8 MiB. The driver
+uses littlefs's `LFS_THREADSAFE` hooks with one kernel mutex shared by bulk files
+and base/delta operations. Normalized relative paths are confined to the asset
+directory. The root backing files are not exposed. No format is needed to add
+bulk data to an already mounted native SD root.
