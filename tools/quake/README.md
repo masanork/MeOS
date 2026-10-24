@@ -20,8 +20,11 @@ is local only. No PAK, game assets or firmware release is included.
 - Private read-only stdio routes through the MeOS VFS, including random seeks.
   `/sd` data is streamed rather than loading an entire PAK into RAM. Handles,
   owner allocations and display/input state are reclaimed through app cleanup.
-- Audio, CD music, network drivers, recording, config/save writes and savegame
-  loading are disabled. Only local loopback client/server is compiled.
+- Native firmware now includes the software effect mixer; its new audio backend
+  passes host tests and physical mixer/DMA/normal-exit checks. Audible output
+  still needs user confirmation. CD music,
+  network drivers, recording, config/save writes and savegame loading remain
+  disabled. Only local loopback client/server is compiled.
 
 ## Build / checks
 
@@ -227,3 +230,25 @@ Hardware LCD refresh and engine frame counts remain separate measurements.
 
 Reference: ESP-IDF v5.4 PPA SRM and DMA2D LL/driver implementation; Espressif's
 [PPA documentation](https://docs.espressif.com/projects/esp-idf/en/release-v5.4/esp32p4/api-reference/peripherals/ppa.html).
+
+## Direct combat start and effect audio
+
+`quake e1m1` starts the shareware Episode 1 combat map directly; `quake smooth e1m1` selects the same map with PPA rendering. The Introduction (`start`) used
+by `quake bench` and plain `quake smooth` has no combat at its initial location.
+Map names accept lowercase letters, digits and underscores. Original engine
+registered-data checks remain intact; arbitrary third-party mods are unqualified.
+
+The native backend mixes PAK WAV effects at 11025 Hz and converts stereo PCM to
+mono for the Tab5 speaker at MeOS's 24000 Hz output rate. The audio worker only
+copies integer PCM, without engine, filesystem, allocation or floating-point calls.
+Consumed samples are cleared to avoid replaying stale sound during loading stalls.
+Normal and forced app cleanup close audio before resetting the engine arena.
+`quake smooth e1m1 --silent` disables effects for comparative performance runs.
+Music/CD playback remains disabled; this backend implements effects only.
+
+The shared Tab5 audio driver now derives descriptor and PCM alignment from the
+configured L2 cache-line size (64 bytes in default/Doom builds, 128 in Quake).
+Host ring tests cover rational conversion, wrap, chunk continuity and stall silence.
+Physical E1M1 gameplay, nonzero mixer output, DMA progression with zero reported
+underruns/errors and normal-exit cleanup passed on 2026-10-24. Audible output
+still requires user confirmation. See `audio-device-2026-10-24.json`.

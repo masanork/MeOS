@@ -124,3 +124,27 @@ on the physical P4. Its revised ownership/cached-buffer implementation and game
 FPS still need qualification; a concurrent atomic-editor device session took
 the serial port before that final test. The CPU mode remains the default.
 Exact CPU observations: `performance-device-2026-10-24.json`.
+
+
+## PPA continuation and effect audio
+
+The later PPA session at source c932851 passed five offscreen tests, 4,738 game
+frames, keyboard routing, normal exit and reuse without PSRAM growth after warmup.
+46 post-load intervals averaged 29.56 FPS harmonically (21.5–35.7 range).
+Constant 30 FPS, forced termination, injected DMA faults and user visual acceptance
+remain unqualified. See `ppa-device-2026-10-24.json`; this supersedes the earlier
+pending game-performance note above.
+
+The following audio-enabled image (SHA256 in `audio-device-2026-10-24.json`)
+started the shareware `e1m1` / The Slipgate Complex map directly. The PPA ownership
+check reported busy, so this session safely retained the classic CPU renderer.
+The ES8388 initialized at 24 kHz; Quake mixed effects at 11025 Hz. Host conversion
+and stall-silence tests, Quake build and separate 64-byte-cache-line Doom build pass.
+A normal exit after 2,716 game frames reported 9,968 DMA blocks, zero reported
+underruns/errors, 5,103,616 output frames and 766,576 nonzero output frames. Audio
+status returned idle, native keyboard text routing returned, and allocation failure
+counters were zero. The sampled game stack reached 13,088 / 49,152 bytes, guard OK.
+These counters prove PCM/DMA activity, not audible speaker output; user listening
+confirmation remains pending. CD/BGM support remains disabled. A second E1M1
+launch reached gameplay after cleanup (44.1–44.2 FPS sampled at the starting view). No SD format, data upload or engine registration
+check bypass was performed.

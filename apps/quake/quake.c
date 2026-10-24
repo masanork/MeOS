@@ -1,6 +1,7 @@
 #include <m5os/board_config.h>
 #include <m5os/quake.h>
 #include <m5os/keyboard_raw.h>
+#include <m5os/audio.h>
 #if M5OS_QUAKE
 #include <m5os/app.h>
 #include <m5os/task.h>
@@ -27,7 +28,8 @@ extern char _quake_data_start[],_quake_data_end[],_quake_bss_start[],_quake_bss_
 static void *initial;
 static jmp_buf escape;
 static bool pending,screen,controls_only,benchmark_start,smooth_requested,ppa_test;
-static bool smooth_active;
+static bool smooth_active,silent_requested;
+static char selected_map[32]="start";
 static uint16_t palette[256];
 static uint8_t *previous_frame;
 static bool palette_dirty;
@@ -67,6 +69,7 @@ static void reset_engine(void) {
 void quake_exit(int code) { longjmp(escape,code?2:1); }
 int quake_app_cleanup(uint32_t id) {
     if(id!=quake_owner||!id)return 0;
+    extern void quake_sound_cleanup(void);quake_sound_cleanup();
     display_smooth_end(id);smooth_active=false;
     quake_io_close_all();
     keyboard_raw_release(&quake_owner);
@@ -192,8 +195,11 @@ void quake_main(void *arg) {
             }
         }
         quakeparms_t parms={0};parms.memsize=12*1024*1024;parms.membase=quake_malloc(parms.memsize);parms.basedir=quake_basedir;
-        char *args[]={"quake","-basedir",quake_basedir,"-nosound","-nocdaudio","+map","start",NULL};
-        COM_InitArgv(benchmark_start?7:5,args);parms.argc=com_argc;parms.argv=com_argv;
+        char *args[9]={"quake","-basedir",quake_basedir,"-nocdaudio"};int ac=4;
+        if(silent_requested)args[ac++]="-nosound";
+        if(benchmark_start){args[ac++]="+map";args[ac++]=selected_map;}
+        args[ac]=NULL;
+        COM_InitArgv(ac,args);parms.argc=com_argc;parms.argv=com_argv;
         Host_Init(&parms);
         Cbuf_AddText("bind w +forward\nbind s +back\nbind a +moveleft\nbind d +moveright\nbind f +attack\nbind e \"impulse 10\"\nbind / \"impulse 10\"\nbind UPARROW +forward\nbind DOWNARROW +back\nbind LEFTARROW +left\nbind RIGHTARROW +right\n+mlook\n");
         frames=0;profile_frames=0;began=profile_at=hal_time_now_us();
@@ -217,12 +223,21 @@ int quake_command(int argc,char **argv) {
     if(quake_owner||pending)return 1;
     if(argc>=2&&!strcmp(argv[1],"receive"))return quake_receive(argc,argv);
     if(argc==2&&!strcmp(argv[1],"verify"))return quake_verify();
-    smooth_requested=argc==2&&(!strcmp(argv[1],"smooth")||!strcmp(argv[1],"ppatest"));
-    ppa_test=argc==2&&!strcmp(argv[1],"ppatest");
-    benchmark_start=argc==2&&(!strcmp(argv[1],"bench")||!strcmp(argv[1],"smooth"));
-    controls_only=argc==2&&(!strcmp(argv[1],"controls")||ppa_test);
-    if(argc>2||(argc==2&&!controls_only&&!benchmark_start&&strcmp(argv[1],"/sd")&&strcmp(argv[1],"/assets/quake"))){kputs("usage: quake [/sd|/assets/quake|controls|bench|smooth|ppatest]\n");return 1;}
-    const char *base=argc==2&&!controls_only&&!benchmark_start?argv[1]:quake_storage_base();
+    smooth_requested=ppa_test=benchmark_start=controls_only=silent_requested=false;
+    const char *base=quake_storage_base();bool map_set=false;strcpy(selected_map,"start");
+    for(int i=1;i<argc;i++){
+        const char *arg=argv[i];
+        if(!strcmp(arg,"--silent")){silent_requested=true;continue;}
+        if(!strcmp(arg,"smooth")){smooth_requested=true;benchmark_start=true;continue;}
+        if(!strcmp(arg,"bench")){benchmark_start=true;continue;}
+        if(!strcmp(arg,"controls")){controls_only=true;continue;}
+        if(!strcmp(arg,"ppatest")){controls_only=ppa_test=smooth_requested=true;continue;}
+        if(!strcmp(arg,"/sd")||!strcmp(arg,"/assets/quake")){base=arg;continue;}
+        size_t n=strlen(arg);bool valid=n>0&&n<sizeof selected_map&&!map_set;
+        for(size_t j=0;j<n;j++)if(!((arg[j]>='a'&&arg[j]<='z')||(arg[j]>='0'&&arg[j]<='9')||arg[j]=='_'))valid=false;
+        if(!valid){kputs("usage: quake [smooth|bench|controls|ppatest] [MAP] [--silent]\n");return 1;}
+        strcpy(selected_map,arg);map_set=true;benchmark_start=true;
+    }
     ksnprintf(quake_basedir,sizeof quake_basedir,"%s",base);
     char path[128];ksnprintf(path,sizeof path,"%s/id1/pak0.pak",base);
     vfs_info_t info;if(!controls_only&&vfs_stat(path,&info)<0){kprintf("quake: missing %s; use quake receive BYTES CRC32hex\n",path);return 1;}

@@ -1131,7 +1131,7 @@ static const command_t s_commands[] = {
     { "basic", cmd_basic, "basic [FILE.bas] numeric BASIC" },
 
 #if M5OS_QUAKE
-    { "quake",quake_command,"quake [bench|smooth|controls]  experimental silent native Quake" },
+    { "quake",quake_command,"quake [smooth] [MAP] [--silent]  native Quake (e1m1 starts combat)" },
 #endif
 #if M5OS_DOOM
     { "doom", doom_command, "doom [WAD-path] [--demo SECONDS] [--silent]" },

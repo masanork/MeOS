@@ -25,3 +25,6 @@ cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined -DM5OS_BOA
 
 cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined tools/quake/math_test.c -lm -o "$OUT/math-test"
 "$OUT/math-test"
+
+cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined tools/quake/audio_test.c -o "$OUT/audio-test"
+"$OUT/audio-test"

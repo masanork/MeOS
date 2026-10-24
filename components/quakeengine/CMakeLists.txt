@@ -71,7 +71,7 @@ idf_component_register(SRCS
     ${QROOT}/world.c
     ${QROOT}/zone.c
     ${QROOT}/net_none.c
-    sys_meos.c sound_null.c
+    sys_meos.c sound_meos.c
     INCLUDE_DIRS ${QROOT} ${CMAKE_CURRENT_LIST_DIR}/../../kernel/include
     LDFRAGMENTS quake.lf)
 target_compile_options(${COMPONENT_LIB} PRIVATE -O3 -fno-tree-vectorize -fno-strict-aliasing -fstack-usage -fno-builtin -msmall-data-limit=0 -w
