@@ -100,3 +100,25 @@ flash-store provisioning/reboot/power-cut, microphone and watchdog reset behavio
 require separate device qualification. No board was flashed or reset during this
 integration. Existing device evidence on individual features does not qualify
 the newly combined revision.
+
+## Host acceptance while the board is occupied
+
+Do not open the board's USB port, reset, flash, mount/modify its SD card or change
+its partitions during the separate SD-boot work. This work does not qualify the
+physical firmware. Run `sh tools/sim/handoff_test.sh` for same-process Scheme /
+writing-editor handoff with IME, graph, file and cleanup assertions. Run
+`sh tools/basic/host_test.sh` for BASIC floating-point, graphics/cancellation and
+shared display-lease regressions.
+
+With an existing local IWAD, `sh tools/doom/host_test.sh /path/to/doom1.wad
+/path/to/frame.ppm` additionally renders 120 frames through the real Doom engine
+and MeOS's video/libc port, and exercises its mixer on game data. The IWAD is read
+from its existing private cache, never downloaded, committed or copied onto the
+board by this test. This headless harness is not Doom's MeOS app lifecycle or a
+same-process Doom -> Scheme handoff; that remains a device/integration gap.
+
+The filesystem redesign belongs in its own feature branch and PR series, based on
+`masanork`. Keep the host acceptance work independent. A useful proposed split is
+(1) VFS contracts and compatibility tests, (2) storage/boot backend, then (3) language
+source paths and user-facing migration. The concrete split should follow the
+other session's design; no new filesystem layout or migration is implemented here.

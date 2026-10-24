@@ -39,7 +39,7 @@ static SDL_Renderer *renderer;
 static SDL_Texture *texture;
 static uint16_t pixels[WIDTH * HEIGHT], *target = pixels;
 static bool dirty, paused, smoke, headless, closing, pumping, app_drawn;
-static const void *display_owner;
+static unsigned vfs_open_count;
 static unsigned char input[INPUT_CAP];
 static size_t input_head, input_count, heap_used;
 static int root_fd = -1;
@@ -213,17 +213,13 @@ void display_present(int x, int y, int w, int h) {
             if(row>=0 && col>=0)pixels[row*WIDTH+col]=target[row*WIDTH+col];
     dirty=true;app_drawn=true;
 }
-bool display_try_claim(const void *owner)
+/* Probe the production display lease after each app exits. */
+static bool display_free(void)
 {
-    if (display_owner)
-        return false;
-    display_owner = owner;
+    static const char probe;
+    if (!display_try_claim(&probe)) return false;
+    display_release_claim(&probe);
     return true;
-}
-void display_release_claim(const void *owner)
-{
-    if (owner == display_owner)
-        display_owner = NULL;
 }
 bool fbcon_is_paused(void) { return paused; }
 void fbcon_pause(bool value) { paused = value; }
@@ -611,6 +607,7 @@ int vfs_open(const char *path, uint32_t flags)
         close(fd);
         return ERR_INVAL;
     }
+    vfs_open_count++;
     return fd;
 }
 int vfs_stat(const char *path, vfs_info_t *out)
@@ -648,15 +645,47 @@ int vfs_write(int fd, const void *data, size_t n)
     while (rc < 0 && errno == EINTR);
     return rc < 0 ? host_error() : (int)rc;
 }
-int vfs_close(int fd) { return close(fd) < 0 ? host_error() : 0; }
+int vfs_close(int fd)
+{
+    if (close(fd) < 0) return host_error();
+    if (!vfs_open_count) die("unbalanced VFS close");
+    vfs_open_count--;
+    return 0;
+}
+
+static void load_replay(const char *path)
+{
+    FILE *f = fopen(path, "r");
+    if (!f) die("cannot open replay file");
+    char error[160] = "cannot close replay file";
+    bool ok = sim_replay_load(f, &replay, error, sizeof error);
+    if (fclose(f)) ok = false;
+    if (!ok) die(error);
+    for (size_t n = 0; n < replay.count; n++)
+        if (replay.actions[n].shot[0] && !shots)
+            die("replay screenshots require --screenshots DIR");
+    replaying = true;
+    replay_started = app_drawn = closing = false;
+    replay_step = 0;
+}
+
 
 int main(int argc, char **argv)
 {
     const char *workspace = NULL, *source = NULL, *record_path = NULL, *replay_path = NULL;
     char normalized_source[VFS_PATH_MAX];
     bool writing = false;
+    struct { bool writing; const char *source, *keys; } stages[16];
+    unsigned stage_count = 0;
     for (int n = 1; n < argc; n++) {
-        if (!strcmp(argv[n], "--write"))
+        if (!strcmp(argv[n], "--stage") && n + 3 < argc) {
+            if (stage_count == 16) die("at most 16 stages are allowed");
+            const char *app = argv[++n];
+            if (strcmp(app, "scheme") && strcmp(app, "write")) die("stage app must be scheme or write");
+            stages[stage_count].writing = !strcmp(app, "write");
+            stages[stage_count].source = argv[++n];
+            stages[stage_count++].keys = argv[++n];
+        } else if (!strcmp(argv[n], "--write"))
             writing = true;
         else if (!strcmp(argv[n], "--smoke"))
             smoke = true;
@@ -674,27 +703,16 @@ int main(int argc, char **argv)
             source = argv[++n];
         else
             die("usage: meos-sim --workspace DIR [--smoke] [--headless] [--screenshots DIR] "
-                "[--write] [--source /home/FILE] [--record NEW_FILE | --replay FILE]");
+                "[--write] [--source /home/FILE] [--record NEW_FILE | --replay FILE] "
+                "[--stage scheme|write /home/FILE REPLAY ...]");
     }
     if (!workspace || (smoke && (source || writing)))
         die("workspace required; smoke uses the built-in demo");
+    if (stage_count && (writing || source || smoke || record_path || replay_path))
+        die("stages cannot be combined with single-app options");
     if ((record_path && replay_path) || (smoke && replay_path))
         die("record/replay and smoke/replay are exclusive");
-    if (replay_path) {
-        FILE *f = fopen(replay_path, "r");
-        if (!f)
-            die("cannot open replay file");
-        char error[160] = "cannot close replay file";
-        bool ok = sim_replay_load(f, &replay, error, sizeof error);
-        if (fclose(f))
-            ok = false;
-        if (!ok)
-            die(error);
-        replaying = true;
-        for (size_t n = 0; n < replay.count; n++)
-            if (replay.actions[n].shot[0] && !shots)
-                die("replay screenshots require --screenshots DIR");
-    }
+    if (replay_path) load_replay(replay_path);
     if (record_path) {
         record_file = fopen(record_path, "wx");
         if (!record_file)
@@ -734,7 +752,26 @@ int main(int argc, char **argv)
     deadline = SDL_GetTicks64() + 10000;
     printf("MeOS application simulator; workspace=%s\n", workspace);
     fflush(stdout);
-    bool app_ok = writing ? write_file(source ? source : "/home/note.txt") : scheme_ide(source);
+    bool app_ok = true;
+    if (stage_count) {
+        size_t baseline = 0;
+        for (unsigned n = 0; n < stage_count; n++) {
+            if (vfs_normalize(stages[n].source, normalized_source) < 0) die("invalid stage source");
+            unsigned before_lines = lines_drawn;
+            load_replay(stages[n].keys);
+            bool ok = stages[n].writing ? write_file(normalized_source) : scheme_ide(normalized_source);
+            present();
+            if (!ok || replay_step != replay.count || input_count || !display_free() || paused ||
+                target != pixels || vfs_open_count)
+                die("stage failed or left display/input/files in use");
+            if (!n) baseline = heap_used;
+            else if (heap_used != baseline) die("stage retained app heap allocations");
+            printf("STAGE PASS: %u %s; heap=%zu; lines=%u; display/input/files released\n",
+                   n + 1, stages[n].writing ? "write" : "scheme", heap_used, lines_drawn - before_lines);
+        }
+    } else {
+        app_ok = writing ? write_file(source ? source : "/home/note.txt") : scheme_ide(source);
+    }
     present();
     if (smoke) {
         char saved[1024] = {0};
@@ -744,18 +781,18 @@ int main(int argc, char **argv)
             vfs_close(fd);
         if (n < 0 || !strstr(saved, "; 日本語\n") || !committed_japanese || !ime_draws ||
             lines_drawn < 100 || smoke_step != sizeof smoke_actions / sizeof smoke_actions[0] ||
-            display_owner || paused) {
+            !display_free() || paused) {
             fprintf(stderr,
                     "smoke state: read=%d committed=%d IME draws=%u lines=%u step=%u owner=%p "
                     "paused=%d\n",
-                    n, committed_japanese, ime_draws, lines_drawn, smoke_step, display_owner,
+                    n, committed_japanese, ime_draws, lines_drawn, smoke_step, (void *)(uintptr_t)!display_free(),
                     paused);
             die("smoke failed: graph, IME, source save or cleanup incomplete");
         }
         printf("SIM PASS: graph + actual MeOS IME conversion + Japanese source save + cleanup\n");
     }
     if (replaying) {
-        if (replay_step != replay.count || input_count || display_owner || paused)
+        if (replay_step != replay.count || input_count || !display_free() || paused)
             die("replay ended before all actions completed");
         printf("REPLAY PASS: %zu actions completed\n", replay.count);
     }

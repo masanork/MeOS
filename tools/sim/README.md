@@ -8,8 +8,9 @@ VFS adapters are replaced. It neither flashes nor opens the physical Tab5.
 
 This is an application simulator: it does not boot MeOS, execute RISC-V firmware,
 or test the MeOS scheduler, interrupts, DMA, FPU context, MIPI, USB, SDIO or device
-drivers. Native host speed does not predict Tab5 performance. BASIC and the other
-MeOS applications are not connected yet; this first target is the Scheme IDE.
+drivers. Native host speed does not predict Tab5 performance. BASIC and Doom are not connected to this SDL frontend. Scheme and the writing
+editor can run sequentially within one process, sharing the production display
+lease, IME, framebuffer and host VFS adapter.
 
 ## Run
 
@@ -186,3 +187,28 @@ a published or license-cleared release.
 Ctrl-S saves, Ctrl-Q exits, Ctrl-Z undoes the last edit. Missing characters are
 boxed. See `user/write/README.md`. Run `sh tools/sim/write_test.sh` for a real
 HID/IME/save replay. The default simulator target remains the Scheme workspace.
+
+## Repeated application handoff
+
+`sh tools/sim/handoff_test.sh` alternates Scheme and the writing editor three times
+inside one process. Each Scheme launch evaluates a graph; both applications enter
+and save Japanese through MeOS's real IME. Expected files are compared byte for
+byte. After each app exits, the test checks the production display lease, drawing
+target, console pause state, input queue, VFS handle count and stable live heap.
+It also tests an invalid UTF-8 source in a later stage. The clean-source check
+runs this test on both Linux and macOS CI.
+
+For custom sequences, repeat `--stage APP VFS_SOURCE HOST_REPLAY`, up to 16 stages:
+
+```sh
+sh tools/sim/run.sh --headless --workspace /tmp/my-meos-workspace \
+  --screenshots /tmp/meos-images \
+  --stage scheme /home/workspace.scm /tmp/scheme.keys \
+  --stage write /home/note.txt /tmp/write.keys
+```
+
+Stages are exclusive with `--write`, `--source`, `--smoke`, `--record` and `--replay`.
+Each stage must consume its replay and quit. Heap equality is measured after the
+first app has warmed the shared IME; it catches retained per-app allocations,
+not libc/SDL allocations or MeOS task-stack/DMA/FPU behavior. This is sequential
+handoff, not concurrent firmware execution.

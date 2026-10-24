@@ -75,3 +75,5 @@ tools/sim/write_test.sh
 user/write/README.md
 tools/fonts/README.md
 tools/fonts/fetch24.py
+drivers/lcd/display_claim.c
+tools/sim/handoff_test.sh
