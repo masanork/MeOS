@@ -278,7 +278,7 @@ static int format_locked(blockdev_t *bd, uint32_t base_lba, uint32_t nblocks)
         base_lba > bd->block_count || nblocks > bd->block_count - base_lba) return ERR_INVAL;
 
 
-    if (V.mounted) return ERR_BUSY;
+    if (V.mounted && bd == V.bd) return ERR_BUSY;
     int rc = ERR_OK;
     m5fs_super_t sb = { .version = M5FS_VERSION, .block_size = M5FS_BLOCK_SIZE, .total_blocks = nblocks };
     mem_copy(sb.magic, M5FS_MAGIC, 4);

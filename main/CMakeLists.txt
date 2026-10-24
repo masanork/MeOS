@@ -6,7 +6,7 @@ file(GLOB_RECURSE M5OS_SRCS
     ${M5OS_ROOT}/kernel/*.c   ${M5OS_ROOT}/kernel/*.S
     ${M5OS_ROOT}/drivers/*.c  ${M5OS_ROOT}/hal/*.c  ${M5OS_ROOT}/hal/*.S
     ${M5OS_ROOT}/fs/*.c       ${M5OS_ROOT}/user/*.c ${M5OS_ROOT}/apps/*.c
-    ${M5OS_ROOT}/third_party/wasm3/*.c ${M5OS_ROOT}/third_party/quirc/*.c)
+    ${M5OS_ROOT}/third_party/wasm3/*.c ${M5OS_ROOT}/third_party/quirc/*.c ${M5OS_ROOT}/third_party/littlefs/lfs.c ${M5OS_ROOT}/third_party/littlefs/lfs_util.c)
 # apps/m5ex/*.c and apps/sdk/*.c are SOURCES OF LOADABLE APPS, built separately by
 # tools/m5exbuild.py with their own link layout; the firmware only embeds the generated images.c.
 list(FILTER M5OS_SRCS EXCLUDE REGEX "/apps/sdk/|/apps/m5ex/[^i]|/apps/wasm/[^w]")
@@ -20,7 +20,7 @@ if("$ENV{M5OS_BOARD}" STREQUAL "cardputer")
     set(M5OS_BOARD_DEF M5OS_BOARD_CARDPUTER=1)
     set(M5OS_ARCH_REQUIRES xtensa)
 elseif("$ENV{M5OS_BOARD}" STREQUAL "tab5")
-    list(FILTER M5OS_SRCS EXCLUDE REGEX "_cores3\\.c$|_cardputer\\.c$|/hal/esp32s3/|/drivers/(touch|button|keyboard|sd)/|/drivers/lcd/(ili9342|st7789|display)\\.c$|/drivers/camera/camera_stub\\.c$|/drivers/wifi/wifi_stub\\.c$|/m5ex/images\\.c$")
+    list(FILTER M5OS_SRCS EXCLUDE REGEX "_cores3\\.c$|_cardputer\\.c$|/hal/esp32s3/|/drivers/(touch|button|keyboard)/|/drivers/sd/sd_spi\\.c$|/drivers/lcd/(ili9342|st7789|display)\\.c$|/drivers/camera/camera_stub\\.c$|/drivers/wifi/wifi_stub\\.c$|/m5ex/images\\.c$")
     set(M5OS_BOARD_DEF M5OS_BOARD_TAB5=1)
     set(M5OS_ARCH_REQUIRES riscv esp_psram esp_mm esp_lcd esp_driver_cam esp_driver_isp esp_driver_ledc usb)
 else()
@@ -58,3 +58,8 @@ target_link_libraries(${COMPONENT_LIB} INTERFACE
 # quirc (third_party/quirc, ISC): QR-code reader for installing apps from the camera.  Vendored as is except for its allocator.
 file(GLOB M5OS_QUIRC_SRCS ${M5OS_ROOT}/third_party/quirc/*.c)
 set_source_files_properties(${M5OS_QUIRC_SRCS} PROPERTIES COMPILE_OPTIONS "-w;-O2")
+
+# littlefs is used through explicit static caches; never calls newlib allocation/logging.
+file(GLOB M5OS_LITTLEFS_SRCS ${M5OS_ROOT}/third_party/littlefs/*.c)
+set_source_files_properties(${M5OS_LITTLEFS_SRCS} PROPERTIES COMPILE_DEFINITIONS
+    "LFS_NO_MALLOC;LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR;LFS_NO_ASSERT" COMPILE_OPTIONS "-O2")

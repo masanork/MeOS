@@ -48,10 +48,27 @@ int cow_mount(struct cow *c,struct cow_io io,uint64_t id,uint32_t sectors,
     if(c->end!=c->committed)c->sealed=1;
     return 0;
 }
+int cow_index(struct cow *c,uint32_t *offsets,size_t sectors) {
+    if(!c||!offsets||sectors<c->sectors||c->active)return -1;
+    c->index=NULL;
+    for(uint32_t i=0;i<c->sectors;i++)offsets[i]=UINT32_MAX;
+    unsigned char r[COW_RECORD];
+    for(uint32_t p=0;p<c->committed;p+=COW_RECORD) {
+        if(c->log.read(c->log.ctx,p,r,sizeof r)||!valid(c,r))return -1;
+        if(get(r+4)==1){if(get(r+20)>=c->sectors)return -1;offsets[get(r+20)]=p;}
+    }
+    c->index=offsets;return 0;
+}
 int cow_read(struct cow *c,uint32_t lba,void *out) {
     if(!c||!out||lba>=c->sectors)return -1;
-    if(c->base_read(c->base_ctx,lba,out))return -1;
     unsigned char r[COW_RECORD];
+    if(c->index) {
+        uint32_t p=c->index[lba];
+        if(p==UINT32_MAX)return c->base_read(c->base_ctx,lba,out);
+        if(c->log.read(c->log.ctx,p,r,sizeof r)||!valid(c,r)||get(r+4)!=1||get(r+20)!=lba)return -1;
+        memcpy(out,r+32,COW_SECTOR);return 0;
+    }
+    if(c->base_read(c->base_ctx,lba,out))return -1;
     /* Linear replay is intentionally a correctness baseline, not a fast index.
      * Pending writes are visible to the live M5FS transaction only. */
     uint32_t limit=c->active?c->end:c->committed;
@@ -66,14 +83,14 @@ int cow_begin(struct cow *c) {
     c->active=1;c->digest=0;return 0;
 }
 static int append(struct cow *c,uint32_t type,uint32_t lba,const void *data) {
-    if(c->end>c->log.capacity-COW_RECORD){c->sealed=1;c->active=0;return -1;}
+    if(c->end>c->log.capacity-COW_RECORD){c->sealed=1;c->active=0;c->index=NULL;return -1;}
     unsigned char r[COW_RECORD]={0};
     put(r,0x31574f43);put(r+4,type);put(r+8,(uint32_t)c->base_id);
     put(r+12,(uint32_t)(c->base_id>>32));put(r+16,c->generation+1);
     put(r+20,lba);put(r+24,c->digest);put(r+28,c->sectors);
     if(data)memcpy(r+32,data,COW_SECTOR);
     put(r+548,crc(r,548));
-    if(c->log.write(c->log.ctx,c->end,r,sizeof r)){c->sealed=1;c->active=0;return -1;}
+    if(c->log.write(c->log.ctx,c->end,r,sizeof r)){c->sealed=1;c->active=0;c->index=NULL;return -1;}
     c->end+=COW_RECORD;
     if(type==1)c->digest=fold(c->digest,get(r+548));
     return 0;
@@ -81,13 +98,16 @@ static int append(struct cow *c,uint32_t type,uint32_t lba,const void *data) {
 int cow_write(struct cow *c,uint32_t lba,const void *data) {
     if(!c||!c->active||c->sealed||!data||lba>=c->sectors)return -1;
     /* Reserve a commit record before accepting another sector. */
-    if(c->log.capacity-c->end<2*COW_RECORD){c->sealed=1;c->active=0;return -1;}
-    return append(c,1,lba,data);
+    if(c->log.capacity-c->end<2*COW_RECORD){c->sealed=1;c->active=0;c->index=NULL;return -1;}
+    uint32_t pos=c->end;
+    int rc=append(c,1,lba,data);
+    if(!rc&&c->index)c->index[lba]=pos;
+    return rc;
 }
 int cow_commit(struct cow *c) {
     if(!c||!c->active||c->sealed)return -1;
     if(c->log.sync(c->log.ctx)||append(c,2,0,0)||c->log.sync(c->log.ctx)) {
-        c->sealed=1;c->active=0;return -1;
+        c->sealed=1;c->active=0;c->index=NULL;return -1;
     }
     c->committed=c->end;c->generation++;c->active=0;return 0;
 }

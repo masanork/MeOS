@@ -25,6 +25,9 @@
 #define FILER_PAUSE_SETTLE_MS 100u
 #include "shell.h"
 #include "hardware.h"
+#if defined(M5OS_BOARD_TAB5)
+#include <m5os/sdroot.h>
+#endif
 #include <m5os/vfs.h>
 #include <m5os/task.h>
 #include <m5os/kprintf.h>
@@ -848,6 +851,18 @@ static int cmd_mount(int argc, char **argv)
 }
 
 #if M5OS_BOARD_TAB5
+static int cmd_sdroot(int argc, char **argv)
+{
+    uint32_t sectors;
+    if (argc == 1) { sdroot_status(); return 0; }
+    if (argc == 3 && sh_streq(argv[1], "format") && parse_uint(argv[2], &sectors)) {
+        int rc = sdroot_format(sectors); SH_PRINTF("sdroot format rc=%d\n", rc); return rc != 0;
+    }
+    if (argc == 3 && sh_streq(argv[1], "save")) {
+        int rc = sdroot_save_probe(argv[2]); SH_PRINTF("SDROOT SAVE rc=%d\n", rc); return rc != 0;
+    }
+    sh_puts("usage: sdroot [format EXPECTED_SECTORS | save TEXT]\n"); return 1;
+}
 static int cmd_devices(int argc, char **argv)
 {
     (void)argc; (void)argv; hardware_print_devices(); return 0;
@@ -915,6 +930,7 @@ static const command_t s_commands[] = {
 #if M5OS_BOARD_TAB5
     { "devices", cmd_devices, "board devices: detected, untested, or unsupported (read-only)" },
     { "power",   cmd_power,   "battery voltage/current, estimated level and charger state (read-only)" },
+    { "sdroot", cmd_sdroot, "SD littlefs/COW root status, explicit format, atomic probe save" },
     { "storage", cmd_storage, "root backing, persistence and microSD support (read-only)" },
 #endif
     { "history", cmd_history, "show command history (or use Up/Down arrows)" },

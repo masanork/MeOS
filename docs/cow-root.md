@@ -1,7 +1,8 @@
 # Immutable system images and transactional block overlays
 
-Status: host-qualified reference implementation. No SD adapter, outer-filesystem
-selection, boot wiring, full firmware link, flash or physical power-cut claim.
+Status: transactional core plus experimental Tab5 SD/littlefs boot adapter.
+See `sd-root-device.md` for exact device evidence and remaining qualification.
+Physical power-loss tolerance is not yet established.
 Changes live in the isolated `experiment/cow-root` worktree. The concurrent dirty
 primary checkout and physical card remain untouched.
 
@@ -116,7 +117,7 @@ recover pending state before reattaching it. No automatic media formatting occur
 
 Run `sh tools/cow/host_test.sh` with ASan/UBSan:
 
-- 3,314 byte-cut cases for data/commit records, with immediate and buffered durability.
+- 6,628 byte-cut cases (indexed and unindexed) for data/commit records, with immediate and buffered durability.
 - 210 crash cases through the actual `fs_transaction` API: create, grow, truncate,
   delete, mkdir and two open files. Separate processes drop volatile state; compare
   EVERY recovered sector with the complete old/new image, then mount M5FS read-only.

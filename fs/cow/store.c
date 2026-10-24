@@ -52,6 +52,7 @@ int cow_store_format(struct cow_store *s,const struct cow_bank b[2],uint64_t id,
 }
 int cow_store_compact(struct cow_store *s){
     if(!s||s->faulted||s->view.active||s->selected<0||s->epoch==UINT64_MAX)return -1;
+    uint32_t *index=s->view.index;
     int target=1-s->selected;s->faulted=1;struct cow next;
     struct cow_bank *b=&s->bank[target];
     if(b->reset(b->io.ctx)||b->io.sync(b->io.ctx)||header(s,target,s->epoch+1))return -1;
@@ -63,7 +64,9 @@ int cow_store_compact(struct cow_store *s){
     }
     if(cow_commit(&next))return -1;
     /* A durable first transaction publishes the new epoch. Never erase old here. */
-    s->view=next;s->selected=target;s->epoch++;s->faulted=0;return 0;
+    s->view=next;s->selected=target;s->epoch++;s->faulted=0;
+    if(index&&cow_index(&s->view,index,s->sectors)){s->faulted=1;return -1;}
+    return 0;
 }
 int cow_store_reserve(struct cow_store *s,uint32_t records){
     if(!s||s->faulted||s->view.active||records<2||records>s->view.log.capacity/COW_RECORD)return -1;

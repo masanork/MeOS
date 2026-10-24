@@ -4,7 +4,7 @@
 #include <string.h>
 #define CAP (16*COW_RECORD)
 static unsigned char disk[CAP], stable[CAP], baseline[CAP];
-static int budget, fail_sync, sync_count, buffered;
+static int budget, fail_sync, sync_count, buffered, indexed;
 static int rd(void *ctx,uint32_t off,void *p,size_t n) {
     (void)ctx;assert(off<=CAP&&n<=CAP-off);memcpy(p,disk+off,n);return 0;
 }
@@ -39,10 +39,12 @@ static void check(struct cow *c,int v) {
 int main(void) {
     struct cow c;budget=-1;mount(&c);assert(!tx(&c,11));check(&c,11);
     memcpy(baseline,stable,CAP);
+    uint32_t offsets[8];
+    for(indexed=0;indexed<=1;indexed++)
     for(buffered=0;buffered<=1;buffered++)
     for(int cut=0;cut<=3*(int)COW_RECORD;cut++) {
         memcpy(disk,baseline,CAP);memcpy(stable,baseline,CAP);
-        budget=cut;fail_sync=0;sync_count=0;mount(&c);int rc=tx(&c,22);
+        budget=cut;fail_sync=0;sync_count=0;mount(&c);if(indexed)assert(!cow_index(&c,offsets,8));int rc=tx(&c,22);
         memcpy(disk,stable,CAP);mount(&c);
         assert(c.generation==1||c.generation==2);
         check(&c,c.generation==2?22:11);
@@ -67,5 +69,5 @@ int main(void) {
     memset(disk,0,CAP);mount(&c);budget=-1;
     while(!tx(&c,33)){}
     assert(c.sealed);mount(&c);assert(c.generation>0);check(&c,33);
-    puts("COW PASS: 3314 byte-cut scenarios (immediate and buffered durability), sync failures, old/new atomic recovery, base identity, corruption, bounds, incomplete tail, capacity; ASan/UBSan");
+    puts("COW PASS: 6628 byte-cut scenarios (indexed/unindexed, immediate/buffered durability), sync failures, old/new atomic recovery, base identity, corruption, bounds, incomplete tail, capacity; ASan/UBSan");
 }
