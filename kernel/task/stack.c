@@ -27,7 +27,8 @@ void task_stack_check_switch(task_t *t, bool saved_sp)
     if (saved_sp && t->stack_base) {
         uintptr_t low = (uintptr_t)t->stack_base + TASK_STACK_GUARD_BYTES;
         uintptr_t sp = (uintptr_t)t->sp;
-        if (sp < low || sp > low + t->stack_size - ARCH_STACK_ALIGN ||
+        if (t->stack_size < arch_task_context_bytes() || sp < low ||
+            sp > low + t->stack_size - arch_task_context_bytes() ||
             sp % ARCH_STACK_ALIGN) kernel_panic("task saved stack pointer out of bounds");
     }
 }
