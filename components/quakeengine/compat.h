@@ -1,5 +1,9 @@
 #include <sys/types.h>
 #pragma once
+#include "esp_attr.h"
+#undef EXT_RAM_BSS_ATTR
+#define EXT_RAM_BSS_ATTR
+#include <assert.h>
 /* Included only in the Doom engine's translation units. Never redirects MeOS libc globally. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,6 +59,8 @@ void quake_exit(int code) __attribute__((noreturn));
 void quake_assertion(const char *file, int line, const char *function, const char *condition) __attribute__((noreturn));
 
 #ifndef QUAKE_COMPAT_DECLARATIONS_ONLY
+#undef assert
+#define assert(test) ((test) ? (void)0 : quake_assertion(__FILE__,__LINE__,__func__,#test))
 #define atof quake_atof
 #define malloc quake_malloc
 #define calloc quake_calloc
@@ -69,6 +75,10 @@ void quake_assertion(const char *file, int line, const char *function, const cha
 #define ftell quake_ftell
 #define feof quake_feof
 #define ferror quake_ferror
+#undef getc
+#undef putc
+#define getc quake_fgetc
+#define putc quake_fputc
 #define fgetc quake_fgetc
 #define fputc quake_fputc
 #define fflush quake_fflush

@@ -1,6 +1,6 @@
 #include <m5os/board_config.h>
-#if M5OS_QUAKE
 #include <m5os/quake.h>
+#if M5OS_QUAKE
 #include <m5os/app.h>
 #include <m5os/task.h>
 #include <m5os/arch.h>
@@ -26,8 +26,9 @@ static jmp_buf escape;
 static bool pending,screen;
 static uint16_t palette[256];
 static unsigned frames;
-static uint64_t began;
-static bool held[256],wanted[256],sampled;
+static uint64_t began,profile_at;
+static unsigned profile_frames;
+static bool held[256],wanted[256],sampled,capture_next;
 static int keyboard;
 static uint64_t key_until;
 static void reset_engine(void) {
@@ -47,16 +48,39 @@ int quake_app_cleanup(uint32_t id) {
 void QG_Init(void) {}
 void QG_Quit(void) { quake_exit(0); }
 void QG_SetPalette(unsigned char p[768]) { for(int i=0;i<256;i++)palette[i]=RGB565(p[i*3],p[i*3+1],p[i*3+2]); }
+static void capture(const uint8_t *pixels) {
+    static const char digits[]="0123456789abcdef";
+    char line[641];kprintf("QSHOT 320 200 %u\n",frames);
+    for(unsigned row=0;row<16;row++) {
+        for(unsigned col=0;col<16;col++) { unsigned n=palette[row*16+col];for(unsigned k=0;k<4;k++)line[col*4+k]=digits[(n>>(12-4*k))&15]; }
+        line[64]=0;kprintf("QPAL %u %s\n",row,line);
+    }
+    for(unsigned row=0;row<200;row++) {
+        for(unsigned col=0;col<320;col++){unsigned n=pixels[row*320+col];line[col*2]=digits[n>>4];line[col*2+1]=digits[n&15];}
+        line[640]=0;kprintf("QROW %u %s\n",row,line);
+    }
+    kputs("QEND\n");
+}
 void QG_DrawFrame(void *pixels) {
     display_draw_indexed_bitmap_resized(160,0,320,200,pixels,palette,960,720);
     frames++;sampled=false;
-    if(!(frames%100))kprintf("quake: %u frames in %u ms\n",frames,(unsigned)((hal_time_now_us()-began)/1000));
+    if(capture_next){capture_next=false;capture(pixels);}
+    if(!(frames%100)) {
+        uint64_t now=hal_time_now_us();unsigned count=frames-profile_frames;
+        unsigned fps10=profile_at&&now>profile_at?(unsigned)((uint64_t)count*10000000/(now-profile_at)):0;
+        kprintf("quake: %u frames, %u.%u presentations/s\n",frames,fps10/10,fps10%10);
+        profile_at=now;profile_frames=frames;
+        task_stack_info_t stack;
+        if(!task_stack_inspect(task_current()->id,&stack))
+            kprintf("quake stack: %u/%u bytes, guard %s\n",(unsigned)stack.used,(unsigned)stack.size,stack.guard_ok?"OK":"BAD");
+    }
     task_yield();
 }
 static void sample_inputs(void) {
     memset(wanted,0,sizeof wanted);
     int ch;while((ch=kconsole_getc())>=0) {
         if(ch==3||ch=='q')quake_exit(0);
+        if(ch=='p'){capture_next=true;continue;}
         keyboard=ch=='w'?K_UPARROW:ch=='s'?K_DOWNARROW:ch=='a'?K_LEFTARROW:ch=='d'?K_RIGHTARROW:ch=='f'?K_CTRL:ch;
         key_until=hal_time_now_us()+180000;
     }
@@ -87,24 +111,30 @@ void quake_main(void *arg) {
     size_t n=(size_t)(_quake_data_end-_quake_data_start);
     if(!n||n>256u*1024u||(uintptr_t)_quake_bss_end<=(uintptr_t)_quake_bss_start){kputs("quake: invalid linker state\n");return;}
     if(!initial){initial=kmalloc_psram(n);if(!initial)return;memcpy(initial,_quake_data_start,n);}
-    reset_engine();memset(held,0,sizeof held);memset(wanted,0,sizeof wanted);sampled=false;keyboard=0;key_until=0;
+    reset_engine();memset(held,0,sizeof held);memset(wanted,0,sizeof wanted);sampled=false;capture_next=false;keyboard=0;key_until=0;
     kconsole_set_focus(task_current()->id);ime_bypass(true);fbcon_pause(true);screen=true;task_sleep(60);
     display_set_target(NULL);display_clear(COLOR_BLACK);
     display_draw_text(12,60,"FWD",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(12,300,"BACK",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(12,580,"MENU",COLOR_WHITE,COLOR_BLACK,2);
     display_draw_text(1140,60,"FIRE",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,260,"JUMP",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,440,"LEFT",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,620,"RIGHT",COLOR_WHITE,COLOR_BLACK,2);
     frames=0;began=hal_time_now_us();
     if(!setjmp(escape)) {
-        quakeparms_t parms={0};parms.memsize=20*1024*1024;parms.membase=quake_malloc(parms.memsize);parms.basedir=quake_basedir;
+        quakeparms_t parms={0};parms.memsize=12*1024*1024;parms.membase=quake_malloc(parms.memsize);parms.basedir=quake_basedir;
         char *args[]={"quake","-basedir",quake_basedir,"-nosound","-nocdaudio",NULL};
         COM_InitArgv(5,args);parms.argc=com_argc;parms.argv=com_argv;
         Host_Init(&parms);
+        frames=0;profile_frames=0;began=profile_at=hal_time_now_us();
+        kputs("quake: Host_Init complete; interactive loop\n");
         uint64_t last=hal_time_now_us();
         for(;;){uint64_t now=hal_time_now_us();Host_Frame((now-last)/1000000.0);last=now;task_sleep(1);}
     }
     kprintf("quake: stopped after %u frames\n",frames);
 }
+extern int quake_receive(int argc,char **argv);
+extern int quake_verify(void);
 int quake_command(int argc,char **argv) {
     if(quake_owner||pending)return 1;
+    if(argc>=2&&!strcmp(argv[1],"receive"))return quake_receive(argc,argv);
+    if(argc==2&&!strcmp(argv[1],"verify"))return quake_verify();
     if(argc>2||(argc==2&&strcmp(argv[1],"/sd"))){kputs("usage: quake [/sd]\n");return 1;}
     vfs_info_t info;if(vfs_stat("/sd/id1/pak0.pak",&info)<0){kputs("quake: mount SD with /id1/pak0.pak first\n");return 1;}
     pending=true;uint32_t id;int rc=app_start("quake",&id);if(rc<0)pending=false;return rc<0;
