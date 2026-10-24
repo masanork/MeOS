@@ -4,6 +4,7 @@
 #include <m5os/arch.h>
 #include <m5os/errno.h>
 #include <m5os/kernel.h>
+#include <m5os/kprintf.h>
 #include <string.h>
 
 void task_stack_prepare(void *allocation, size_t usable)
@@ -29,7 +30,14 @@ void task_stack_check_switch(task_t *t, bool saved_sp)
         uintptr_t sp = (uintptr_t)t->sp;
         if (t->stack_size < arch_task_context_bytes() || sp < low ||
             sp > low + t->stack_size - arch_task_context_bytes() ||
-            sp % ARCH_STACK_ALIGN) kernel_panic("task saved stack pointer out of bounds");
+            sp % ARCH_STACK_ALIGN) {
+            /* The rejected task may differ from task_current() (the outgoing
+             * task recorded by panic). Capture its identity without a lock. */
+            static char detail[96];
+            ksnprintf(detail,sizeof detail,"stack bounds: pid %u sp %x low %x size %u ctx %u",
+                t->id,(unsigned)sp,(unsigned)low,(unsigned)t->stack_size,(unsigned)arch_task_context_bytes());
+            kernel_panic(detail);
+        }
     }
 }
 

@@ -52,8 +52,9 @@ ASan host render (130 frames), the Tab5 firmware build, and a separate WAD-free
 Doom regression build pass. The Quake image boots on the physical Tab5. A shareware
 PAK was transferred to the original SDSC card with matching incoming-stream CRC
 and a clean unmount. A FAT32 16 GB SDHC card was separately prepared through the
-Mac reader with matching SHA256 and safe eject. Gameplay, native FPS and
-quit/restart/forced termination remain to be qualified after the card swap.
+Mac reader with matching SHA256 and safe eject. Physical gameplay and normal quit/restart are now qualified as recorded in
+`DEVICE_TEST.md`. Forced termination and physical touch interaction remain
+separate qualification items.
 Do not transfer historical Doom performance claims to this port.
 
 ## Next device check
@@ -111,3 +112,13 @@ The capture is the engine frame/palette, not a camera image of the physical LCD.
 The profiling interval begins after Host_Init and reports presentations/second;
 it does not claim every image contains changed scene content. Stack paint/guard
 samples are diagnostics rather than exact maximum-depth proofs.
+
+The physical bring-up caught legacy 128 KiB PAK-directory and up-to-88 KiB
+renderer frames. Those fixed work arrays now live in resettable PSRAM BSS.
+`check_stack.py` fails a firmware build if a reported engine frame exceeds
+16 KiB or is unbounded; this is not a call-graph/recursion proof. Scheduler
+bounds failures now name the rejected task, which can differ from the currently
+running task stored by the panic recorder. Stack guards remain enabled.
+
+Touch rails: FWD/BACK are menu up/down; MENU is back/Escape; FIRE/OK selects
+in menus and fires in-game. Keyboard/serial F follows the same context rule.

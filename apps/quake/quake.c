@@ -81,7 +81,7 @@ static void sample_inputs(void) {
     int ch;while((ch=kconsole_getc())>=0) {
         if(ch==3||ch=='q')quake_exit(0);
         if(ch=='p'){capture_next=true;continue;}
-        keyboard=ch=='w'?K_UPARROW:ch=='s'?K_DOWNARROW:ch=='a'?K_LEFTARROW:ch=='d'?K_RIGHTARROW:ch=='f'?K_CTRL:ch;
+        keyboard=ch=='w'?K_UPARROW:ch=='s'?K_DOWNARROW:ch=='a'?K_LEFTARROW:ch=='d'?K_RIGHTARROW:ch=='f'?(key_dest==key_menu?K_ENTER:K_CTRL):ch;
         key_until=hal_time_now_us()+180000;
     }
     if(hal_time_now_us()<key_until && keyboard>0&&keyboard<256)wanted[keyboard]=true;
@@ -89,7 +89,7 @@ static void sample_inputs(void) {
     for(int i=0;i<count;i++) {
         int x=points[i].x,y=points[i].y,key=0;
         if(x<160)key=y<240?K_UPARROW:y<480?K_DOWNARROW:K_ESCAPE;
-        else if(x>=1120)key=y<180?K_CTRL:y<360?K_SPACE:y<540?K_LEFTARROW:K_RIGHTARROW;
+        else if(x>=1120)key=y<180?(key_dest==key_menu?K_ENTER:K_CTRL):y<360?K_SPACE:y<540?K_LEFTARROW:K_RIGHTARROW;
         if(key)wanted[key]=true;
     }
 }
@@ -115,7 +115,7 @@ void quake_main(void *arg) {
     kconsole_set_focus(task_current()->id);ime_bypass(true);fbcon_pause(true);screen=true;task_sleep(60);
     display_set_target(NULL);display_clear(COLOR_BLACK);
     display_draw_text(12,60,"FWD",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(12,300,"BACK",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(12,580,"MENU",COLOR_WHITE,COLOR_BLACK,2);
-    display_draw_text(1140,60,"FIRE",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,260,"JUMP",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,440,"LEFT",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,620,"RIGHT",COLOR_WHITE,COLOR_BLACK,2);
+    display_draw_text(1140,60,"FIRE/OK",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,260,"JUMP",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,440,"LEFT",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,620,"RIGHT",COLOR_WHITE,COLOR_BLACK,2);
     frames=0;began=hal_time_now_us();
     if(!setjmp(escape)) {
         quakeparms_t parms={0};parms.memsize=12*1024*1024;parms.membase=quake_malloc(parms.memsize);parms.basedir=quake_basedir;

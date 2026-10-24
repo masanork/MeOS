@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdarg.h>
 #include <setjmp.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -19,6 +20,7 @@ bool task_has_perm(uint32_t perm) { assert(perm == APP_PERM_SPAWN); return allow
 void *kmalloc_internal(size_t n) { allocations++; return fail_alloc ? NULL : aligned_alloc(16, (n+15)&~(size_t)15); }
 void kfree(void *p) { frees++; free(p); }
 void kprintf(const char *fmt, ...) { (void)fmt; }
+int ksnprintf(char *out,size_t cap,const char *fmt,...) { va_list a;va_start(a,fmt);int n=vsnprintf(out,cap,fmt,a);va_end(a);return n; }
 const char *task_state_name(task_state_t state) { (void)state; return "test"; }
 void arch_task_trampoline(void) {}
 uint32_t arch_irq_disable(void) { return irq_depth++; }
