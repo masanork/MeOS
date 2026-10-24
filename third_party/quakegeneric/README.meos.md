@@ -16,3 +16,12 @@ Vector length/normalization also uses an FP32 square root for its FP32 input and
 output. GCC/Clang builds request `__builtin_sqrtf`, with the original double call
 as the portable fallback. ESP32-P4 disassembly confirms `fsqrt.s`. A million
 finite input comparisons and the same 130-frame image comparison remain exact.
+
+Four rasterizer edge/light-gradient ceilings now use `Q_CeilFloatToInt` for
+finite float inputs whose result is representable as int. Truncation plus a
+positive-fraction correction exactly preserves integer ceil without double/libm
+calls. Boundary/denormal tests and a million comparisons pass; the 130-frame
+render remains byte-identical. MeOS-only host phase hooks aggregate command,
+server, client, rendering and effect-mixer elapsed times; builds without the
+forced compatibility header retain no-op hooks. No game arithmetic is changed
+by profiling. Hardware speed impact of this follow-up remains unmeasured.

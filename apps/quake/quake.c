@@ -17,6 +17,7 @@
 #include "runtime.h"
 #include "input.h"
 #include "layout.h"
+#include "../../components/quakeengine/profile.h"
 #define QUAKE_COMPAT_DECLARATIONS_ONLY
 #include "../../components/quakeengine/compat.h"
 #include "../../third_party/quakegeneric/source/quakedef.h"
@@ -57,6 +58,14 @@ static void profile_report(void){
         (unsigned)(prof_host/n),(unsigned)(prof_draw/n),(unsigned)(prof_copy/n),(unsigned)(prof_flush/n),
         (unsigned)(prof_input/n),(unsigned)(prof_wait/n),(unsigned)(other/n));
     kprintf("quake keyboard: %s, %u native transitions\n",native_ready?"ready":"waiting",native_events);
+    quake_profile_stats p=quake_profile_take();unsigned pn=p.completed_frames?p.completed_frames:n;
+    kprintf("quake phases: cmd %u server %u client %u render %u audio %u us/frame (%u completed)\n",
+        (unsigned)(p.phase_us[QP_COMMANDS]/pn),(unsigned)(p.phase_us[QP_SERVER]/pn),
+        (unsigned)(p.phase_us[QP_CLIENT]/pn),(unsigned)(p.phase_us[QP_RENDER]/pn),
+        (unsigned)(p.phase_us[QP_AUDIO]/pn),p.completed_frames);
+    kprintf("quake io: %u bytes, open %u/%u read %u/%u seek %u/%u calls/us\n",
+        (unsigned)p.read_bytes,p.io_calls[QIO_OPEN],(unsigned)p.io_us[QIO_OPEN],
+        p.io_calls[QIO_READ],(unsigned)p.io_us[QIO_READ],p.io_calls[QIO_SEEK],(unsigned)p.io_us[QIO_SEEK]);
     task_stack_info_t stack;if(!task_stack_inspect(task_current()->id,&stack))
         kprintf("quake stack: %u/%u bytes, guard %s\n",(unsigned)stack.used,(unsigned)stack.size,stack.guard_ok?"OK":"BAD");
     profile_reset();
@@ -155,7 +164,7 @@ void quake_main(void *arg) {
     size_t n=(size_t)(_quake_data_end-_quake_data_start);
     if(!n||n>256u*1024u||(uintptr_t)_quake_bss_end<=(uintptr_t)_quake_bss_start){kputs("quake: invalid linker state\n");return;}
     if(!initial){initial=kmalloc_psram(n);if(!initial)return;memcpy(initial,_quake_data_start,n);}
-    reset_engine();quake_input_reset();native_events=0;native_ready=false;sampled=false;capture_next=false;
+    reset_engine();quake_profile_reset();quake_input_reset();native_events=0;native_ready=false;sampled=false;capture_next=false;
     if(!keyboard_raw_claim(&quake_owner)){kputs("quake: native keyboard is busy\n");return;}
     kconsole_set_focus(task_current()->id);ime_bypass(true);fbcon_pause(true);screen=true;task_sleep(60);
     display_set_target(NULL);display_clear(COLOR_BLACK);
@@ -200,6 +209,7 @@ void quake_main(void *arg) {
         if(benchmark_start){args[ac++]="+map";args[ac++]=selected_map;}
         args[ac]=NULL;
         COM_InitArgv(ac,args);parms.argc=com_argc;parms.argv=com_argv;
+        uint64_t load_at=hal_time_now_us();bool playable_reported=false;
         Host_Init(&parms);
         Cbuf_AddText("bind w +forward\nbind s +back\nbind a +moveleft\nbind d +moveright\nbind f +attack\nbind e \"impulse 10\"\nbind / \"impulse 10\"\nbind UPARROW +forward\nbind DOWNARROW +back\nbind LEFTARROW +left\nbind RIGHTARROW +right\n+mlook\n");
         frames=0;profile_frames=0;began=profile_at=hal_time_now_us();
@@ -208,6 +218,9 @@ void quake_main(void *arg) {
         for(;;){
             uint64_t now=hal_time_now_us();unsigned before=frames;
             Host_Frame((now-last)/1000000.0);last=now;
+            if(!playable_reported&&frames&&cls.signon==SIGNONS){
+                playable_reported=true;kprintf("quake load: %u ms to playable signon\n",(unsigned)((hal_time_now_us()-load_at)/1000));
+            }
             prof_host+=hal_time_now_us()-now;
             uint64_t wait_start=hal_time_now_us();
             if(legacy_wait||frames==before)task_sleep(1);

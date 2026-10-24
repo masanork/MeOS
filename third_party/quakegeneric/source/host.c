@@ -21,6 +21,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "quakedef.h"
 #include "r_local.h"
+#ifndef QUAKE_PHASE
+#define QUAKE_PHASE(p) ((void)0)
+#endif
 
 /*
 
@@ -591,6 +594,7 @@ void _Host_Frame (float time)
 // decide the simulation time
 	if (!Host_FilterTime (time))
 		return;			// don't run too fast, or packets will flood out
+	QUAKE_PHASE(QP_COMMANDS);
 		
 // get new key events
 	Sys_SendKeyEvents ();
@@ -615,9 +619,11 @@ void _Host_Frame (float time)
 
 // check for commands typed to the host
 	Host_GetConsoleCommands ();
+	QUAKE_PHASE(QP_SERVER);
 	
 	if (sv.active)
 		Host_ServerFrame ();
+	QUAKE_PHASE(QP_CLIENT);
 
 //-------------------
 //
@@ -639,6 +645,7 @@ void _Host_Frame (float time)
 	}
 
 // update video
+	QUAKE_PHASE(QP_RENDER);
 	if (host_speeds.value)
 		time1 = Sys_FloatTime ();
 		
@@ -648,6 +655,7 @@ void _Host_Frame (float time)
 		time2 = Sys_FloatTime ();
 		
 // update audio
+	QUAKE_PHASE(QP_AUDIO);
 	if (cls.signon == SIGNONS)
 	{
 		S_Update (r_origin, vpn, vright, vup);
@@ -657,6 +665,7 @@ void _Host_Frame (float time)
 		S_Update (vec3_origin, vec3_origin, vec3_origin, vec3_origin);
 	
 	CDAudio_Update();
+	QUAKE_PHASE(QP_COUNT);
 
 	if (host_speeds.value)
 	{

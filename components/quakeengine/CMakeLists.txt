@@ -76,6 +76,7 @@ idf_component_register(SRCS
     LDFRAGMENTS quake.lf)
 target_compile_options(${COMPONENT_LIB} PRIVATE -O3 -fno-tree-vectorize -fno-strict-aliasing -fstack-usage -fno-builtin -msmall-data-limit=0 -w
     -include ${CMAKE_CURRENT_LIST_DIR}/compat.h)
+target_compile_definitions(${COMPONENT_LIB} PRIVATE MEOS_QUAKE_PROFILE=1)
 add_custom_command(TARGET ${COMPONENT_LIB} POST_BUILD
     COMMAND ${PYTHON} ${CMAKE_CURRENT_LIST_DIR}/isolate_data.py
         ${CMAKE_OBJDUMP} ${CMAKE_OBJCOPY} $<TARGET_FILE:${COMPONENT_LIB}>

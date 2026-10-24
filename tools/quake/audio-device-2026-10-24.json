@@ -24,7 +24,7 @@
     0,
     0
   ],
-  "audible_user_confirmation": "pending",
+  "audible_user_confirmation": "user confirmed effect audio audible",
   "bgm_supported": false,
   "host_checks": "ASan/UBSan audio ring and existing Quake adapter/render/math suite passed",
   "builds": [

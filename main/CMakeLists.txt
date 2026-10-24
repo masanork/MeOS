@@ -157,6 +157,7 @@ set_source_files_properties(${M5OS_LITTLEFS_SRCS} PROPERTIES COMPILE_DEFINITIONS
 # Quake uses the same rotated/indexed LCD hot path as Doom. Keep non-game builds
 # unchanged; the default SDK debug choice must not de-optimize this game path.
 if("$ENV{M5OS_QUAKE}" STREQUAL "1")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE MEOS_QUAKE_PROFILE=1)
     set_source_files_properties(${M5OS_ROOT}/drivers/lcd/display_tab5.c ${M5OS_ROOT}/drivers/lcd/ppa_tab5.c
         PROPERTIES COMPILE_OPTIONS "-O3;-funroll-loops;-fno-builtin")
     set_source_files_properties(${M5OS_ROOT}/apps/quake/quake.c ${M5OS_ROOT}/apps/quake/libc.c

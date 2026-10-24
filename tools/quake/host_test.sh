@@ -28,3 +28,6 @@ cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined tools/quak
 
 cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined tools/quake/audio_test.c -o "$OUT/audio-test"
 "$OUT/audio-test"
+
+cc -std=c11 -Wall -Wextra -Werror -O2 -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -DM5OS_QUAKE=1 -Ikernel/include tools/quake/profile_test.c apps/quake/profile.c -o "$OUT/profile-test"
+"$OUT/profile-test"

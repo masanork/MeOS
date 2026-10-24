@@ -144,7 +144,6 @@ A normal exit after 2,716 game frames reported 9,968 DMA blocks, zero reported
 underruns/errors, 5,103,616 output frames and 766,576 nonzero output frames. Audio
 status returned idle, native keyboard text routing returned, and allocation failure
 counters were zero. The sampled game stack reached 13,088 / 49,152 bytes, guard OK.
-These counters prove PCM/DMA activity, not audible speaker output; user listening
-confirmation remains pending. CD/BGM support remains disabled. A second E1M1
+The user subsequently confirmed audible effect output from the speaker. CD/BGM support remains disabled. A second E1M1
 launch reached gameplay after cleanup (44.1–44.2 FPS sampled at the starting view). No SD format, data upload or engine registration
 check bypass was performed.

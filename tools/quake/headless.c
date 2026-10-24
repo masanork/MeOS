@@ -49,6 +49,9 @@ int main(int argc,char **argv){
  int result=setjmp(done);if(result)return result==1?0:1;
  quakeparms_t p={0};p.memsize=12*1024*1024;p.membase=quake_malloc(p.memsize);p.basedir=quake_basedir;
  char *args[]={"quake","-basedir",quake_basedir,"-nosound","-nocdaudio",NULL};COM_InitArgv(5,args);p.argc=com_argc;p.argv=com_argv;
- Host_Init(&p);for(unsigned i=0;i<120;i++)Host_Frame(.05);
+ quake_profile_reset();Host_Init(&p);for(unsigned i=0;i<120;i++)Host_Frame(.05);
+ quake_profile_stats profile=quake_profile_take();
+ if(!profile.completed_frames||!profile.phase_us[QP_RENDER]||!profile.read_bytes)return 1;
+ printf("HEADLESS profile: %u completed frames, %u bytes read\n",profile.completed_frames,(unsigned)profile.read_bytes);
  printf("HEADLESS frames=%u\n",frames);return frames>=20?0:1;
 }

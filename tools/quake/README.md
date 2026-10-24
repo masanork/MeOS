@@ -21,8 +21,8 @@ is local only. No PAK, game assets or firmware release is included.
   `/sd` data is streamed rather than loading an entire PAK into RAM. Handles,
   owner allocations and display/input state are reclaimed through app cleanup.
 - Native firmware now includes the software effect mixer; its new audio backend
-  passes host tests and physical mixer/DMA/normal-exit checks. Audible output
-  still needs user confirmation. CD music,
+  passes host tests and physical mixer/DMA/normal-exit checks. Audible effect output
+  was also confirmed by the user. CD music,
   network drivers, recording, config/save writes and savegame loading remain
   disabled. Only local loopback client/server is compiled.
 
@@ -250,5 +250,26 @@ The shared Tab5 audio driver now derives descriptor and PCM alignment from the
 configured L2 cache-line size (64 bytes in default/Doom builds, 128 in Quake).
 Host ring tests cover rational conversion, wrap, chunk continuity and stall silence.
 Physical E1M1 gameplay, nonzero mixer output, DMA progression with zero reported
-underruns/errors and normal-exit cleanup passed on 2026-10-24. Audible output
-still requires user confirmation. See `audio-device-2026-10-24.json`.
+underruns/errors and normal-exit cleanup passed on 2026-10-24. Audible effect output
+was confirmed by the user. See `audio-device-2026-10-24.json`.
+
+## Follow-up profiling (hardware measurement pending)
+
+The next Quake image reports `quake phases` every 100 presented engine frames:
+command execution, local server, client processing, rendering (including display
+presentation) and game-task effect mixing, in microseconds per completed host
+frame. These are elapsed times including preemption; the audio-worker callback
+is not isolated CPU time. `quake io` reports read bytes and open/read/seek
+call counts and elapsed microseconds, including failed operations. IO time is
+nested within the host phases and must not be added to them. The first IO report
+also includes Host_Init data reads; following reports reset interval totals.
+`quake load` measures Host_Init through the first presented frame with complete
+client signon, covering map loading for direct-map commands. This is a readiness
+proxy, not a camera or input-latency measurement. No per-frame serial trace is
+emitted. The hooks do not change frame scheduling or gameplay arithmetic.
+
+Four float-to-integer rasterizer ceilings avoid software double/libm calls, with
+exact integer results for finite, int-range inputs. Boundary/denormal cases, one
+million reference cases and the same 130-frame ASan image pass. Native speed and
+load-time comparisons await a coordinated device session after the parallel
+SDMMC work; no firmware was flashed for this follow-up.
