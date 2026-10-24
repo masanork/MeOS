@@ -14,6 +14,7 @@
 #include <m5os/dev_buttons.h>
 #include <m5os/blockdev.h>
 #include <m5os/fs.h>
+#include <m5os/rootfs.h>
 #include <m5os/vfs.h>
 #include <m5os/mutex.h>
 #include <m5os/app.h>
@@ -40,8 +41,13 @@ void hog_main(void *arg);
 #define M5OS_BOOT_SELFTEST 0
 #endif
 
-bool rootfs_mount(blockdev_t *sd);
 static blockdev_t *s_sd;
+
+static void boot_mark(const char *stage)
+{
+    kprintf("BOOT +%u ms %s\n",
+            (uint32_t)(hal_time_now_us() / 1000u), stage);
+}
 static bool lcd_ready;
 
 
@@ -391,6 +397,7 @@ void kernel_main(void)
 
     bool lcd_ok = display_init();                    /* driver bring-up (kernel side) */
     kprintf("LCD: %s\n", lcd_ok ? "ok" : "FAILED");
+    boot_mark("display-ready");
     lcd_ready = lcd_ok;
 
     sched_init();
@@ -405,6 +412,7 @@ void kernel_main(void)
 #else
     blockdev_t *sd = s_sd = NULL;                    /* no SD driver on this board yet */
 #endif
+    boot_mark(sd ? "sd-ready" : "sd-unavailable");
 
 #if M5OS_BOOT_SELFTEST
     task_create("hog0", hog_main, NULL, TASK_PRIO_DEFAULT);
@@ -415,6 +423,7 @@ void kernel_main(void)
     task_create("logB", log_task, (void *)'B', TASK_PRIO_DEFAULT);
 #else
     rootfs_mount(sd);
+    boot_mark(rootfs_is_persistent() ? "root-persistent" : "root-recovery");
     wifi_boot_start();
 #if M5OS_HAS_TOUCH
     if (lcd_ok && gui_init() == ERR_OK) {            /* touch screen: windows and the launcher */
@@ -429,6 +438,7 @@ void kernel_main(void)
     task_create_stack("shell", shell_task, NULL, TASK_PRIO_DEFAULT + 1, 32768);
 #endif
     health_start();
+    boot_mark("scheduler-start");
     sched_start_preemption();
 
     for (;;) arch_cpu_idle();

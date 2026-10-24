@@ -1484,6 +1484,7 @@ void shell_task(void *arg)
 
     tailscale_boot_start();
 
+    SH_PRINTF("BOOT +%u ms shell-ready\n", (uint32_t)(hal_time_now_us() / 1000u));
     sh_puts("\nMeOS " M5OS_VERSION_STRING "\nBoard: " M5OS_BOARD_NAME "\nCPU: " M5OS_CPU_NAME "\nScheduler: MeOS\nFreeRTOS: disabled\n\n");
     char line[LINE_MAX];
     for (;;) {

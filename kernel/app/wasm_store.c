@@ -22,6 +22,7 @@
 #include <m5os/crc32.h>
 #include <m5os/arch.h>
 #include <m5os/task.h>
+#include <m5os/rootfs.h>
 #include <string.h>
 #include "esp_attr.h"
 #include "esp_rom_spiflash.h"
@@ -47,6 +48,7 @@ extern esp_rom_spiflash_result_t esp_rom_spiflash_unlock(void);
 
 static mutex_t s_lock = MUTEX_INIT;
 static bool s_ready;
+static bool s_persistent_root;
 static uint32_t s_end, s_erased;                  /* where the next record goes; flash from s_end to s_erased is known erased */
 
 /* ---- flash ---------------------------------------------------------------------------------- */
@@ -230,6 +232,11 @@ int wasm_install_image(const uint8_t *file, size_t len, char name_out[16])
     wasm_manifest_t m;
     if (len > MAX_APP || !wasm_read_manifest(file, len, &m)) return ERR_INVAL;
     if (m.name[0] < 0x20) return ERR_INVAL;
+    if (s_persistent_root) {
+        int rc = put_file(m.name, file, (uint32_t)len);
+        if (rc == ERR_OK && name_out) strcpy(name_out, m.name);
+        return rc;
+    }
     mutex_lock(&s_lock);
     int rc = s_ready ? ERR_OK : ERR_IO;
     uint32_t old = 0;
@@ -274,11 +281,14 @@ int wasm_uninstall(const char *name)
 {
     char path[VFS_PATH_MAX];
     app_path(name, path);
-    mutex_lock(&s_lock);
-    uint32_t off;
-    bool had = s_ready && find(name, &off, NULL);
-    int rc = had ? mark_removed(off) : ERR_NOENT;
-    mutex_unlock(&s_lock);
+    int rc = ERR_NOENT;
+    if (!s_persistent_root) {
+        mutex_lock(&s_lock);
+        uint32_t off;
+        bool had = s_ready && find(name, &off, NULL);
+        rc = had ? mark_removed(off) : ERR_NOENT;
+        mutex_unlock(&s_lock);
+    }
     vfs_info_t st;
     bool file = vfs_stat(path, &st) == ERR_OK;
     if (file) vfs_unlink(path);
@@ -356,6 +366,30 @@ int wasm_list_installed(wasm_list_cb cb, void *ctx)
 
 void wasm_store_boot(void)
 {
+    if (rootfs_is_persistent()) {
+        static const char marker[] = "/apps/.persistent-store-v1";
+        s_persistent_root = true;
+        vfs_mkdir("/apps");
+        vfs_info_t st;
+        int seeded = 0;
+        if (vfs_stat(marker, &st) != ERR_OK) {
+            for (int i = 0; i < g_wasm_image_count; i++) {
+                char path[VFS_PATH_MAX];
+                app_path(g_wasm_images[i].name, path);
+                if (vfs_stat(path, &st) == ERR_OK) continue;
+                if (put_file(g_wasm_images[i].name, g_wasm_images[i].data,
+                             g_wasm_images[i].size) == ERR_OK) seeded++;
+            }
+            int fd = vfs_open(marker, VFS_O_WRITE | VFS_O_CREATE | VFS_O_TRUNC);
+            if (fd >= 0) {
+                static const char version[] = "persistent /apps is authoritative\n";
+                vfs_write(fd, version, sizeof version - 1u);
+                vfs_close(fd);
+            }
+        }
+        kprintf("wasm: persistent /apps active (%d sample(s) seeded)\n", seeded);
+        return;
+    }
     esp_rom_spiflash_unlock();
     mutex_lock(&s_lock);
     if (!scan()) {
