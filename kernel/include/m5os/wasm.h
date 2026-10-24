@@ -28,11 +28,11 @@ int  app_start_wasm_image(const uint8_t *file, size_t len, uint32_t *app_id);
 void wasm_app_cleanup(uint32_t app_id);        /* kernel: an app ended; give back the screen if it held it */
 
 /*
- * Installed apps.  "Installed" = a file /apps/NAME.wasm that also lives in flash (region wasmapps), so it survives a
- * reset; the RAM-disk root is rebuilt from the flash copy at every boot.  Uninstalling removes both.  The firmware
- * ships a few samples (apps/wasm); they are installed on the very first boot only, so removing one sticks.
+ * Installed apps live at /apps/NAME.wasm. A persistent SD root is authoritative
+ * and bypasses the legacy flash log. On a volatile recovery root, region
+ * wasmapps remains the durable copy and is restored at boot.
  */
-void wasm_store_boot(void);                                   /* after the root file system is up: restore (and seed) /apps */
+void wasm_store_boot(void);                                   /* select persistent /apps or restore a recovery root */
 int  wasm_install_image(const uint8_t *file, size_t len, char name_out[16]);   /* validate, store in flash and /apps; 0 or -ERR */
 int  wasm_install_file(const char *path, char name_out[16]);
 int  wasm_uninstall(const char *name);                        /* 0, or ERR_NOENT if there is no such installed app */

@@ -1,6 +1,8 @@
 /*
- * Installed WebAssembly apps: a small append-only log in the flash region "wasmapps" (0xA00000, 2 MB), mirrored into
- * /apps/NAME.wasm on the RAM-disk root at every boot.  Concept: kernel/include/m5os/wasm.h.
+ * Recovery-root WebAssembly apps: a small append-only log in the flash region
+ * "wasmapps" (0xA00000, 2 MB), mirrored into /apps/NAME.wasm on a RAM-disk root.
+ * A persistent SD root uses /apps directly and never probes this legacy log.
+ * Concept: kernel/include/m5os/wasm.h.
  *
  *   record = 32-byte header | data padded to 4 bytes
  *   header = magic "WAPP" | state | size | crc32 | name[16]
