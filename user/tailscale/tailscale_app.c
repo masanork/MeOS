@@ -2480,11 +2480,13 @@ static bool ts_sync_control_plane(void)
 
     if (auth_url[0] != 0 && !authorized) {
         ts_lock();
+        bool announce_auth = s_state != TS_STATE_NEEDS_LOGIN || !str_eq(s_auth_url, auth_url);
         str_copy(s_auth_url, sizeof(s_auth_url), auth_url);
         s_state = TS_STATE_NEEDS_LOGIN;
         ksnprintf(s_last_msg, sizeof(s_last_msg), "Login required: %s", auth_url);
         ts_unlock();
-        kprintf("tailscale: Authorize node at: %s\n", auth_url);
+        if (announce_auth)
+            kprintf("tailscale: Authorize node at: %s\n", auth_url);
 
         /* Follow up with /machine/register (Followup: auth_url) on stream 3 to wait for user approval */
         ksnprintf(reg_json, sizeof(reg_json),
@@ -2578,7 +2580,11 @@ static void tailscale_daemon_task(void *arg)
     while (s_want_up) {
         if (s_state != TS_STATE_RUNNING) {
             ts_sync_control_plane();
-            for (int i = 0; i < 8 && s_want_up && s_state != TS_STATE_RUNNING; i++) {
+            /* An AuthURL remains valid while the user approves it. Poll often
+             * enough for responsive login without hammering the control plane
+             * or repeatedly filling the console with the same URL. */
+            int retry_ticks = s_state == TS_STATE_NEEDS_LOGIN ? 50 : 10;
+            for (int i = 0; i < retry_ticks && s_want_up && s_state != TS_STATE_RUNNING; i++) {
                 task_sleep(100);
             }
         } else {
