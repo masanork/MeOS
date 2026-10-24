@@ -17,6 +17,12 @@ static unsigned char base_image[SECTORS*512];
 static unsigned char old_image[SECTORS*512],new_image[SECTORS*512];
 static unsigned char *disk;
 static int budget;
+static const fs_tx_ops_t *tx;
+static int call_open(const char *p,uint32_t f){return tx?tx->open(p,f):fs_open(p,f);}
+static int call_close(int fd){return tx?tx->close(fd):fs_close(fd);}
+static int call_write(int fd,const void *p,size_t n){return tx?tx->write(fd,p,n):fs_write(fd,p,n);}
+static int call_mkdir(const char *p){return tx?tx->mkdir(p):fs_mkdir(p);}
+static int call_delete(const char *p){return tx?tx->unlink(p):fs_delete(p);}
 void *kmalloc(size_t n){return malloc(n);}
 void *kmalloc_psram(size_t n){return malloc(n);}
 void *kcalloc(size_t n,size_t s){return calloc(n,s);}
@@ -38,30 +44,35 @@ static struct cow_io io={0,CAP,rd,wr,sync_io};
 static void mount_overlay(struct cow *c,blockdev_t *bd){assert(!cow_mount(c,io,42,SECTORS,base_read,0));cow_blockdev_init(bd,c);}
 static void write_file(const char *path,int value,size_t n,unsigned flags){
     unsigned char b[1200];memset(b,value,sizeof b);assert(n<=sizeof b);
-    int fd=fs_open(path,FS_O_WRITE|flags);assert(fd>=0);
-    assert(fs_write(fd,b,n)==(int)n);assert(!fs_close(fd));
+    int fd=call_open(path,FS_O_WRITE|flags);assert(fd>=0);
+    assert(call_write(fd,b,n)==(int)n);assert(!call_close(fd));
 }
 static void mutation(int op){
     switch(op){
     case 0:write_file("/home/new",22,900,FS_O_CREATE);break;
     case 1:write_file("/home/seed",22,900,FS_O_APPEND);break;
     case 2:write_file("/home/seed",22,111,FS_O_TRUNC);break;
-    case 3:assert(!fs_delete("/home/seed"));break;
-    case 4:assert(!fs_mkdir("/home/sub"));break;
+    case 3:assert(!call_delete("/home/seed"));break;
+    case 4:assert(!call_mkdir("/home/sub"));break;
     case 5:{
-        int a=fs_open("/home/a",FS_O_WRITE|FS_O_CREATE),b=fs_open("/home/b",FS_O_WRITE|FS_O_CREATE);
-        assert(a>=0&&b>=0);assert(fs_write(a,"aaa",3)==3);assert(fs_write(b,"bbb",3)==3);
-        assert(!fs_close(a));assert(!fs_close(b));break;
+        int a=call_open("/home/a",FS_O_WRITE|FS_O_CREATE),b=call_open("/home/b",FS_O_WRITE|FS_O_CREATE);
+        assert(a>=0&&b>=0);assert(call_write(a,"aaa",3)==3);assert(call_write(b,"bbb",3)==3);
+        assert(!call_close(a));assert(!call_close(b));break;
     }
     default:abort();
     }
 }
+static int execute(const fs_tx_ops_t *ops,void *ctx){tx=ops;mutation(*(int *)ctx);tx=NULL;return 0;}
+static int begin(void *ctx){return cow_begin(ctx);}
+static int commit(void *ctx){return cow_commit(ctx);}
+static int recover_unused(void *ctx){(void)ctx;return -1;}
 static void run_child(int op,int cut){
     pid_t pid=fork();assert(pid>=0);
     if(!pid){
         struct cow c;blockdev_t bd;budget=cut;mount_overlay(&c,&bd);
-        assert(!fs_mount(&bd,0));assert(!cow_begin(&c));mutation(op);
-        assert(!fs_sync());assert(!cow_commit(&c));_exit(0);
+        fs_tx_backend_t backend={&c,begin,commit,recover_unused};
+        assert(!fs_mount_atomic(&bd,0,&backend));
+        assert(!fs_transaction(execute,&op));_exit(0);
     }
     int status;assert(waitpid(pid,&status,0)==pid);assert(WIFEXITED(status));
     assert(WEXITSTATUS(status)==0||WEXITSTATUS(status)==90);
@@ -72,11 +83,9 @@ static void verify(const unsigned char *expected){
     if(!pid){
         struct cow c;blockdev_t bd;unsigned char b[512];mount_overlay(&c,&bd);
         for(unsigned i=0;i<SECTORS;i++){assert(!cow_read(&c,i,b));assert(!memcmp(b,expected+i*512,512));}
-        assert(!fs_mount(&bd,0));fs_info_t info;assert(!fs_stat("/home",&info));
+        assert(!fs_mount_readonly(&bd,0));fs_info_t info;assert(!fs_stat("/home",&info));
         fs_stat_t st;assert(!fs_statfs(&st));assert(st.total_blocks==SECTORS);
-        /* Teardown intentionally fails write_super outside a transaction, but
-         * fs_unmount still frees buffers. A production RO path needs its own API. */
-        assert(fs_unmount()==ERR_IO);_exit(0);
+        assert(!fs_unmount());_exit(0);
     }
     int status;assert(waitpid(pid,&status,0)==pid);assert(WIFEXITED(status)&&!WEXITSTATUS(status));
 }

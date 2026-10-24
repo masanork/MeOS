@@ -1,94 +1,145 @@
 # Immutable system images and transactional block overlays
 
-Status: experimental host-only C implementation. No firmware wiring, SD writes,
-formatting, filesystem dependency, or boot change. Primary dirty checkout preserved.
+Status: host-qualified reference implementation. No SD adapter, outer-filesystem
+selection, boot wiring, full firmware link, flash or physical power-cut claim.
+Changes live in the isolated `experiment/cow-root` worktree. The concurrent dirty
+primary checkout and physical card remain untouched.
 
-## Storage contract
+## Durable block model
 
-`fs/cow/cow.c` exposes a 512-byte sector view over an immutable base reader and
-an append-only, preallocated zero-filled log. The base identity and sector count
-are recorded in every checksummed record. The caller must derive a stable identity
-from the exact base image (prefer a verified cryptographic image manifest); the
-prototype's 64-bit identifier is an association check, not authentication.
+`fs/cow/cow.c` exposes 512-byte sectors over an immutable base reader and an
+append-only preallocated log. Data and commit records have CRC32, base identity,
+geometry and transaction generation; commit records bind the ordered data-record
+CRCs. Data is synced before a commit record is issued, and that record is synced
+before success is returned. Recovery exposes only complete committed generations.
+An IO/sync failure can have an uncertain outcome: the caller receives failure,
+but recovery may select the old OR new complete transaction. Never assume a failed
+commit means a rollback. Live writes are sealed until authoritative recovery.
 
-Begin a transaction, write sectors, then commit. Reads during the transaction see
-pending writes. All callers must be serialized, and M5FS may not expose partial
-transactions to another task. Data records are synced before the commit record;
-the commit record is then synced before success is returned. Recovery publishes
-only complete consecutive generations whose transaction digest verifies. A sync
-error has an uncertain outcome: recovery may find either the old or new generation.
-The live writer is sealed on uncertain IO. A torn/uncommitted tail is never reused;
-compact committed data into a fresh log before resuming writes.
+The caller must bind the exact immutable base to a stable identity (prefer a
+verified cryptographic manifest). The 64-bit identity here checks association; it
+is not authentication. CRCs detect accidental corruption, not hostile modification.
+Arbitrary post-commit media corruption may lose previously acknowledged data.
 
-Callbacks must implement exact reads/writes and durable, ordered sync. This is a
-conditional guarantee, not proof that an SD card's internal FTL obeys it. CRCs
-provide accidental corruption detection, not adversarial integrity. Arbitrary
-media corruption can lose earlier generations; fail-safe replication is separate.
+Callbacks transfer exactly the requested length or return nonzero. `sync` must
+make all prior writes durable and ordered. Failure must be reported, not silently
+acknowledged. The SD controller/FTL must actually meet this contract; software
+fault tests cannot establish that. Byte-addressed records are 552 bytes and need
+a file adapter or explicit aligned storage layer before direct SD use.
 
-The reference format is experimental and is not an on-device ABI. It uses 552-byte
-records, so it requires a byte-addressed file adapter, not direct aligned sector
-writes. Each record includes type, base identity, generation, LBA, geometry, sector
-payload and CRC. Commit records bind the ordered data-record CRCs in that generation.
+## Two-bank collection and publication
 
-## Memory and performance
+`fs/cow/store.c` manages two independent banks. Each has a 512-byte header with
+base identity, geometry, epoch and CRC, followed by its COW log. `open` never
+formats. Only the explicitly destructive `cow_store_format` resets both banks.
 
-No heap or capacity-sized index. Approximately one record of automatic scratch per
-call, plus constant-size state. Reads scan the committed log (and the pending tail
-inside a live transaction); this is intentionally slow and establishes a reference
-for an indexed implementation. Do not ship it as the production read path.
+Compaction, including recovery from an uncommitted/torn tail:
 
-No compaction, snapshots API, authentication, concurrency control, or erase handling
-is implemented. Empty/full logs never trigger automatic formatting or overwrite.
+1. Keep the selected committed bank untouched.
+2. Reset only the other bank, then sync that reset before reusing it.
+3. Write its header with the next epoch.
+4. Copy each sector that differs from the immutable base into a fresh transaction.
+5. Sync the snapshot data, append its commit and sync again.
+6. Select the new bank only after that commit completes. Retain the old bank until
+   the next collection needs to reuse it.
 
-## Integration sequence
+At restart, a bank without its first committed snapshot is unpublished. Choose the
+highest valid published epoch; reject equal epochs, incompatible identities and
+unreadable bank IO. IO uncertainty faults the writer. Recovery rescans both banks;
+if a pending tail remains, it compacts committed state before permitting writes.
 
-1. Test actual M5FS operations against this view, with explicit transaction fences.
-   M5FS currently flushes metadata on close/sync and performs some mutations earlier;
-   simply committing every sector or wrapping close is insufficient. On failed
-   transactions, discard/reload M5FS in-memory metadata before further operations.
-   Add tests for create, grow, truncate, unlink and multiple open files.
-2. Define `/system` RO separately from persistent user data. Keep user data across
-   system image upgrades. Binding an old block overlay to a different base is forbidden.
-3. Compare littlefs-backed files with a dedicated append-only block store. An outer
-   filesystem is optional; adding it must earn its RAM, write-amplification and porting
-   cost. Do not assume littlefs on SD inherits raw-flash guarantees without testing.
-4. Implement durable storage adapter, explicit fresh-log initialization, compaction
-   and atomic checkpoint selection. Keep the old checkpoint until the new reachable
-   data is durable. Budget spare capacity and bound checkpoint/index RAM.
-5. Wire boot: Flash startup/kernel -> SD storage -> verified base + committed overlay
-   -> M5FS root. No card/root failure may automatically format media. Use a small
-   rescue RAM root and skip the normal 8 MiB RAM disk on success.
-6. Qualify real-card write ordering, power removal, restart recovery, latency, heap,
-   stack and interaction with Wi-Fi. Card erasure is authorized by the user, but this
-   phase performs no card access. Identification must precede any destructive tool.
+Compaction requires spare space: each bank must fit the current changed-sector
+snapshot PLUS the desired transaction headroom. `cow_store_reserve` configures the
+minimum free record budget before beginning an operation (including its commit).
+If a larger operation still exhausts capacity, abort/recover and report failure;
+never rerun arbitrary application callbacks automatically. Oversized snapshots and
+IO errors leave the old bank intact. An epoch never wraps.
 
-## Evidence
+No capacity-sized index or snapshot buffer is allocated. Reads currently scan the
+log; compaction scans the entire virtual volume and replays the log for each sector.
+These bounded-memory reference paths are deliberately slow. Before deployment,
+implement an on-disk index with bounded cache and measure collection latency and
+write amplification. Two banks consume storage, not two image-sized RAM buffers.
 
-Run `sh tools/cow/host_test.sh`. ASan/UBSan test 3,314 byte-cut scenarios across
-all three records of a two-sector transaction, with immediately durable writes and
-writes buffered until sync. Every recovered transaction is entirely old or new.
-Tests also cover both sync failures, wrong base identity, uncommitted tail sealing,
-CRC corruption, invalid LBA and exhausted capacity. This is synthetic storage
-fault evidence; it is not M5FS integration, an outer-filesystem test, a device build,
-or physical power-loss qualification.
+## M5FS transaction and error boundaries
 
-## Real M5FS adapter and crash campaign
+`fs_mount_atomic` installs begin/commit/recover callbacks. Ordinary mutating `fs_*`
+operations each acquire the single filesystem mutex, begin a transaction, perform
+the operation, flush data/metadata/superblock and commit before returning success.
+A reader or second writer cannot enter while a group is running. Raw `fs_mount`
+keeps the legacy behavior; merely using a COW blockdev does not enable transactions.
 
-`fs/cow/blockdev.c` now presents the overlay as the existing `blockdev_t`. The
-host harness mounts the real `fs/m5fs/m5fs.c`, explicitly begins a transaction,
-performs file operations, flushes M5FS metadata/superblock with `fs_sync`, then
-commits the overlay. Create, append/grow, truncate, delete, mkdir and two open
-files pass 210 injected crashes (seven cut offsets per written record). Recovery
-compares every virtual sector to the complete old/new reference image and mounts
-M5FS again. The immutable base is checked unchanged. Separate processes discard
-all volatile M5FS state, descriptors and heap after each simulated power loss.
+`fs_transaction(callback, context)` groups multiple calls using a callback-scoped
+`fs_tx_ops_t` table. Use that table inside the callback; recursive public `fs_*`
+calls would deadlock. Return zero to commit or a negative error to abort. Any failed
+operation or short write poisons the entire group even if the callback ignores it.
+The table is a trusted internal API, not an untrusted-app capability boundary.
 
-This proves the externally fenced operation groups in the harness. Production
-M5FS/VFS transaction APIs, concurrency exclusion, error recovery without reboot,
-failed application-operation aborts and RO unmount semantics remain unfinished.
-The adapter rejects writes outside a transaction. The existing M5FS unmount writes
-a superblock even for a read-only session; the test explicitly expects that write
-to fail while buffers are released. Firmware needs a proper discard/RO teardown.
+A full atomic save must group open/truncate, writes and close. Separate ordinary
+open/truncate and write calls are separate commits and can leave an empty file
+between them. Existing VFS/app save paths have NOT yet been migrated to group saves.
+
+```c
+static int save(const fs_tx_ops_t *fs, void *context)
+{
+    const char *text = context;
+    int fd = fs->open("/home/note", FS_O_WRITE | FS_O_CREATE | FS_O_TRUNC);
+    if (fd < 0) return fd;
+    size_t n = strlen(text);
+    int rc = fs->write(fd, text, n);
+    if (rc < 0) return rc;
+    if ((size_t)rc != n) return ERR_NOSPC;
+    return fs->close(fd);
+}
+/* Once mounted with a transactional backend: */
+/* int rc = fs_transaction(save, "new complete contents"); */
+```
+
+On abort or uncertain commit, discard ALL in-memory M5FS metadata and descriptors,
+recover authoritative block state and remount it. File handles have non-reused tokens,
+so old handles cannot alias newly opened files. Applications must reopen after failed
+transactional operations. If recovery/remount fails, leave M5FS offline; do not
+continue with dirty metadata. Reattach explicitly after storage recovery succeeds.
+
+An inflight marker survives an abandoned callback. After the kernel releases its
+owner's mutex, the next accessor recovers before exposing data. Host tests simulate
+abandonment at a callback boundary; arbitrary-instruction task termination and
+allocator interruption still need device qualification. Transaction callbacks
+must be bounded. A kernel-owned storage worker is preferred for future app wiring.
+
+`fs_mount_readonly` rejects modifications and supports close/sync/unmount without
+writes. `fs_discard` invalidates all handles and frees volatile state without any
+storage callbacks, including when abandoning a transaction. The storage owner must
+recover pending state before reattaching it. No automatic media formatting occurs.
+
+## Evidence and remaining gates
+
+Run `sh tools/cow/host_test.sh` with ASan/UBSan:
+
+- 3,314 byte-cut cases for data/commit records, with immediate and buffered durability.
+- 210 crash cases through the actual `fs_transaction` API: create, grow, truncate,
+  delete, mkdir and two open files. Separate processes drop volatile state; compare
+  EVERY recovered sector with the complete old/new image, then mount M5FS read-only.
+- 17,506 byte cuts across inactive-bank reset, header, snapshot and publication,
+  including reuse of a previously populated bank. Verify committed contents and
+  successful writes after restart. Both immediate and buffered durability are tested.
+- Compaction sync errors before/after persistence, read failure, wrong base, repeated
+  bank reuse, discarded tails, repeated capacity recovery and differences returning
+  to base contents.
+- M5FS legacy selftest, grouped save/rollback, ignored errors, short writes, torn IO,
+  uncertain final sync, handle invalidation, full descriptor table, abandoned owner,
+  concurrent reader exclusion, failed recovery staying offline, RO/no-write teardown,
+  repeated saves/collection and zero tracked heap leaks.
+
+Five changed production/selftest C sources also compile to Tab5 target objects using
+the existing RISC-V toolchain and ABI flags. This is not a complete firmware build.
+The original M5FS selftest now uses the actual returned handle rather than assuming
+slot zero; its unused loop counter was removed for the strict host build.
+
+Before SD deployment: select/implement the outer store and durable adapter, index
+reads, bound collection time, migrate save endpoints, wire boot/rescue, integrate
+concurrent branches, and qualify actual SD write ordering/power cuts and memory.
+The M5FS on-disk file/extent/name limits are unchanged. The volume is still a singleton.
 
 ## Tab5 memory baseline (2026-10-24)
 
