@@ -518,3 +518,9 @@ An active SD-root card cannot simultaneously be probed/mounted as VFAT. The oute
 littlefs namespace is not yet exposed for general asset import; normal VFAT cards
 retain the existing explicit `/sd` path. See the SD guide for trial device evidence,
 recovery backup, memory results and remaining physical power-cut qualification.
+
+
+BASIC SAVE, Scheme save-buffer, `write` and `edit` now commit a whole document
+in one transaction on the SD-backed M5FS root. On failure their buffers remain
+available for retry. Legacy filesystems keep their existing save semantics.
+See [atomic editor saves](docs/atomic-editor-save.md) for exact guarantees and tests.

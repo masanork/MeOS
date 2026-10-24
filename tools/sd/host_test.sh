@@ -28,6 +28,6 @@ done
 
 ${CC:-cc} -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
     -DM5OS_BOARD_TAB5=1 -Ikernel/include -Ithird_party/fatfs tools/sd/vfat_write_vfs_test.c user/shell/sdbench.c \
-    fs/vfs/vfs.c fs/fat/fat_ro.c third_party/fatfs/ff.c third_party/fatfs/ffunicode.c \
+    fs/vfs/vfs.c fs/vfs/write_file.c fs/fat/fat_ro.c third_party/fatfs/ff.c third_party/fatfs/ffunicode.c \
     -o "$OUT/vfat_write_vfs_test"
 "$OUT/vfat_write_vfs_test" "$OUT/fat32-mbr.img"

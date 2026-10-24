@@ -120,6 +120,7 @@ static int open_banks(bool create) {
 }
 static int attach_index(void){return cow_index(&store.view,index_map,ROOT_SECTORS);}
 static int begin(void *ctx){(void)ctx;if(!store.view.index&&attach_index())return -1;return cow_store_begin(&store);}
+static int reserve(void *ctx,uint32_t records){(void)ctx;return cow_store_reserve(&store,records);}
 static int commit(void *ctx){(void)ctx;return cow_store_commit(&store);}
 static int recover(void *ctx){
     (void)ctx;
@@ -138,7 +139,7 @@ int sdroot_mount(void) {
     index_map=kmalloc_psram(ROOT_SECTORS*sizeof *index_map);if(!index_map)goto fail;
     if(attach_index()||cow_store_reserve(&store,32))goto fail;
     cow_blockdev_init(&root_bd,&store.view);
-    fs_tx_backend_t backend={NULL,begin,commit,recover};
+    fs_tx_backend_t backend={.begin=begin,.commit=commit,.recover=recover,.reserve=reserve};
     if(fs_mount_atomic(&root_bd,0,&backend))goto fail;
     active=true;return 0;
 fail:close_files();return ERR_IO;

@@ -886,3 +886,41 @@ int fs_list(const char *p,int (*cb)(const fs_info_t *,void *),void *ctx)
 {
     fs_lock(); int rc = list_locked(p,cb,ctx); mutex_unlock(&s_lock); return rc;
 }
+
+
+int fs_replace_file(const char *path,const void *data,size_t len,size_t *written)
+{
+    if (written) *written = 0;
+    if ((!data && len) || len > 0x7fffffffu) return ERR_INVAL;
+    fs_lock();
+    bool atomic = s_backend.begin != NULL;
+    size_t done = 0;
+    int rc = ERR_OK;
+    if (V.mounted && !s_readonly && s_backend.reserve) {
+        uint32_t records = (uint32_t)(len / M5FS_BLOCK_SIZE + (len % M5FS_BLOCK_SIZE != 0))
+                         + V.sb.bitmap_blocks + M5FS_DIR_BLOCKS + 2;
+        if (s_backend.reserve(s_backend.ctx,records)) rc = ERR_NOSPC;
+    }
+    if (rc == ERR_OK) rc = begin_locked();
+    if (rc == ERR_OK) {
+        int fd = open_locked(path, FS_O_WRITE | FS_O_CREATE | FS_O_TRUNC);
+        rc = fd < 0 ? fd : ERR_OK;
+        if (fd >= 0) {
+            if (len) {
+                int n = write_locked(fd, data, len);
+                if (n > 0) done = (size_t)n;
+                rc = n < 0 ? n : ((size_t)n == len ? ERR_OK : ERR_NOSPC);
+            }
+            /* Failed atomic writes discard all volatile state in finish_locked;
+             * do not flush dirty metadata in a second attempt to close. */
+            if (rc == ERR_OK || !atomic) {
+                int close_rc = close_locked(fd);
+                if (rc == ERR_OK) rc = close_rc;
+            }
+        }
+        rc = finish_locked(rc);
+    }
+    if (written) *written = atomic ? (rc == ERR_OK ? len : 0) : done;
+    mutex_unlock(&s_lock);
+    return rc;
+}

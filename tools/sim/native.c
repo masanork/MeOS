@@ -816,3 +816,8 @@ int main(int argc, char **argv)
     close(root_fd);
     return app_ok ? 0 : 1;
 }
+
+int vfs_replace_file(const char *path,const void *data,size_t len,size_t *written)
+{
+    return vfs_write_file(path,data,len,written);
+}
