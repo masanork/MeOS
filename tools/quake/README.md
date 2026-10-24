@@ -156,3 +156,16 @@ selects the matching storage base automatically; `/sd` and `/assets/quake` can
 also be chosen explicitly. Gameplay remains read-only. This provides storage for
 the base PAK; specific third-party mods and registered data are separate inputs
 and have not been qualified. No game files are included in the repository.
+
+For a repeatable transfer, quit any running app and use a Python environment
+with pyserial (the ESP-IDF environment includes it):
+
+```
+python tools/quake/upload.py --port /dev/cu.usbmodem101 /path/to/pak0.pak
+```
+
+The helper refuses to bypass the firmware's no-overwrite check, reports progress,
+and verifies stored size/CRC after transfer. On macOS it holds a temporary
+`caffeinate` assertion for the transfer so host sleep cannot strand a binary
+packet at the shell after the device's receive timeout. It closes the connection
+and releases the assertion on exit; system power settings are unchanged.

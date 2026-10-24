@@ -17,3 +17,5 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DM5OS_BOARD_T
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -Ikernel/include \
     tools/keyboard/tab5_mode_test.c kernel/dev/keyboard_raw.c drivers/usbkbd/hid_keys.c -o "$OUT/keyboard-mode-test"
 "$OUT/keyboard-mode-test"
+
+python3 tools/quake/upload_test.py
