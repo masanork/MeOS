@@ -47,6 +47,7 @@ static const char *shots;
 static unsigned lines_drawn, ime_draws;
 static bool committed_japanese;
 static uint64_t last_present, deadline;
+static unsigned eval_poll_delay;
 static sim_replay replay;
 static bool replaying, replay_started;
 static size_t replay_step;
@@ -401,7 +402,7 @@ static const action smoke_actions[] = {{.shot = "initial"},
                                        {.text = "\x11"}};
 static unsigned smoke_step;
 static uint64_t next_action;
-static void pump(void)
+static void pump(bool idle)
 {
     if (pumping)
         return;
@@ -453,7 +454,8 @@ static void pump(void)
     }
     uint64_t now = SDL_GetTicks64();
     if (smoke && app_drawn && !input_count && now >= next_action &&
-        smoke_step < sizeof smoke_actions / sizeof smoke_actions[0]) {
+        smoke_step < sizeof smoke_actions / sizeof smoke_actions[0] &&
+        (!smoke_actions[smoke_step].shot || idle)) {
         const action *a = &smoke_actions[smoke_step++];
         if (a->keys) {
             if (!strcmp(a->keys, IME_TOGGLE_KEY))
@@ -473,7 +475,7 @@ static void pump(void)
         deadline = now + replay.duration + 5000;
     }
     if (replaying && replay_started && !input_count && now >= replay_due &&
-        replay_step < replay.count) {
+        replay_step < replay.count && (!replay.actions[replay_step].shot[0] || idle)) {
         const sim_action *a = &replay.actions[replay_step++];
         if (a->shot[0])
             snapshot(a->shot);
@@ -494,7 +496,7 @@ static void pump(void)
 }
 int kconsole_getc(void)
 {
-    pump();
+    pump(false);
     if (!input_count)
         return -1;
     int c = input[input_head];
@@ -504,10 +506,12 @@ int kconsole_getc(void)
 }
 void task_sleep(uint32_t ms)
 {
-    pump();
+    /* Scheme cancellation polls use sleep(0) while evaluation/drawing is still
+     * in progress. Screenshots must wait for a real input-idle boundary. */
+    pump(ms > 0);
     present();
-    if (ms)
-        SDL_Delay(ms);
+    if (ms || eval_poll_delay)
+        SDL_Delay(ms ? ms : eval_poll_delay);
 }
 
 static int host_error(void)
@@ -723,6 +727,13 @@ int main(int argc, char **argv)
         if (vfs_normalize(source, normalized_source) < 0)
             die("invalid source VFS path");
         source = normalized_source;
+    }
+    const char *slow_eval = getenv("M5OS_SIM_EVAL_POLL_DELAY_MS");
+    if (slow_eval) {
+        char *end;
+        unsigned long delay = strtoul(slow_eval, &end, 10);
+        if (!*slow_eval || *end || delay > 20) die("invalid evaluation poll delay");
+        eval_poll_delay = (unsigned)delay;
     }
     root_fd = open(workspace, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
     if (root_fd < 0)

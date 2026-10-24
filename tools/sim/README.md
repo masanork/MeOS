@@ -212,3 +212,9 @@ Each stage must consume its replay and quit. Heap equality is measured after the
 first app has warmed the shared IME; it catches retained per-app allocations,
 not libc/SDL allocations or MeOS task-stack/DMA/FPU behavior. This is sequential
 handoff, not concurrent firmware execution.
+
+Screenshot actions wait until an application is idle for input, rather than
+capturing during Scheme's evaluation cancellation polls. CI also repeats the
+record/replay check with `M5OS_SIM_EVAL_POLL_DELAY_MS=2` to exercise slow evaluation
+and verify byte-identical frames. This simulator-only delay does not change the
+firmware or its Scheme evaluator.

@@ -14,6 +14,7 @@ git clone -q --no-local "$sim_candidate/source" "$sim_candidate/clone"
     cd "$sim_candidate/clone"
     sh tools/scheme/host_test.sh
     sh tools/sim/replay_test.sh
+    M5OS_SIM_EVAL_POLL_DELAY_MS=2 sh tools/sim/replay_test.sh
     sh tools/sim/write_test.sh
     sh tools/sim/handoff_test.sh
 )
