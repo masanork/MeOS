@@ -486,3 +486,5 @@ void display_draw_indexed_bitmap_resized(int x,int y,int w,int h,const uint8_t *
     if (tab5_indexed_resize(s_draw,x,y,w,h,indices,palette,dw,dh,&first,&last))
         fb_flush_rows(DISPLAY_WIDTH-1-last,DISPLAY_WIDTH-1-first);
 }
+
+bool display_is_ready(void) { return s_fb && s_frames; }

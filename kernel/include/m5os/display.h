@@ -50,3 +50,5 @@ void display_release_claim(const void *owner);
 bool display_try_claim(const void *owner);
 void display_release_claim(const void *owner);
 
+
+bool display_is_ready(void); /* Tab5 framebuffer allocated and scanout active */
