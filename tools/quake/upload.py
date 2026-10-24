@@ -35,6 +35,8 @@ def main():
         connection.timeout = 0.1
         connection.write_timeout = 30
         connection.dtr = connection.rts = False
+        if os.name == "posix":
+            connection.exclusive = True
         connection.open()
         pending = bytearray()
 
