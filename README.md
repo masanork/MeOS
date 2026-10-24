@@ -41,7 +41,7 @@ MeOS implements its own **preemptive/cooperative scheduler, task management, tim
 | **SoC** | ESP32-S3 (Xtensa LX7) + 8 MB PSRAM, 16 MB Flash | ESP32-S3FN8: 8 MB Flash, **no PSRAM** | **ESP32-P4 (Dual-core RISC-V @ 400 MHz)** + 32 MB PSRAM, 16 MB Flash + **ESP32-C6** co-processor |
 | **Display** | ILI9342C 320×240 (SPI, via AXP2101/AW9523) | ST7789 135×240 in landscape (240×135) | ST7121 / ILI9881C 720×1280 MIPI-DSI in landscape (**1280×720**) |
 | **Input** | Capacitive touch (FT6336U) | **Built-in Keyboard** (74HC138 matrix / TCA8418 I2C) | **Tab5 Keyboard** (I2C HID `0x6D`) or USB-A HID boot keyboard |
-| **UI Mode** | Touch GUI (Window Manager + Launcher) | Full-screen console (`fbcon`) + TUI apps (`dqwin`) | High-res console (`fbcon` 80×45) + TUI apps (`files`, `edit`, `camera`, `wifi`, `ssh`) |
+| **UI Mode** | Touch GUI (Window Manager + Launcher) | Full-screen console (`fbcon`) + TUI apps (`dqwin`) | Touch/keyboard Home launcher + high-res console (`fbcon` 80×45) + TUI apps |
 | **Camera** | — | — | **SC202CS** 1600×1200 MIPI-CSI + Hardware ISP + Auto-Gain/White-Balance |
 | **Wi-Fi / Net** | — | — | **ESP32-C6** over SDIO Slot 1 (DHCPv4/ARP/ICMP/DNS/TCP + **SSH-2 Client**) |
 | **Build Command** | `tools/build.sh cores3` | `tools/build.sh cardputer` | `tools/build.sh tab5` |
@@ -165,11 +165,22 @@ Key hardware subsystems supported on M5Stack Tab5:
 * **I/O Expanders (`hal/esp32p4/board_tab5.c`)**: Dual PI4IOE5V6408 I2C expanders (`0x43` / `0x44`) controlling LCD/touch reset, speaker enable, camera reset, USB 5V host power, and ESP32-C6 Wi-Fi power.
 * **Keyboard (`drivers/tab5kbd`, `drivers/usbkbd`)**: Polls the official M5Stack Tab5 I2C Keyboard (`0x6D` on Ext.Port1 G0/G1) in HID mode, with automatic fallback to USB-A HID boot keyboards over the DWC2 host controller.
 
+### Tab5 Home launcher
+
+After the shell announces its first prompt, Tab5 waits 1.5 seconds for a serial
+management command. With no input it opens the full-screen `home` launcher.
+Choose a large two-column tile by touch or arrows and Enter; Q/Esc opens the
+command shell. Run `home` at any later shell prompt to return. Write, Scheme,
+Files, Camera, Web, Wi-Fi, SSH, Tailscale, installed WebAssembly apps and BASIC
+are always available; Doom and Quake appear only in builds that enable them.
+Sending a command as soon as the first serial prompt appears suppresses automatic
+Home startup, so recovery and test scripts retain a deterministic shell path.
+
 ---
 
 ## TUI Window System (`dqwin`), Filer (`files`), and Text Editor (`edit`)
 
-Keyboard-equipped boards (**M5Cardputer** and **M5Stack Tab5**) feature a Dragon Quest-inspired retro TUI window toolkit (`user/tui/dqwin.c`) with thick white rounded borders on a black background and a `▶` selection cursor. Layout uses character cells (`8×8` glyph × `M5OS_FBCON_SCALE`), scaling cleanly from 40 columns on Cardputer to 80×22 on Tab5, and works simultaneously on both the built-in LCD+keyboard and serial terminals.
+Keyboard-equipped boards (**M5Cardputer** and **M5Stack Tab5**) feature a Dragon Quest-inspired retro TUI window toolkit (`user/tui/dqwin.c`) with thick white rounded borders on a black background and a `▶` selection cursor. Layout uses character cells (`8×8` glyph × `M5OS_FBCON_SCALE`), scaling cleanly from 40 columns on Cardputer to 80×45 on Tab5, and works simultaneously on both the built-in LCD+keyboard and serial terminals.
 
 ### Full-Screen Filer (`files [DIR]`)
 Implemented in `user/filer/filer.c` (inspired by VZ Editor's filer). Run `files` from the shell or launch `run files`.

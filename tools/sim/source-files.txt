@@ -77,6 +77,11 @@ tools/fonts/README.md
 tools/fonts/fetch24.py
 drivers/lcd/display_claim.c
 tools/sim/handoff_test.sh
+tools/sim/home_test.sh
+
+# Tab5 Home launcher
+user/home/home.c
+user/home/home.h
 
 # Shared streaming fallback for host-only VFS adapters
 fs/vfs/write_file.c

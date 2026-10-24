@@ -19,6 +19,7 @@
 #if M5OS_BOARD_TAB5
 #include "../wasmapps/wasmapps.h"
 #include "../wasmapps/qrinstall.h"
+#include "../home/home.h"
 #endif
 #include "../../drivers/lcd/fbcon.h"
 
@@ -998,6 +999,52 @@ static int cmd_web(int argc, char **argv)
     return web_cmd_main(argc, argv);
 }
 
+#if M5OS_BOARD_TAB5
+static bool home_touch(int *x, int *y, void *context)
+{
+    (void)context;
+    return tab5_touch_read(x, y);
+}
+
+static int cmd_home(int argc, char **argv)
+{
+    (void)argc; (void)argv;
+    static int selected;
+    for (;;) {
+        fbcon_pause(true);
+        task_sleep(FILER_PAUSE_SETTLE_MS);
+        dq_clear();
+        home_action_t action = home_select(&selected, home_touch, NULL);
+        dq_clear();
+        fbcon_pause(false);
+
+        char *one[1];
+        switch (action) {
+        case HOME_WRITE:     one[0] = "write";     cmd_write(1, one);     break;
+        case HOME_SCHEME:    one[0] = "scheme";    cmd_scheme(1, one);    break;
+        case HOME_FILES:     one[0] = "files";     cmd_files(1, one);     break;
+        case HOME_CAMERA:    one[0] = "camera";    cmd_camera(1, one);    break;
+        case HOME_WEB:       one[0] = "web";       cmd_web(1, one);       break;
+        case HOME_WIFI:      one[0] = "wifi";      cmd_wifi(1, one);      break;
+        case HOME_SSH:       one[0] = "ssh";       cmd_ssh(1, one);       break;
+        case HOME_TAILSCALE: one[0] = "tailscale"; cmd_tailscale(1, one); break;
+        case HOME_APPS:      one[0] = "apps";      cmd_apps(1, one);      break;
+        case HOME_BASIC:     one[0] = "basic";     cmd_basic(1, one);     break;
+        case HOME_DOOM:
+            one[0] = "doom";
+            return doom_command(1, one);
+        case HOME_QUAKE:
+            one[0] = "quake";
+            return quake_command(1, one);
+        case HOME_SHELL:
+        case HOME_NONE:
+        default:
+            return 0;
+        }
+    }
+}
+#endif
+
 static int cmd_install(int argc, char **argv)
 {
     char path[VFS_PATH_MAX], name[16];
@@ -1184,6 +1231,7 @@ static const command_t s_commands[] = {
 #endif
     { "help",    cmd_help,    "list commands" },
 #if M5OS_BOARD_TAB5
+    { "home", cmd_home, "home            full-screen touch and keyboard launcher" },
     { "mic", microphone_command, "mic test [SECONDS] bounded microphone input test" },
     { "play", cmd_play, "play PATH       MP3 player (Q stops)" },
     { "audio", audio_command, "audio test      low-volume speaker test" },
@@ -1533,9 +1581,29 @@ void shell_task(void *arg)
 
     SH_PRINTF("BOOT +%u ms shell-ready\n", (uint32_t)(hal_time_now_us() / 1000u));
     sh_puts("\nMeOS " M5OS_VERSION_STRING "\nBoard: " M5OS_BOARD_NAME "\nCPU: " M5OS_CPU_NAME "\nScheduler: MeOS\nFreeRTOS: disabled\n\n");
+    bool prompt_ready = false;
+#if M5OS_BOARD_TAB5
+    /* Keep serial recovery deterministic: host tools wait for this prompt and
+     * can send any byte during the grace period to suppress Home. */
+    prompt();
+    int32_t home_delay = 1500;
+    vfs_ioctl(s_in, UART_IOC_SET_RX_TIMEOUT, &home_delay);
+    uint8_t first;
+    int first_n = vfs_read(s_in, &first, 1);
+    vfs_ioctl(s_in, UART_IOC_SET_RX_TIMEOUT, &forever);
+    if (first_n == 1) {
+        kconsole_inject_n((const char *)&first, 1);
+        prompt_ready = true;
+    }
+    else if (first_n == 0) {
+        char *home_argv[] = { "home" };
+        cmd_home(1, home_argv);
+    }
+#endif
     char line[LINE_MAX];
     for (;;) {
-        prompt();
+        if (!prompt_ready) prompt();
+        prompt_ready = false;
         if (read_line(line) > 0) execute(line);
     }
 }
