@@ -407,3 +407,5 @@ disk full, and failed/torn writes. Fixtures are generated memory-backed images.
 verified, then test files are removed. Only a newly created MEOSBENCH directory
 is used. See [tools/sd/BENCHMARK.md](tools/sd/BENCHMARK.md) for limits and device
 log capture. These are end-to-end, write-through VFS measurements on SPI.
+
+See [tools/common/README.md](tools/common/README.md) for this branch's application work, validation and limitations.

@@ -44,3 +44,11 @@ void display_draw_indexed_bitmap_resized(int x,int y,int source_w,int source_h,
 /* Cooperative screen ownership; legacy GUI apps are not all covered. */
 bool display_try_claim(const void *owner);
 void display_release_claim(const void *owner);
+
+/* Cooperative full-screen lease used by BASIC and WebAssembly. Owner identity
+ * must remain valid until release. Existing legacy GUI apps are not covered. */
+bool display_try_claim(const void *owner);
+void display_release_claim(const void *owner);
+
+
+bool display_is_ready(void); /* Tab5 framebuffer allocated and scanout active */
