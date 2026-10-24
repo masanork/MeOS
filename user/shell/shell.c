@@ -29,6 +29,8 @@
 #include <m5os/wall_time.h>
 #include <m5os/hal_i2c.h>
 #include "hardware.h"
+#include "../scheme/ide.h"
+#include "../write/write.h"
 #include "../../apps/calculator/expr.h"
 #include "sd.h"
 #include <m5os/audio.h>
@@ -574,6 +576,26 @@ static int cmd_stop(int argc, char **argv)
 }
 
 #if M5OS_HAS_KEYBOARD
+#if M5OS_BOARD_TAB5
+static int cmd_write(int argc, char **argv)
+{
+    char path[VFS_PATH_MAX];
+    if (argc > 2) { SH_PRINTF("usage: write [FILE.txt]\n"); return 1; }
+    if (!resolve(argc == 2 ? argv[1] : "note.txt", path)) return fail("write", "bad path", ERR_INVAL);
+    if (!write_file(path)) return fail("write", path, ERR_INVAL);
+    return 0;
+}
+
+static int cmd_scheme(int argc, char **argv)
+{
+    char path[VFS_PATH_MAX];
+    if (argc > 2) { SH_PRINTF("usage: scheme [FILE.scm]\n"); return 1; }
+    if (argc == 2 && !resolve(argv[1], path)) return fail("scheme", "bad path", ERR_INVAL);
+    scheme_ide(argc == 2 ? path : NULL);
+    return 0;
+}
+#endif
+
 static int cmd_files(int argc, char **argv)
 {
     char path[VFS_PATH_MAX];
@@ -985,6 +1007,8 @@ static const command_t s_commands[] = {
     { "play", cmd_play, "play PATH       MP3 player (Q stops)" },
     { "audio", audio_command, "audio test      low-volume speaker test" },
 #endif
+    { "write", cmd_write, "write [FILE.txt] prose editor / Japanese input" },
+    { "scheme", cmd_scheme, "scheme [FILE.scm] workspace / editor / plot" },
     { "calc", cmd_calc, "calc EXPR | deg | rad  numeric expressions" },
     { "devices", cmd_devices, "board devices: detected, untested, or unsupported (read-only)" },
     { "power",   cmd_power,   "battery voltage/current, estimated level and charger state (read-only)" },
