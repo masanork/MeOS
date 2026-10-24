@@ -115,3 +115,18 @@ shell; the quick RAM fallback must not count as a successful SD recovery.
 Neither these EN resets nor the normal save tests establish physical SD
 power-loss tolerance. Card absence and a card/controller fault cannot be
 distinguished by the current slot probe because there is no card-detect signal.
+
+### Subsequent recovery and exact-content verification
+
+After the user reported switching the device off, waiting and starting it again,
+a subsequent serial session confirmed `SDROOT active=1`, the same 30,867,456-sector
+card and the persistent SD root. All four normal-save files matched their recorded
+contents, lengths and SHA-256 hashes. The interrupted-save file `/home/at-r3.txt`
+also matched the complete 2,058-byte old version exactly. No corruption was
+observed in these five qualification files, and no reformat or repair was needed.
+
+This resolves the pending content check above; the device is again running with
+the SD root. It does not resolve the intermittent probe failure or qualify the
+unexecuted fifth reset trial. Actual power-rail state was not measured, and the
+serial attachment observed USB reset reason 11, so this is subsequent recovery
+evidence, not a controlled physical power-cut experiment.
