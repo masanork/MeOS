@@ -6,6 +6,8 @@
 #ifndef M5OS_BIZUD_EMBEDDED
 #include <m5os/vfs.h>
 #include <m5os/crc32.h>
+#include <m5os/hal_time.h>
+#include <m5os/kprintf.h>
 #include <string.h>
 #endif
 typedef struct { uint32_t cp, offset; uint16_t length; int8_t x,y; uint8_t w,h,advance; } biz_glyph;
@@ -33,6 +35,7 @@ static bool read_all(int fd,void *out,size_t size,uint32_t *crc) {
     return true;
 }
 static bool load_atlas(void) {
+    uint64_t started=hal_time_now_us();
     uint8_t h[BIZUD_HEADER]={0};uint32_t ignored=0,index_crc=0,data_crc=0;
     int fd=vfs_open(BIZUD_PATH,VFS_O_READ);if(fd<0)return false;
     bool ok=read_all(fd,h,sizeof h,&ignored);
@@ -48,7 +51,10 @@ static bool load_atlas(void) {
         biz_glyph *g=&glyphs[i];uint32_t length=g->length&32767u;
         if((i&&glyphs[i-1].cp>=g->cp)||g->offset>data_bytes||length>data_bytes-g->offset)goto fail;
     }
-    vfs_close(fd);return true;
+    vfs_close(fd);
+    kprintf("bizud: loaded %u glyphs, %u bytes from SD in %u ms\n",count,index_bytes+data_bytes,
+            (uint32_t)((hal_time_now_us()-started)/1000u));
+    return true;
 fail:
     vfs_close(fd);kfree(atlas);atlas=0;glyphs=0;coverage=0;glyph_count=0;return false;
 }

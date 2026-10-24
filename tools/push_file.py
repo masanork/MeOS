@@ -27,7 +27,15 @@ def main():
     try:
         if sys.platform == "darwin":
             awake = subprocess.Popen(["caffeinate", "-is", "-w", str(os.getpid())])
-        connection = serial.Serial(args.port, 115200, timeout=0.1, write_timeout=30, exclusive=True)
+        connection = serial.Serial()
+        connection.port = args.port
+        connection.baudrate = 115200
+        connection.timeout = 0.1
+        connection.write_timeout = 30
+        connection.dtr = connection.rts = False
+        if os.name == "posix":
+            connection.exclusive = True
+        connection.open()
         pending = bytearray()
 
         def until(token, timeout=120):
@@ -45,8 +53,8 @@ def main():
                 pending.extend(connection.read(max(1, connection.in_waiting)))
             raise TimeoutError(f"waiting for {token!r}")
 
-        connection.write(b"\r")
-        until(b"\n> ")
+        connection.write(b"\x03\r")
+        until(b"> ", 30)
         pending.clear()
         connection.write(f"putraw {args.destination} {size} {crc:08x}\r".encode())
         until(f"PUTREADY {size} 4096\r\n".encode())

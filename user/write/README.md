@@ -12,11 +12,14 @@ Space opens candidates; Enter commits. Ctrl-S saves, Ctrl-Q exits (repeat to dis
 unsaved edits), Ctrl-Z undoes the last edit. Arrows, Home/End, PgUp/PgDn navigate.
 Buffer limit 16 KiB, one undo snapshot. UTF-8 files and MeOS VFS are used.
 
-Only BIZ UD is embedded. Missing glyphs show a box. Combining marks and IVS are
-not shaped as sequences yet. Soft wrapping is by glyph width without Japanese
-kinsoku rules. Font asset adds about 2.57 MB of read-only data; a full offscreen
-RGB565 frame (about 1.8 MB) is allocated in PSRAM to avoid clear/redraw flicker.
-It is independent of the Scheme/code editor's existing grid UI.
+Only BIZ UD is used. The Tab5 loads `/assets/fonts/bizud24.m5f` from the
+persistent SD root into PSRAM while this editor is active; the simulator uses
+the byte-identical generated atlas directly. Missing glyphs show a box.
+Combining marks and IVS are not shaped as sequences yet. Soft wrapping is by
+glyph width without Japanese kinsoku rules. The font asset is about 2.32 MiB;
+a full offscreen RGB565 frame (about 1.76 MiB) is also allocated in PSRAM to
+avoid clear/redraw flicker. Both allocations are released on exit. It is
+independent of the Scheme/code editor's existing grid UI.
 
 `sh tools/sim/write_test.sh` replays the real MeOS IME through HID input, saves
 Japanese text, verifies exact UTF-8 file contents, and captures wrapping/candidates.

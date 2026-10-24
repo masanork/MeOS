@@ -452,8 +452,13 @@ void kernel_main(void)
 #else
     blockdev_t *sd = s_sd = NULL;                    /* no SD driver on this board yet */
 #endif
-    boot_screen_status(sd ? "SDMMC READY" : "SD UNAVAILABLE",52);
+#if M5OS_BOARD_TAB5
+    boot_screen_status("PROBING SDMMC",52);
+    boot_mark("storage-probe");
+#else
+    boot_screen_status(sd ? "SD READY" : "SD UNAVAILABLE",52);
     boot_mark(sd ? "sd-ready" : "sd-unavailable");
+#endif
 
 #if M5OS_BOOT_SELFTEST
     task_create("hog0", hog_main, NULL, TASK_PRIO_DEFAULT);

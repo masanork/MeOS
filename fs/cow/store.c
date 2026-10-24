@@ -23,7 +23,7 @@ static int header(struct cow_store *s,int i,uint64_t epoch){
     put(h+16,s->sectors);put64(h+24,epoch);put(h+508,crc(h,508));
     return s->bank[i].io.write(s->bank[i].io.ctx,0,h,sizeof h);
 }
-int cow_store_recover(struct cow_store *s){
+int cow_store_recover_indexed(struct cow_store *s,uint32_t *index,size_t index_sectors){
     if(!s)return -1;
     s->faulted=1;int order[2],count=0;uint64_t epochs[2]={0,0};struct cow winner;
     for(int i=0;i<2;i++){
@@ -43,15 +43,24 @@ int cow_store_recover(struct cow_store *s){
      * does not belong on the normal boot path. */
     for(int n=0;n<count;n++){
         int i=order[n];struct cow candidate;
-        if(cow_mount(&candidate,log_io(&s->bank[i]),s->base_id,s->sectors,s->base_read,s->base_ctx))return -1;
+        if(cow_mount_indexed(&candidate,log_io(&s->bank[i]),s->base_id,s->sectors,
+                             s->base_read,s->base_ctx,index,index_sectors))return -1;
         if(!candidate.generation)continue;
         winner=candidate;s->view=winner;s->selected=i;s->epoch=epochs[i];s->faulted=0;return 0;
     }
     return -1;
 }
+int cow_store_recover(struct cow_store *s){
+    if(!s)return -1;
+    return cow_store_recover_indexed(s,s->view.index,s->view.index?s->sectors:0);
+}
 int cow_store_open(struct cow_store *s,const struct cow_bank b[2],uint64_t id,uint32_t n,int (*r)(void *,uint32_t,void *),void *ctx){
     if(config(s,b,id,n,r,ctx))return -1;
     return cow_store_recover(s);
+}
+int cow_store_open_indexed(struct cow_store *s,const struct cow_bank b[2],uint64_t id,uint32_t n,int (*r)(void *,uint32_t,void *),void *ctx,uint32_t *index,size_t index_sectors){
+    if(!index||index_sectors<n||config(s,b,id,n,r,ctx))return -1;
+    return cow_store_recover_indexed(s,index,index_sectors);
 }
 int cow_store_format(struct cow_store *s,const struct cow_bank b[2],uint64_t id,uint32_t n,int (*r)(void *,uint32_t,void *),void *ctx){
     if(config(s,b,id,n,r,ctx))return -1;

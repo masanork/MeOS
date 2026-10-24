@@ -9,6 +9,7 @@
 #include <m5os/sdcard.h>
 #include <m5os/fat.h>
 #include <m5os/hal_gpio.h>
+#include <m5os/hal_time.h>
 #include <m5os/kmalloc.h>
 #include <m5os/kprintf.h>
 #include <m5os/errno.h>
@@ -43,6 +44,11 @@ static blockdev_t root_bd;
 static uint32_t *index_map;
 static uint64_t identity;
 static bool mounted,active,opened;
+static void mount_mark(const char *stage,uint64_t start,uint64_t *last) {
+    uint64_t now=hal_time_now_us();
+    kprintf("SDROOT +%u ms (%u ms) %s\n",(uint32_t)((now-start)/1000u),(uint32_t)((now-*last)/1000u),stage);
+    *last=now;
+}
 static int disk_read(const struct lfs_config *c,lfs_block_t b,lfs_off_t off,void *p,lfs_size_t n) {
     (void)c;return sd->read(sd,b*8+off/512,n/512,p)?LFS_ERR_IO:0;
 }
@@ -129,24 +135,30 @@ static int reserve(void *ctx,uint32_t records){(void)ctx;return cow_store_reserv
 static int commit(void *ctx){(void)ctx;return cow_store_commit(&store);}
 static int recover(void *ctx){
     (void)ctx;
-    if(cow_store_recover(&store)||attach_index())return -1;
+    if(cow_store_recover_indexed(&store,index_map,ROOT_SECTORS))return -1;
     return store.view.sealed?cow_store_compact(&store):0;
 }
 int sdroot_mount(void) {
     /* Refuse competing owners before prepare can reset/probe the SD bus. */
     if(active||mounted||fat_is_mounted())return ERR_BUSY;
+    uint64_t start=hal_time_now_us(),last=start;
     int rc=prepare();if(rc)return rc;
+    mount_mark("card-ready",start,&last);
     if(lfs_mount(&lfs,&cfg))return ERR_CORRUPT;
+    mount_mark("littlefs-mounted",start,&last);
     mounted=true;
     if(open_base(LFS_O_RDONLY))goto fail;
     if(base_identity()){lfs_file_close(&lfs,&base_file);goto fail;}
-    if(open_banks(false))goto fail;
-    if(cow_store_open(&store,banks,identity,ROOT_SECTORS,base_read,NULL))goto fail;
+    mount_mark("base-identified",start,&last);
     index_map=kmalloc_psram(ROOT_SECTORS*sizeof *index_map);if(!index_map)goto fail;
-    if(attach_index()||cow_store_reserve(&store,32))goto fail;
+    if(open_banks(false))goto fail;
+    if(cow_store_open_indexed(&store,banks,identity,ROOT_SECTORS,base_read,NULL,index_map,ROOT_SECTORS))goto fail;
+    if(cow_store_reserve(&store,32))goto fail;
+    mount_mark("cow-recovered+indexed",start,&last);
     cow_blockdev_init(&root_bd,&store.view);
     fs_tx_backend_t backend={.begin=begin,.commit=commit,.recover=recover,.reserve=reserve};
     if(fs_mount_atomic(&root_bd,0,&backend))goto fail;
+    mount_mark("m5fs-mounted",start,&last);
     active=true;return 0;
 fail:close_files();return ERR_IO;
 }

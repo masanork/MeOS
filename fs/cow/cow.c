@@ -26,10 +26,13 @@ static int valid(struct cow *c,unsigned char *r) {
         get(r+12)==(uint32_t)(c->base_id>>32) && get(r+28)==c->sectors &&
         get(r+548)==crc(r,548);
 }
-int cow_mount(struct cow *c,struct cow_io io,uint64_t id,uint32_t sectors,
-              int (*read_base)(void *,uint32_t,void *),void *ctx) {
-    if(!c||!io.read||!io.write||!io.sync||!read_base||!sectors||io.capacity<COW_RECORD)return -1;
+int cow_mount_indexed(struct cow *c,struct cow_io io,uint64_t id,uint32_t sectors,
+              int (*read_base)(void *,uint32_t,void *),void *ctx,
+              uint32_t *offsets,size_t index_sectors) {
+    if(!c||!io.read||!io.write||!io.sync||!read_base||!sectors||io.capacity<COW_RECORD||
+       (offsets&&index_sectors<sectors))return -1;
     *c=(struct cow){.log=io,.base_ctx=ctx,.base_read=read_base,.base_id=id,.sectors=sectors};
+    if(offsets)for(uint32_t i=0;i<sectors;i++)offsets[i]=UINT32_MAX;
     unsigned char r[COW_RECORD];uint32_t digest=0;
     while(c->end<=io.capacity-COW_RECORD) {
         if(io.read(io.ctx,c->end,r,sizeof r))return -1;
@@ -38,15 +41,27 @@ int cow_mount(struct cow *c,struct cow_io io,uint64_t id,uint32_t sectors,
            (get(r+8)!=(uint32_t)id || get(r+12)!=(uint32_t)(id>>32) || get(r+28)!=sectors))return -1;
         if(!valid(c,r)) {c->sealed=1;break;}
         if(c->generation==UINT32_MAX||get(r+16)!=c->generation+1){c->sealed=1;break;}
-        if(get(r+4)==1 && get(r+20)<sectors)digest=fold(digest,get(r+548));
+        if(get(r+4)==1 && get(r+20)<sectors){
+            digest=fold(digest,get(r+548));
+            if(offsets)offsets[get(r+20)]=c->end;
+        }
         else if(get(r+4)==2 && get(r+24)==digest) {
             c->generation++;c->committed=c->end+COW_RECORD;digest=0;
         } else {c->sealed=1;break;}
         c->end+=COW_RECORD;
     }
     /* A partial transaction requires compaction into a fresh log. */
-    if(c->end!=c->committed)c->sealed=1;
+    if(c->end!=c->committed){
+        c->sealed=1;
+        /* Tentative records may have replaced committed offsets. This is the
+         * exceptional recovery path; rebuild only through the last commit. */
+        if(offsets&&cow_index(c,offsets,index_sectors))return -1;
+    } else c->index=offsets;
     return 0;
+}
+int cow_mount(struct cow *c,struct cow_io io,uint64_t id,uint32_t sectors,
+              int (*read_base)(void *,uint32_t,void *),void *ctx) {
+    return cow_mount_indexed(c,io,id,sectors,read_base,ctx,NULL,0);
 }
 int cow_index(struct cow *c,uint32_t *offsets,size_t sectors) {
     if(!c||!offsets||sectors<c->sectors||c->active)return -1;

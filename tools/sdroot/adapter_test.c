@@ -11,6 +11,8 @@
 static unsigned char *card;
 static unsigned probe_failures,probe_attempts,probe_delays,write_requests,max_read_blocks,max_write_blocks;
 static bool fail_reads;
+static uint64_t fake_time;
+uint64_t hal_time_now_us(void){return fake_time+=1000;}
 void hal_delay_us(uint32_t us){assert(us==100000);probe_delays++;}
 static blockdev_t device;
 static int read_sd(blockdev_t *d,uint32_t l,uint32_t n,void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);if(n>max_read_blocks)max_read_blocks=n;if(fail_reads)return -1;memcpy(p,card+(size_t)l*512,n*512);return 0;}
