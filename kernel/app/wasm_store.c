@@ -367,27 +367,10 @@ int wasm_list_installed(wasm_list_cb cb, void *ctx)
 void wasm_store_boot(void)
 {
     if (rootfs_is_persistent()) {
-        static const char marker[] = "/apps/.persistent-store-v1";
         s_persistent_root = true;
-        vfs_mkdir("/apps");
-        vfs_info_t st;
-        int seeded = 0;
-        if (vfs_stat(marker, &st) != ERR_OK) {
-            for (int i = 0; i < g_wasm_image_count; i++) {
-                char path[VFS_PATH_MAX];
-                app_path(g_wasm_images[i].name, path);
-                if (vfs_stat(path, &st) == ERR_OK) continue;
-                if (put_file(g_wasm_images[i].name, g_wasm_images[i].data,
-                             g_wasm_images[i].size) == ERR_OK) seeded++;
-            }
-            int fd = vfs_open(marker, VFS_O_WRITE | VFS_O_CREATE | VFS_O_TRUNC);
-            if (fd >= 0) {
-                static const char version[] = "persistent /apps is authoritative\n";
-                vfs_write(fd, version, sizeof version - 1u);
-                vfs_close(fd);
-            }
-        }
-        kprintf("wasm: persistent /apps active (%d sample(s) seeded)\n", seeded);
+        /* The SD root is authoritative. Samples and installed apps are never
+         * restored from the legacy flash log, nor probed on the boot path. */
+        kputs("wasm: persistent /apps authoritative (no flash restore)\n");
         return;
     }
     esp_rom_spiflash_unlock();
