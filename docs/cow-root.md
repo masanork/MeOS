@@ -1,10 +1,7 @@
 # Immutable system images and transactional block overlays
 
-Status: transactional core plus experimental Tab5 SD/littlefs boot adapter.
+Status: transactional core plus the Tab5 SD/littlefs boot adapter.
 See `sd-root-device.md` for exact device evidence and remaining qualification.
-Physical power-loss tolerance is not yet established.
-Changes live in the isolated `experiment/cow-root` worktree. The concurrent dirty
-primary checkout and physical card remain untouched.
 
 ## Durable block model
 
@@ -28,6 +25,21 @@ acknowledged. The SD controller/FTL must actually meet this contract; software
 fault tests cannot establish that. Byte-addressed records are 552 bytes and need
 a file adapter or explicit aligned storage layer before direct SD use.
 
+On Tab5 the outer littlefs volume contains a sparse read-only `base.img` and two
+log files, `delta-a.log` and `delta-b.log`. The exposed M5FS device is 8 MiB
+(16,384 sectors). Each bank has a logical capacity of 12 MiB, but littlefs files
+grow only as records are appended; capacity is not reserved as RAM or eagerly
+written SD space. Bulk `/assets` files are siblings in littlefs and bypass this
+M5FS COW path entirely.
+
+Every log record is exactly 552 bytes. Its 32-byte prefix identifies the record
+type, immutable-base identity, transaction generation, sector number, running
+transaction digest and geometry. A data record then carries one 512-byte sector;
+the final four bytes are CRC32. A commit record uses the same fixed layout but no
+sector payload. One logical transaction therefore costs
+`552 * (changed sectors + 1)` bytes. Filesystem metadata means a small user write
+can change several sectors; it is not a byte-for-byte journal.
+
 ## Two-bank collection and publication
 
 `fs/cow/store.c` manages two independent banks. Each has a 512-byte header with
@@ -44,10 +56,14 @@ Compaction, including recovery from an uncommitted/torn tail:
 6. Select the new bank only after that commit completes. Retain the old bank until
    the next collection needs to reuse it.
 
-At restart, a bank without its first committed snapshot is unpublished. Choose the
-highest valid published epoch; reject equal epochs, incompatible identities and
-unreadable bank IO. IO uncertainty faults the writer. Recovery rescans both banks;
-if a pending tail remains, it compacts committed state before permitting writes.
+At restart, a bank without its first committed snapshot is unpublished. Headers
+are checked first and the newest epoch is scanned. The older bank is scanned only
+if the newest has no published transaction. Equal epochs, incompatible identities
+and unreadable bank IO are rejected. The scan validates every record through the
+last commit and simultaneously builds a 16,384-entry sector-to-record index
+(64 KiB in PSRAM). A torn or otherwise invalid tail seals the bank; recovery
+rebuilds the index only through the last commit and compacts before permitting
+another write.
 
 Compaction requires spare space: each bank must fit the current changed-sector
 snapshot PLUS the desired transaction headroom. `cow_store_reserve` configures the
@@ -56,11 +72,16 @@ If a larger operation still exhausts capacity, abort/recover and report failure;
 never rerun arbitrary application callbacks automatically. Oversized snapshots and
 IO errors leave the old bank intact. An epoch never wraps.
 
-No capacity-sized index or snapshot buffer is allocated. Reads currently scan the
-log; compaction scans the entire virtual volume and replays the log for each sector.
-These bounded-memory reference paths are deliberately slow. Before deployment,
-implement an on-disk index with bounded cache and measure collection latency and
-write amplification. Two banks consume storage, not two image-sized RAM buffers.
+No image-sized snapshot buffer is allocated. Normal reads use the PSRAM index and
+touch either the latest data record or the immutable base. Boot recovery is still
+linear in the selected bank's physical log length because the index is rebuilt on
+every boot. Compaction scans all 16,384 logical sectors, compares current contents
+with the base, and writes only differing sectors to the inactive bank. This bounds
+steady-state history but can be a long, write-heavy operation. A future persistent
+checkpoint could shorten boot only if it is bound to the bank epoch, generation,
+committed offset and checksums; an unverified cached index would turn corruption
+or a power cut into silent misdirection. Two banks consume SD storage, not two
+image-sized RAM buffers.
 
 ## M5FS transaction and error boundaries
 

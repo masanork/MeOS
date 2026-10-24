@@ -28,12 +28,12 @@ int  app_start_wasm_image(const uint8_t *file, size_t len, uint32_t *app_id);
 void wasm_app_cleanup(uint32_t app_id);        /* kernel: an app ended; give back the screen if it held it */
 
 /*
- * Installed apps live at /apps/NAME.wasm. A persistent SD root is authoritative
- * and bypasses the legacy flash log. On a volatile recovery root, region
- * wasmapps remains the durable copy and is restored at boot.
+ * Installed apps live at /apps/NAME.wasm. A persistent SD root is authoritative.
+ * On a volatile recovery root, built-in samples are seeded at boot and installs
+ * last until reset; there is deliberately no second raw-flash app store.
  */
-void wasm_store_boot(void);                                   /* select persistent /apps or restore a recovery root */
-int  wasm_install_image(const uint8_t *file, size_t len, char name_out[16]);   /* validate, store in flash and /apps; 0 or -ERR */
+void wasm_store_boot(void);                                   /* seed built-ins on a volatile recovery root */
+int  wasm_install_image(const uint8_t *file, size_t len, char name_out[16]);   /* validate and store in /apps; 0 or -ERR */
 int  wasm_install_file(const char *path, char name_out[16]);
 int  wasm_uninstall(const char *name);                        /* 0, or ERR_NOENT if there is no such installed app */
 bool wasm_is_installed(const char *name);

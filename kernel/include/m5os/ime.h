@@ -18,7 +18,8 @@
  * Full-screen programs that own the display (fbcon paused) get the same UI as a two-line bar at the bottom of
  * the screen, which is restored when the composition ends.
  *
- * Dictionary: a small one is built in; a large SKK dictionary is loaded from flash (tools/ime_flash_dict.sh).
+ * Dictionary: a small one is built in; a large SKK dictionary can be loaded
+ * asynchronously from /assets/ime-dict.bin on SD (tools/ime_flash_dict.sh).
  */
 
 #define IME_TOGGLE_KEY  "\x1b[99~"      /* what the key decoders emit for the on/off key */

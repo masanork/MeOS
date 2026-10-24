@@ -295,9 +295,10 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
   that stay kana. Choices are remembered for the session (`ime_dict_learn`).
 * **Screen**: console programs get an overlay at the text cursor (`fbcon_overlay_*`); programs that own the display
   (`fbcon_pause`: filer, ssh, web) get the same UI as a two-line bar at the bottom, restored afterwards.
-* **Dictionary**: a small one is built in (`tools/ime/mini.skk`). For real use put an SKK dictionary in flash once:
-  `tools/ime_flash_dict.sh -p /dev/cu.usbmodemXXXX` (downloads SKK-JISYO.L, GPL-2.0+, and writes it to the `imedict` partition
-  at `0x400000`; it is loaded into PSRAM in the background after boot). `partitions_tab5.csv` now gives the app 3.9 MB.
+* **Dictionary**: a small one is built in (`tools/ime/mini.skk`). For real use put an SKK dictionary on the SD card:
+  `tools/ime_flash_dict.sh -p /dev/cu.usbmodemXXXX` (downloads SKK-JISYO.L, GPL-2.0+, and uploads
+  `/assets/ime-dict.bin`; it is loaded into PSRAM in the background after the persistent root has mounted).
+  A missing/removed SD card simply leaves the built-in dictionary active.
 * **Tests** run on the host: `tools/ime/host_test.sh [dict.bin]`.
 
 ## Tab5 Device, Power and Storage Diagnostics
@@ -426,7 +427,7 @@ Application details, validation and limitations:
 
 An opt-in hierarchical VFS store supports language sources without changing the default
 partition table or boot path. The optional `programs` data partition is exactly
-1 MiB at 0xC00000 (subtype 0x42), after the existing 0xA00000..0xBFFFFF WASM store.
+1 MiB at 0xC00000 (subtype 0x42), inside the unallocated tail after `ota_1`.
 The configuration preparer refuses overlaps and retains all existing entries:
 
 ```sh
@@ -458,8 +459,8 @@ EDIT and shell `edit` use `/data` through the same VFS interfaces.
 The ROM adapter checks the live partition table, exact label/type/offset/size,
 flags, available chip size and overlaps before allowing access. It uses bounded,
 aligned internal buffers around ROM flash calls; it does not call FreeRTOS-backed
-ESP-IDF VFS/flash services. Host adapter tests verify that app, SSH-key, dictionary
-and WASM-store sentinel bytes remain unchanged.
+ESP-IDF VFS/flash services. Host adapter tests verify that unrelated flash sentinel
+bytes remain unchanged.
 
 `/data/bas` and `/data/scm` are available immediately after mounting. Use
 `mkdir /data/lua` to add another language directory, or create nested directories.
