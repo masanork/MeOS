@@ -50,6 +50,43 @@ static void boot_mark(const char *stage)
 }
 static bool lcd_ready;
 
+#if M5OS_BOARD_TAB5
+#define BOOT_BG       RGB565(6, 13, 27)
+#define BOOT_PANEL    RGB565(12, 27, 48)
+#define BOOT_MUTED    RGB565(116, 142, 166)
+#define BOOT_ACCENT   RGB565(41, 219, 190)
+#define BOOT_BLUE     RGB565(38, 116, 224)
+static void boot_screen_start(void)
+{
+    display_clear(BOOT_BG);
+    display_fill_rect(0,0,DISPLAY_WIDTH,6,BOOT_ACCENT);
+    display_fill_triangle(1010,0,1280,0,1280,270,BOOT_PANEL);
+    display_fill_triangle(1110,0,1280,0,1280,170,BOOT_BLUE);
+    display_draw_rect(84,142,92,92,BOOT_ACCENT);
+    display_draw_line(105,210,130,166,BOOT_ACCENT);
+    display_draw_line(130,166,155,210,BOOT_ACCENT);
+    display_draw_text(204,154,"MeOS",COLOR_WHITE,BOOT_BG,8);
+    display_draw_text(88,266,"A SMALL SYSTEM WITH A LARGE HORIZON",BOOT_MUTED,BOOT_BG,2);
+    display_draw_text(920,390,"M5STACK TAB5",COLOR_WHITE,BOOT_BG,2);
+    display_draw_text(920,420,"ESP32-P4 / 32MB PSRAM",BOOT_MUTED,BOOT_BG,1);
+    display_draw_text(920,440,"NATIVE SDMMC ROOT",BOOT_MUTED,BOOT_BG,1);
+    display_fill_rect(88,548,1104,8,BOOT_PANEL);
+    display_draw_text(88,590,"INITIALIZING",BOOT_MUTED,BOOT_BG,2);
+}
+static void boot_screen_status(const char *stage,unsigned percent)
+{
+    if(!lcd_ready)return;
+    if(percent>100)percent=100;
+    display_fill_rect(88,548,1104,8,BOOT_PANEL);
+    display_fill_rect(88,548,(int)(1104u*percent/100u),8,BOOT_ACCENT);
+    display_fill_rect(88,590,720,20,BOOT_BG);
+    display_draw_text(88,590,stage,COLOR_WHITE,BOOT_BG,2);
+}
+#else
+static void boot_screen_start(void) {}
+static void boot_screen_status(const char *stage,unsigned percent) {(void)stage;(void)percent;}
+#endif
+
 
 #if M5OS_BOOT_SELFTEST
 /* =========================================================================
@@ -397,13 +434,16 @@ void kernel_main(void)
 
     bool lcd_ok = display_init();                    /* driver bring-up (kernel side) */
     kprintf("LCD: %s\n", lcd_ok ? "ok" : "FAILED");
-    boot_mark("display-ready");
     lcd_ready = lcd_ok;
+    if(lcd_ok)boot_screen_start();
+    boot_screen_status("DISPLAY READY",18);
+    boot_mark("display-ready");
 
     sched_init();
     devices_init();                                  /* registers uart/display/buttons */
     vfs_init();                                      /* /dev is available from here on */
     app_init();                                      /* cleanup task for finished applications */
+    boot_screen_status("KERNEL READY",32);
 
     /* SD card: read-only probe. A card is never written or formatted automatically. */
 #if M5OS_HAS_SD
@@ -412,6 +452,7 @@ void kernel_main(void)
 #else
     blockdev_t *sd = s_sd = NULL;                    /* no SD driver on this board yet */
 #endif
+    boot_screen_status(sd ? "SDMMC READY" : "SD UNAVAILABLE",52);
     boot_mark(sd ? "sd-ready" : "sd-unavailable");
 
 #if M5OS_BOOT_SELFTEST
@@ -422,10 +463,14 @@ void kernel_main(void)
     task_create("logA", log_task, (void *)'A', TASK_PRIO_DEFAULT);
     task_create("logB", log_task, (void *)'B', TASK_PRIO_DEFAULT);
 #else
+    boot_screen_status("MOUNTING ROOT",62);
     rootfs_mount(sd);
+    boot_screen_status(rootfs_is_persistent() ? "PERSISTENT ROOT READY" : "RECOVERY ROOT READY",80);
     boot_mark(rootfs_is_persistent() ? "root-persistent" : "root-recovery");
     wifi_boot_start();
+    boot_screen_status("STARTING SERVICES",92);
 #if M5OS_HAS_TOUCH
+    boot_screen_status("READY",100);
     if (lcd_ok && gui_init() == ERR_OK) {            /* touch screen: windows and the launcher */
         uint32_t id;
         app_start("launcher", &id);                  /* the home screen */

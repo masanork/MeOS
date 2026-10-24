@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build a 24px, 16-level coverage atlas; no runtime outline dependency."""
 from pathlib import Path
-import hashlib
+import hashlib,struct,zlib
 from PIL import Image,ImageDraw,ImageFont
 from fontTools.ttLib import TTFont
 ROOT=Path(__file__).resolve().parents[2]
@@ -61,4 +61,10 @@ with inc.open('w') as o:
  o.write('};\nstatic const uint8_t coverage[] = {\n')
  for n in range(0,len(data),32):o.write(','.join(map(str,data[n:n+32]))+',\n')
  o.write('};\n')
-print(len(entries),'glyphs;',len(data),'coverage bytes;',len(entries)*16+len(data),'approx bytes with index')
+index=b''.join(struct.pack('<IIHbbBBBx',*e) for e in entries)
+coverage=bytes(data)
+asset=ROOT/'assets/fonts/bizud24.m5f';asset.parent.mkdir(parents=True,exist_ok=True)
+header=struct.pack('<8sIIIIII',b'M5BIZ24\0',1,len(entries),len(index),len(coverage),
+                   zlib.crc32(index)&0xffffffff,zlib.crc32(coverage)&0xffffffff)
+asset.write_bytes(header+index+coverage)
+print(len(entries),'glyphs;',len(data),'coverage bytes;',len(index)+len(coverage),'asset bytes')

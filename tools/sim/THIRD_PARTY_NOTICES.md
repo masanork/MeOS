@@ -39,8 +39,8 @@ The writing editor uses BIZ UD Gothic Regular 1.051 by Morisawa, distributed
 under SIL Open Font License 1.1. Original source:
 https://github.com/googlefonts/morisawa-biz-ud-gothic
 The pinned TTF is rasterized at build-preparation time into 24px, 16-level
-coverage data (`drivers/lcd/bizud24_data.inc`); the simulator and firmware render
-the same generated data. The unmodified upstream license and copyright are in
+coverage data (`drivers/lcd/bizud24_data.inc` and `assets/fonts/bizud24.m5f`);
+the simulator and firmware render the same generated data. The unmodified upstream license and copyright are in
 `tools/fonts/licenses/BIZ-UD-OFL.txt`. No second typeface is merged or used for
 fallback. See `tools/fonts/README.md` for the source checksum and regeneration.
 

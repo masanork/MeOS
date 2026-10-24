@@ -5,19 +5,33 @@ import hashlib
 from pathlib import Path
 import re
 import struct
+import zlib
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPECTED = "c7d570a208bb4ad4115c58f2ea63013c350431ee75e841c42044dcde1e5dd5c4"
 
 
-def decoded_digest(path):
+def read_atlas(path):
+    if path.suffix == ".m5f":
+        raw = path.read_bytes()
+        magic, version, count, index_size, data_size, index_crc, data_crc = struct.unpack("<8sIIIIII", raw[:32])
+        assert magic == b"M5BIZ24\0" and version == 1 and index_size == count * 16
+        index, data = raw[32:32 + index_size], raw[32 + index_size:]
+        assert len(data) == data_size and zlib.crc32(index) & 0xffffffff == index_crc
+        assert zlib.crc32(data) & 0xffffffff == data_crc
+        return [struct.unpack("<IIHbbBBBx", index[n:n + 16]) for n in range(0, len(index), 16)], data
     index, encoded = path.read_text().split("static const uint8_t coverage[] = {")
     data = bytes(map(int, re.findall(r"\d+", encoded)))
+    entries = [tuple(map(int, row.split(","))) for row in re.findall(r"\{([^{}]+)\}", index)]
+    return entries, data
+
+
+def decoded_digest(path):
+    entries, data = read_atlas(path)
     digest = hashlib.sha256()
     previous = -1
     count = 0
-    for row in re.findall(r"\{([^{}]+)\}", index):
-        cp, offset, flags, x, y, width, height, advance = map(int, row.split(","))
+    for cp, offset, flags, x, y, width, height, advance in entries:
         assert previous < cp and width <= 64 and height <= 64
         previous = cp
         length = flags & 32767
@@ -56,8 +70,11 @@ def decoded_digest(path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--atlas", type=Path, default=ROOT / "drivers/lcd/bizud24_data.inc")
+    parser.add_argument("--atlas", type=Path)
     args = parser.parse_args()
-    checksum, count, size = decoded_digest(args.atlas)
-    assert checksum == EXPECTED, f"glyph metrics or decoded pixels changed: {checksum}"
-    print(f"BIZ UD: {count} glyphs, all metrics/pixels unchanged; {size} encoded bytes PASS")
+    paths = [args.atlas] if args.atlas else [ROOT / "drivers/lcd/bizud24_data.inc", ROOT / "assets/fonts/bizud24.m5f"]
+    results = [decoded_digest(path) for path in paths]
+    for path, (checksum, count, size) in zip(paths, results):
+        assert checksum == EXPECTED, f"{path}: glyph metrics or decoded pixels changed: {checksum}"
+        print(f"BIZ UD {path.name}: {count} glyphs, all metrics/pixels unchanged; {size} encoded bytes PASS")
+    assert len(set(results)) == 1, "embedded and SD atlases differ"

@@ -564,6 +564,52 @@ static int cmd_put(int argc, char **argv)
     return 0;
 }
 
+static bool parse_hex32(const char *s,uint32_t *out)
+{
+    uint32_t v=0;unsigned n=0;
+    for(;*s;s++,n++) {
+        unsigned d=*s>='0'&&*s<='9'?(unsigned)(*s-'0'):
+                   *s>='a'&&*s<='f'?(unsigned)(*s-'a'+10):
+                   *s>='A'&&*s<='F'?(unsigned)(*s-'A'+10):16;
+        if(d>=16||n>=8)return false;
+        v=(v<<4)|d;
+    }
+    *out=v;return n!=0;
+}
+
+/* Bounded raw developer transfer. Each 4 KiB acknowledgement is flow control;
+ * CRC verifies the stream and failures remove the incomplete destination. */
+static int cmd_putraw(int argc,char **argv)
+{
+    char path[VFS_PATH_MAX];uint32_t size,want;
+    if(argc!=4||!resolve(argv[1],path)||!parse_uint(argv[2],&size)||
+       !parse_hex32(argv[3],&want)||!size||size>64u*1024u*1024u) {
+        sh_puts("usage: putraw PATH BYTES CRC32hex\n");return 1;
+    }
+    int fd=vfs_open(path,VFS_O_WRITE|VFS_O_CREATE|VFS_O_TRUNC);
+    if(fd<0)return fail("putraw",path,fd);
+    uint8_t data[4096];uint32_t done=0,sum=0;
+    SH_PRINTF("PUTREADY %u 4096\n",size);
+    while(done<size) {
+        unsigned need=size-done;if(need>sizeof data)need=sizeof data;
+        unsigned got=0;uint64_t deadline=hal_time_now_us()+5000000u;
+        while(got<need) {
+            int c=kconsole_getc();
+            if(c>=0){data[got++]=(uint8_t)c;deadline=hal_time_now_us()+5000000u;}
+            else if(hal_time_now_us()>deadline)goto failed;
+            else task_yield();
+        }
+        if(vfs_write(fd,data,need)!=(int)need)goto failed;
+        sum=crc32_update(sum,data,need);done+=need;SH_PRINTF("PUTACK %u\n",done);
+    }
+    if(sum!=want)goto failed;
+    if(vfs_close(fd)<0){fd=-1;goto failed;}fd=-1;
+    SH_PRINTF("PUTDONE %u %08x\n",done,sum);return 0;
+failed:
+    if(fd>=0)vfs_close(fd);
+    int rc=vfs_unlink(path);SH_PRINTF("PUTFAIL %u %08x cleanup %d\n",done,sum,rc);return 1;
+}
+
 static int cmd_send(int argc, char **argv)
 {
     uint32_t pid;
@@ -1168,6 +1214,7 @@ static const command_t s_commands[] = {
     { "uptime",  cmd_uptime,  "time since boot" },
     { "run",     cmd_run,     "run [APP]       start an application (no argument: list them)" },
     { "put",     cmd_put,     "put PATH        receive a file as base64 (see tools/m5ex_push.py)" },
+    { "putraw",  cmd_putraw,  "putraw PATH BYTES CRC32  bounded raw developer upload" },
     { "send",    cmd_send,    "send PID TEXT   send a message to a task" },
     { "recv",    cmd_recv,    "recv [MS]       receive messages (waits up to MS, default 1000)" },
     { "tap",     cmd_tap,     "tap X Y         simulate a touch on the screen" },

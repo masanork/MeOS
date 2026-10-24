@@ -91,8 +91,20 @@ Bunsen Ext and Jigmo's three files are unions, not a single-font glyph count.
 
 ## Selected writing font
 
-`drivers/lcd/bizud24_data.inc` is the generated, committed-build input (no Python,
-FreeType or TTF runtime on device). It contains the BIZ UD cmap glyphs rasterized
+`drivers/lcd/bizud24_data.inc` is the generated, committed simulator input (no Python,
+FreeType or TTF runtime). `assets/fonts/bizud24.m5f` contains the identical atlas
+for Tab5; copy it to that absolute path on the persistent SD root before opening
+the writing editor. The firmware loads and CRC-checks the atlas into PSRAM only
+while the editor is active, rather than consuming the internal app partition.
+With a Tab5 shell connected, provision it with:
+
+```sh
+mkdir /assets/fonts
+python3 tools/push_file.py --port /dev/cu.usbmodemXXXX \
+  assets/fonts/bizud24.m5f /assets/fonts/bizud24.m5f
+```
+
+Both files contain the BIZ UD cmap glyphs rasterized
 at 24px, with original advances/baseline offsets. Coverage is quantized to 4 bits
 and stored as either packed nibbles or independently LZ-compressed glyphs, whichever is smaller.
 The source TTF is checksum-pinned by `fetch24.py`; run that script and then
