@@ -1,9 +1,9 @@
 /*
  * Root filesystem selection.
- *   1. An SD card that already holds an M5FS volume is mounted as "/" (persistent).
- *   2. Otherwise a RAM disk is formatted and mounted (volatile, lost at reset).
- * A card without M5FS is NEVER formatted automatically: that would destroy
- * whatever the user keeps on it.
+ *   1. Tab5 first tries an existing littlefs/COW M5FS root on SD.
+ *   2. A supplied legacy M5FS block device is tried if no SD-root was mounted.
+ *   3. Otherwise a RAM disk is formatted and mounted (volatile, lost at reset).
+ * Boot NEVER formats the SD card; failed or absent media remains untouched.
  */
 #include <m5os/vfs.h>
 #include <m5os/rootfs.h>
@@ -13,6 +13,10 @@
 #include <m5os/errno.h>
 #include <m5os/kprintf.h>
 #include <m5os/kmalloc.h>
+#include <m5os/board_config.h>
+#if defined(M5OS_BOARD_TAB5)
+#include <m5os/sdroot.h>
+#endif
 #include "../../drivers/ramdisk/ramdisk.h"
 
 #define RAMDISK_BLOCKS_PSRAM_LARGE 16384u     /* 8 MiB on boards with >= 16 MiB PSRAM (Tab5) */
@@ -35,7 +39,12 @@ static void seed(const char *path, const char *text)
 bool rootfs_mount(blockdev_t *sd)
 {
     bool persistent = false;
-    if (sd) {
+#if defined(M5OS_BOARD_TAB5)
+    int sdrc = sdroot_mount();
+    persistent = sdrc == ERR_OK;
+    kprintf("sdroot: mount %d (no automatic format)\n", sdrc);
+#endif
+    if (sd && !persistent) {
         int rc = fs_mount(sd, 0);
         if (rc == ERR_OK) {
             persistent = true;
@@ -73,5 +82,8 @@ bool rootfs_mount(blockdev_t *sd)
         }
     }
     wasm_store_boot();                           /* installed WebAssembly apps come back from flash (Tab5 only) */
+#if defined(M5OS_BOARD_TAB5)
+    if (sdroot_active()) kputs("SDROOT BOOT PASS: persistent root; RAM disk not allocated; kernel remains in Flash\n");
+#endif
     return true;
 }

@@ -4,6 +4,7 @@
 #if M5OS_BOARD_TAB5
 #include <m5os/sdcard.h>
 #include <m5os/fat.h>
+#include <m5os/sdroot.h>
 #include <m5os/kprintf.h>
 #include <m5os/errno.h>
 #include <string.h>
@@ -25,6 +26,9 @@ static bool number(const char *text,unsigned *out) {
 }
 int shell_sd(int argc, char **argv)
 {
+    if(sdroot_active() && !(argc==1 || (argc==2 && !strcmp(argv[1],"status")))) {
+        kputs("sd: card is the active littlefs system root; raw probe/FAT mount/benchmark disabled\n");return 1;
+    }
     if(argc>=2 && !strcmp(argv[1],"bench")){
         unsigned files=128,small=1024,large=8;
         if(argc>5 || (argc>2 && !number(argv[2],&files)) || (argc>3 && !number(argv[3],&small)) ||
