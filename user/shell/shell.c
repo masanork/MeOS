@@ -48,9 +48,6 @@
 #include <m5os/audio.h>
 #include <m5os/player.h>
 #include <m5os/microphone.h>
-#if defined(M5OS_BOARD_TAB5)
-#include <m5os/sdroot.h>
-#endif
 #include <m5os/vfs.h>
 #include <m5os/task.h>
 #include <m5os/kprintf.h>
@@ -1141,11 +1138,9 @@ static const command_t s_commands[] = {
 #endif
     { "help",    cmd_help,    "list commands" },
 #if M5OS_BOARD_TAB5
-#if M5OS_BOARD_TAB5
     { "mic", microphone_command, "mic test [SECONDS] bounded microphone input test" },
     { "play", cmd_play, "play PATH       MP3 player (Q stops)" },
     { "audio", audio_command, "audio test      low-volume speaker test" },
-#endif
     { "data", programs_command, "data [status|mount|init|unmount] persistent /data/bas, /data/scm" },
     { "programs", programs_command, "alias for data" },
 
@@ -1156,7 +1151,6 @@ static const command_t s_commands[] = {
     { "power",   cmd_power,   "battery voltage/current, estimated level and charger state (read-only)" },
     { "sdroot", cmd_sdroot, "SD littlefs/COW root status, explicit format, atomic probe save" },
     { "sd", shell_sd, "sd [status|probe|mount [ro|rw]|unmount] microSD" },
-    { "sdroot", cmd_sdroot, "SD littlefs/COW root status, explicit format, atomic probe save" },
     { "storage", cmd_storage, "root backing, persistence and microSD support (read-only)" },
 #endif
     { "history", cmd_history, "show command history (or use Up/Down arrows)" },

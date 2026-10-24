@@ -313,9 +313,9 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
   DC is shown as unknown. Charge permission and raw `CHG_STAT` are not treated as proof of actual charging
   or external power. The monitor must already be in continuous shunt+bus conversion mode; a missing,
   mismatched, unreadable or differently configured monitor produces an explicit unavailable result.
-* `storage` identifies the current root backing and its persistence. Tab5 uses an 8 MiB RAM disk unless a valid littlefs/COW SD root is available;
-  `sd mount` mounts Tab5 microSD as read/write FAT12/16/32 at `/sd`, with UTF-8 VFAT long names.
-  exFAT, card writes and formatting are disabled. The separate flash-backed WASM app store survives reboot.
+* `storage` identifies the current root backing and its persistence. Tab5 first tries a valid littlefs/COW SD root and allocates no 8 MiB RAM disk when it succeeds;
+  the RAM disk remains a rescue fallback for absent or unusable media. With a non-root card, `sd mount` mounts FAT12/16/32 read/write at `/sd`, with UTF-8 VFAT long names.
+  Native SDMMC slot 0 (4-bit, 20 MHz, 8 KiB PSRAM DMA staging) is the default and shares the controller safely with Wi-Fi on slot 1; `M5OS_SD_SPI=1` retains the slower diagnostic SPI transport. exFAT and FAT formatting are not supported. The separate flash-backed WASM app store survives reboot.
 * `play "/sd/path/track.mp3"` opens the Tab5 streaming MP3 player; the filer also opens MP3 files.
   Space pauses, +/- adjusts volume, Q/Esc stops. See [player notes](tools/player/README.md) for limits
   and the remaining physical-device validation.

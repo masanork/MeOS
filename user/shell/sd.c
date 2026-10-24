@@ -14,10 +14,13 @@ void shell_sd_status(void)
     sdcard_status_t s; sdcard_status(&s);
     kprintf("microSD: %s\n", s.detail);
     if (s.ready) kprintf("Card: %s, %u MiB (%u sectors)\n", s.high_capacity ? "SDHC/SDXC" : "SDSC", s.sectors / 2048u, s.sectors);
-    if (s.probed) kprintf("Last R1: 0x%02x\n", s.last_r1);
+    if (s.probed) kprintf("Last card status: 0x%08x (low 0x%02x)\n",
+                          s.last_status, s.last_r1);
     if(fat_is_mounted())kprintf("FAT: mounted %s at /sd (VFAT UTF-8 long names)\n",fat_is_readonly()?"read-only":"read/write");
     else kputs("FAT: not mounted\n");
-    kputs("Transport: dedicated SPI pins; Wi-Fi SDMMC registers unchanged\n");
+    kprintf("Transport: %s", s.transport ? s.transport : "unknown");
+    if (s.clock_khz) kprintf(", %u-bit @ %u kHz", s.bus_width, s.clock_khz);
+    kputs("\n");
 }
 static bool number(const char *text,unsigned *out) {
     unsigned n=0;if(!*text)return false;

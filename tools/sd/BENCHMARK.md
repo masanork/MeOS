@@ -26,13 +26,15 @@ those timing phases. A deterministic per-file/offset pattern checks every byte
 and EOF; the command only prints PASS after both read phases and cleanup succeed.
 Write phases report `verified=0` until their subsequent read phase verifies them.
 
-This is end-to-end VFS performance on software SPI using CMD17/CMD24, with 4KiB
-transfers and synchronous data/metadata flush on every VFS write. Pattern work,
-file/directory operations, scheduling and occasional progress output are included.
-It is not raw SD bus bandwidth or a claim about native SDMMC performance. There
-is no OS page cache; card-internal caching, fragmentation and existing card usage
-can still affect the result. Each phase is limited to 10 minutes and can be
-aborted with Ctrl-C. Power loss during a write is not made atomic by this test.
+This is end-to-end VFS performance. The default Tab5 build uses native SDMMC
+slot 0 in 4-bit 20 MHz mode, with up to 16 sectors per DMA command; builds made
+with `M5OS_SD_SPI=1` use the earlier software-SPI path. VFS uses 4 KiB transfers
+and synchronizes data/metadata on every write. Pattern work, file/directory
+operations, scheduling and occasional progress output are included, so this is
+not raw bus bandwidth. There is no OS page cache; card-internal caching,
+fragmentation and existing card usage can still affect the result. Each phase is
+limited to 10 minutes and can be aborted with Ctrl-C. Power loss during a write
+is not made atomic by this test.
 
 To capture and validate a physical run (opening USB serial may reset the board):
 
