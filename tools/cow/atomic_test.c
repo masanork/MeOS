@@ -26,6 +26,8 @@ static unsigned char image[SECTORS*512];
 struct bank {unsigned char bytes[CAP];};
 static struct bank banks[2];
 static int budget=-1,fail_sync,syncs,fail_recover;
+static jmp_buf replacement_abandoned;
+static bool abandon_write;
 static size_t allocated;
 typedef union {max_align_t align;size_t size;} alloc_header;
 void *kmalloc(size_t n){alloc_header *h=malloc(sizeof *h+n);if(!h)return NULL;h->size=n;allocated+=n;return h+1;}
@@ -45,6 +47,7 @@ static int rd(void *ctx,uint32_t o,void *p,size_t n){struct bank *b=ctx;assert(o
 static int wr(void *ctx,uint32_t o,const void *p,size_t n){struct bank *b=ctx;assert(o+n<=CAP);size_t take=n;
     if(budget>=0&&(size_t)budget<take)take=(size_t)budget;
     memcpy(b->bytes+o,p,take);if(budget>=0)budget-=(int)take;
+    if(abandon_write){abandon_write=false;longjmp(replacement_abandoned,1);}
     return take==n?0:-1;
 }
 static int reset(void *ctx){struct bank *b=ctx;memset(b,0,sizeof *b);return 0;}
@@ -128,6 +131,16 @@ int main(void){
     check_file("/home/value","complete");assert(!vfs_replace_file("/home/value",NULL,0,&confirmed)&&confirmed==0);
     check_file("/home/value","");assert(!vfs_replace_file("/home/value","old",3,NULL));
     assert(!vfs_count_owned(0));
+    /* Owner termination inside the real replace write must release the VFS
+     * pin without closing a nonexistent file, then recover M5FS before reading. */
+    if(!setjmp(replacement_abandoned)){
+        abandon_write=true;
+        (void)vfs_replace_file("/home/value","abandoned replacement",21,&confirmed);
+        assert(0);
+    }
+    mutex_unlock(NULL); /* kernel releases the terminated owner's mutex */
+    assert(vfs_close_owned(0)==1);assert(!vfs_count_owned(0));
+    check_file("/home/value","old");
     /* Near a log boundary, the save's size hint triggers collection BEFORE
      * truncation instead of failing halfway through a perfectly valid save. */
     while ((store.view.log.capacity-store.view.end)/COW_RECORD >= 20)
