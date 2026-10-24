@@ -18,8 +18,9 @@ void kprintf(const char *fmt,...){(void)fmt;}
 void kputs(const char *s){(void)s;}
 int shell_sd(int,char **);
 int main(void){
-    char *probe[]={"sd","probe"},*mount[]={"sd","mount"},*bench[]={"sd","bench"},*status[]={"sd","status"};
+    char *probe[]={"sd","probe"},*mount[]={"sd","mount"},*bench[]={"sd","bench"},*status[]={"sd","status"},*unmount[]={"sd","unmount"},*rw[]={"sd","mount","rw"};
     root=true;assert(shell_sd(2,probe));assert(shell_sd(2,mount));assert(shell_sd(2,bench));
+    assert(shell_sd(2,unmount));assert(shell_sd(3,rw));
     assert(!shell_sd(2,status));assert(!probes&&!mounts&&!benchmarks);
     root=false;assert(!shell_sd(2,probe));assert(probes==1);
     assert(!shell_sd(2,mount));assert(probes==2&&mounts==1);

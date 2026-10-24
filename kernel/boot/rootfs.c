@@ -1,9 +1,9 @@
 /*
  * Root filesystem selection.
- *   1. An SD card that already holds an M5FS volume is mounted as "/" (persistent).
- *   2. Otherwise a RAM disk is formatted and mounted (volatile, lost at reset).
- * A card without M5FS is NEVER formatted automatically: that would destroy
- * whatever the user keeps on it.
+ *   1. Tab5 first tries an existing littlefs/COW M5FS root on SD.
+ *   2. A supplied legacy M5FS block device is tried if no SD-root was mounted.
+ *   3. Otherwise a RAM disk is formatted and mounted (volatile, lost at reset).
+ * Boot NEVER formats the SD card; failed or absent media remains untouched.
  */
 #include <m5os/vfs.h>
 #include <m5os/rootfs.h>

@@ -34,6 +34,9 @@
 #include "../basic/console.h"
 #include "../basic/graphics.h"
 #include <m5os/program_fs.h>
+#if M5OS_BOARD_TAB5
+#include <m5os/sdroot.h>
+#endif
 
 #include "../scheme/ide.h"
 #include "../write/write.h"
@@ -1151,6 +1154,7 @@ static const command_t s_commands[] = {
     { "calc", cmd_calc, "calc EXPR | deg | rad  numeric expressions" },
     { "devices", cmd_devices, "board devices: detected, untested, or unsupported (read-only)" },
     { "power",   cmd_power,   "battery voltage/current, estimated level and charger state (read-only)" },
+    { "sdroot", cmd_sdroot, "SD littlefs/COW root status, explicit format, atomic probe save" },
     { "sd", shell_sd, "sd [status|probe|mount [ro|rw]|unmount] microSD" },
     { "sdroot", cmd_sdroot, "SD littlefs/COW root status, explicit format, atomic probe save" },
     { "storage", cmd_storage, "root backing, persistence and microSD support (read-only)" },
