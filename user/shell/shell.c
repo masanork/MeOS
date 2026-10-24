@@ -135,6 +135,7 @@ static bool resolve(const char *arg, char *out)       /* relative to cwd -> norm
 /* --------------------------------------------------------------- commands */
 
 static int read_line_ex(char *line, bool echo);
+static int read_byte(void);
 
 typedef struct { const char *name; int (*fn)(int, char **); const char *help; } command_t;
 static const command_t s_commands[];

@@ -66,3 +66,6 @@ int main(void) {
     assert(!strcmp(source,"10 PRINT 42\n"));
     puts("BASIC editor handoff tests PASS");
 }
+
+void ime_clear_anchor(void) {}
+void ime_set_anchor(int x,int y) { (void)x; (void)y; }
