@@ -98,3 +98,18 @@ free, a further 64 KiB dynamic allocation relative to the earlier sample. COW
 collection allocates no heap and reuses the existing index; unrelated service
 allocation was not instrumented, so this sample is not a device heap-leak verdict.
 No physical power was removed during these operations.
+
+### Final verified installation
+
+The final application built from source commit `6fbd921` was written at 0x10000;
+esptool verified its data hash. A first final-flash attempt failed during USB
+connection, and an intervening boot showed a different Quake firmware. With the
+port free, a retry succeeded. `final-verified-boot.log` then confirmed the new boot
+message, active littlefs SD root, epoch 2/bank 1 and `qualification-099` after
+reset. The settled memory sample returned to 634 KiB used / 28,037 KiB free.
+
+The sanitized machine-readable receipt is
+`tools/sdroot/device-results-20261024.json`. It contains exact app/backup hashes
+and explicitly leaves physical power-cut and full concurrent-app integration
+unqualified. No bootloader, partition table, eFuse or secure-boot setting was
+changed. The device is left running the SD-root trial firmware.
