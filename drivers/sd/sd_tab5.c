@@ -1,6 +1,5 @@
-/* Read-only SD/SDSC/SDHC/SDXC SPI transport. Derived from MeOS sd_spi.c;
- * kept separate so the existing CoreS3/Cardputer write path is unchanged.
- * Supported commands are enumerated here: no write/erase/program command exists. */
+/* SD/SDSC/SDHC/SDXC SPI transport. Single-block CMD24 writes wait for
+ * programming completion and check CMD13 status. No erase command is used. */
 #include <m5os/sdcard.h>
 #include <m5os/hal_sdspi.h>
 #include <m5os/hal_gpio.h>
@@ -83,10 +82,33 @@ static int read_blocks(blockdev_t *bd, uint32_t lba, uint32_t count, void *buf)
 out:
     spi_bus_unlock(); return rc;
 }
-static int reject_write(blockdev_t *bd, uint32_t lba, uint32_t count, const void *buf)
+static int write_blocks(blockdev_t *bd, uint32_t lba, uint32_t count, const void *buf)
 {
-    (void)bd; (void)lba; (void)count; (void)buf;
-    return ERR_PERM; /* No SPI traffic, even for direct block-device callers. */
+    (void)bd;
+    spi_bus_lock();
+    int rc = ERR_OK;
+    if (!s.ready) { rc = ERR_NODEV; goto out; }
+    if (s.write_protected) { rc = ERR_PERM; goto out; }
+    if (!buf || !count || lba >= s.sectors || count > s.sectors-lba) { rc = ERR_INVAL; goto out; }
+    hal_sdspi_begin(); hal_sdspi_cs(true);
+    for (uint32_t i=0; i<count; i++) {
+        uint32_t block=lba+i;
+        if (!s.high_capacity && block>UINT32_MAX/512u) { rc=ERR_INVAL; break; }
+        if (command(24, s.high_capacity ? block : block*512u, 1) != 0) { rc=ERR_IO; break; }
+        hal_sdspi_xfer(0xff); hal_sdspi_xfer(0xfe);
+        const uint8_t *bytes=(const uint8_t *)buf+(size_t)i*512;
+        uint16_t crc=0;
+        for (unsigned j=0;j<512;j++) { hal_sdspi_xfer(bytes[j]); crc=crc16(crc,bytes[j]); }
+        hal_sdspi_xfer((uint8_t)(crc>>8)); hal_sdspi_xfer((uint8_t)crc);
+        uint8_t response=0xff;
+        for (unsigned n=0;n<10 && response==0xff;n++) response=hal_sdspi_xfer(0xff);
+        if ((response&31)!=5 || !wait_ready()) { rc=ERR_IO; break; }
+        if (command(13,0,1)!=0 || hal_sdspi_xfer(0xff)!=0) { rc=ERR_IO; break; }
+    }
+    if (rc==ERR_IO) { s.ready=false; s.detail="write/status error; unmount then probe again"; }
+    deselect(); hal_sdspi_end();
+out:
+    spi_bus_unlock(); return rc;
 }
 
 blockdev_t *sdcard_probe(void)
@@ -134,12 +156,13 @@ blockdev_t *sdcard_probe(void)
     if (((csd[0] >> 6) == 1) != s.high_capacity) goto out;
     s.sectors = capacity(csd);
     if (!s.sectors) goto out;
-    s.ready = true; s.detail = "ready (SPI, read-only)"; ok = true;
+    s.write_protected = (csd[14] & 0x30) != 0;
+    s.ready = true; s.detail = s.write_protected ? "ready (SPI, card write-protected)" : "ready (SPI, read/write)"; ok = true;
 out:
     deselect(); hal_sdspi_end(); spi_bus_unlock();
     if (!ok) return NULL;
-    s_bd = (blockdev_t){ .name = "sd0-ro", .block_size = 512, .block_count = s.sectors,
-                        .read = read_blocks, .write = reject_write };
+    s_bd = (blockdev_t){ .name = "sd0", .block_size = 512, .block_count = s.sectors,
+                        .read = read_blocks, .write = write_blocks };
     return &s_bd;
 }
 void sdcard_status(sdcard_status_t *out) { spi_bus_lock(); *out = s; spi_bus_unlock(); }
