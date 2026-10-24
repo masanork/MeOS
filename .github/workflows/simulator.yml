@@ -1,9 +1,9 @@
 name: MeOS App Simulator
 on:
   pull_request:
-    paths: ['tools/sim/**', 'tools/scheme/**', 'user/scheme/**', 'user/tui/**', 'drivers/ime/**', 'drivers/lcd/font*', 'drivers/lcd/fbcon.h', 'drivers/usbkbd/hid_keys.*', 'kernel/include/**', 'kernel/lib/number.c', '.github/workflows/simulator.yml']
+    paths: ['tools/sim/**', 'user/write/**', 'drivers/lcd/bizud*', 'tools/fonts/**', 'tools/scheme/**', 'user/scheme/**', 'user/tui/**', 'drivers/ime/**', 'drivers/lcd/font*', 'drivers/lcd/fbcon.h', 'drivers/usbkbd/hid_keys.*', 'kernel/include/**', 'kernel/lib/number.c', '.github/workflows/simulator.yml']
   push:
-    paths: ['tools/sim/**', 'tools/scheme/**', 'user/scheme/**', 'user/tui/**', 'drivers/ime/**', 'drivers/lcd/font*', 'drivers/lcd/fbcon.h', 'drivers/usbkbd/hid_keys.*', 'kernel/include/**', 'kernel/lib/number.c', '.github/workflows/simulator.yml']
+    paths: ['tools/sim/**', 'user/write/**', 'drivers/lcd/bizud*', 'tools/fonts/**', 'tools/scheme/**', 'user/scheme/**', 'user/tui/**', 'drivers/ime/**', 'drivers/lcd/font*', 'drivers/lcd/fbcon.h', 'drivers/usbkbd/hid_keys.*', 'kernel/include/**', 'kernel/lib/number.c', '.github/workflows/simulator.yml']
   workflow_dispatch:
 permissions:
   contents: read

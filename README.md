@@ -399,3 +399,5 @@ physical write reliability or power-loss recovery.
 `sh tools/sd/host_test.sh` covers read-only regression, CMD24/status/timeouts,
 FAT12/16/32 create/append/truncate/delete/remount, permissions, open-file locking,
 disk full, and failed/torn writes. Fixtures are generated memory-backed images.
+
+See [tools/sim/README.md](tools/sim/README.md) for this branch's application work, validation and limitations.

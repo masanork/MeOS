@@ -43,3 +43,7 @@ coverage data (`drivers/lcd/bizud24_data.inc`); the simulator and firmware rende
 the same generated data. The unmodified upstream license and copyright are in
 `tools/fonts/licenses/BIZ-UD-OFL.txt`. No second typeface is merged or used for
 fallback. See `tools/fonts/README.md` for the source checksum and regeneration.
+
+The prose editor also uses a generated BIZ UD Gothic atlas under SIL OFL 1.1.
+The pinned TTF source, generator and license are documented in `tools/fonts/README.md`
+and `tools/fonts/licenses/BIZ-UD-OFL.txt`; the source manifest includes that notice.
