@@ -17,6 +17,7 @@
 #define SYS_SDA 12
 #endif
 static bool running;
+static unsigned fast_ticks;
 static unsigned clock_lows, scl_reads, stall_at, stretch_delays;
 static task_t task;
 static int depth, locks, unlocks, expected_scl = SYS_SCL, expected_sda = SYS_SDA;
@@ -32,6 +33,7 @@ static void edge(int pin)
 void hal_gpio_config_open_drain(int pin) { edge(pin); }
 void hal_gpio_od_release(int pin) { edge(pin); }
 void hal_gpio_od_drive_low(int pin) { edge(pin); if(pin==expected_scl) clock_lows++; }
+void hal_i2c_fast_tick(void) { fast_ticks++; }
 void hal_delay_us(uint32_t us) { assert(us==4 || us==1); if(us==1)stretch_delays++; }
 int hal_gpio_read(int pin)
 {
@@ -100,7 +102,13 @@ int main(void)
     begin();assert(hal_i2c_sys_read_regs_ex(0x32,0,NULL,1)==HAL_I2C_INVALID);done();
     begin();queue(0);queue(0);queue(0);byte(0x66);
     assert(hal_i2c_sys_read_regs_ex(0x32,0x10,b,1)==HAL_I2C_OK && b[0]==0x66);done();
+    begin();queue(0);queue(0);queue(0);queue(0);byte(8);
+    fast_ticks=0;assert(hal_i2c_read_reg16_fast(0x55,0x10,b,1) && b[0]==8);done();assert(fast_ticks>0);
+    begin();queue(1);assert(!hal_i2c_read_reg16_fast(0x55,0x10,b,1));done();
+    begin();stall_at=1;assert(!hal_i2c_read_reg16_fast(0x55,0x10,b,1));done();
+    fast_ticks=0;begin();queue(0);queue(0);queue(0);byte(0x66);
+    assert(hal_i2c_sys_read_regs_ex(0x32,0x10,b,1)==HAL_I2C_OK && b[0]==0x66);done();assert(!fast_ticks);
     hal_i2c_stats_t stats;hal_i2c_get_stats(&stats);
-    assert(stats.timeout==4 && stats.invalid==2 && stats.nack>=2 && stats.ok>0);
+    assert(stats.timeout==5 && stats.invalid==2 && stats.nack>=2 && stats.ok>0);
     puts("i2c: boot/task locks, RMW, system/accessory routing, legacy APIs, NACK tests PASS");
 }

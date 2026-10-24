@@ -10,9 +10,7 @@ static uint8_t flash[PROGRAM_STORE_BYTES],baseline[PROGRAM_STORE_BYTES];
 static unsigned mutations,fail_at;static int tear,fail_reads;
 static int read_io(void *ctx,uint32_t off,void *out,size_t n) {
     (void)ctx;assert(off<=sizeof flash && n<=sizeof flash-off);
-    if(fail_reads) return ERR_IO;
-    if(n) memcpy(out,flash+off,n);
-    return 0;
+    if(fail_reads) return ERR_IO;if(n) memcpy(out,flash+off,n);return 0;
 }
 static int write_io(void *ctx,uint32_t off,const void *data,size_t n) {
     (void)ctx;assert(!(off&3)&&!(n&3)&&off<=sizeof flash&&n<=sizeof flash-off);
@@ -28,7 +26,7 @@ static int erase_io(void *ctx,uint32_t off) {
 static program_store_io io={.read=read_io,.write=write_io,.erase=erase_io};
 static void reset_fault(void) {mutations=fail_at=0;tear=fail_reads=0;}
 static void put32(uint8_t *p,uint32_t n) {for(unsigned i=0;i<4;i++)p[i]=(uint8_t)(n>>(i*8));}
-static void record_crc(uint8_t *h) {put32(h+48,crc32_update(crc32(h+4,44),h+52,12));}
+static void record_crc(uint8_t *h) {put32(h+112,crc32_update(crc32(h+4,108),h+116,12));}
 static void expect(program_store *s,const char *name,const char *data) {
     char got[100];size_t len;assert(!program_store_read(s,name,got,sizeof got,&len));assert(len==strlen(data)&&!memcmp(got,data,len));
 }
@@ -90,11 +88,11 @@ int main(void) {
     memcpy(flash,baseline,sizeof flash);reset_fault();assert(!program_store_mount(&s,&io));
     /* Corrupt the newest payload: recover its older validated bank. */
     int id=program_store_find(&s,"a.bas");uint32_t newest=4096+((unsigned)id*2+s.entry[id].bank)*PROGRAM_STORE_BANK;
-    flash[newest+64]^=1;
+    flash[newest+PROGRAM_STORE_HEADER]^=1;
     char corrupted[32];size_t ignored;assert(program_store_read(&s,"a.bas",corrupted,sizeof corrupted,&ignored)==ERR_CORRUPT&&!s.ready);
     assert(program_store_save(&s,"a.bas","x",1)==ERR_IO);
     assert(!program_store_mount(&s,&io)&&s.recovered==1);expect(&s,"a.bas","10 PRINT 1\n");
-    flash[4096+((unsigned)id*2+(s.entry[id].bank))*PROGRAM_STORE_BANK+64]^=1;
+    flash[4096+((unsigned)id*2+(s.entry[id].bank))*PROGRAM_STORE_BANK+PROGRAM_STORE_HEADER]^=1;
     assert(program_store_mount(&s,&io)==ERR_CORRUPT&&!s.ready);
     /* Capacity, slot reuse and stale generations. */
     memset(flash,255,sizeof flash);reset_fault();assert(!program_store_init(&s,&io));
@@ -114,6 +112,25 @@ int main(void) {
     /* Init never erases; interrupted provisioning is not auto-formatted. */
     memset(flash,255,sizeof flash);reset_fault();fail_at=1;tear=1;assert(program_store_init(&s,&io)==ERR_IO);
     reset_fault();assert(program_store_mount(&s,&io)==ERR_CORRUPT);assert(program_store_init(&s,&io)==ERR_EXIST&&!mutations);
+    /* Read legacy 64-byte records, then update atomically to path-aware v2. */
+    memset(flash,255,sizeof flash);reset_fault();assert(!program_store_init(&s,&io));
+    uint8_t legacy[64];memset(legacy,255,sizeof legacy);
+    put32(legacy,0x4752504d);put32(legacy+4,1);put32(legacy+8,1);put32(legacy+12,3);
+    put32(legacy+16,crc32("old",3));put32(legacy+20,0);memset(legacy+24,0,24);memcpy(legacy+24,"legacy.bas",10);
+    put32(legacy+48,crc32_update(crc32(legacy+4,44),legacy+52,12));memcpy(flash+4096,legacy,64);memcpy(flash+4096+64,"old",3);
+    assert(!program_store_mount(&s,&io));expect(&s,"legacy.bas","old");assert(s.entry[0].header_size==64);
+    memcpy(baseline,flash,sizeof flash);reset_fault();assert(!program_store_save(&s,"legacy.bas","new",3));unsigned legacy_cuts=mutations;
+    for(unsigned cut=1;cut<=legacy_cuts;cut++) for(int effect=0;effect<3;effect++) {
+        memcpy(flash,baseline,sizeof flash);reset_fault();assert(!program_store_mount(&s,&io));fail_at=cut;tear=effect;
+        assert(program_store_save(&s,"legacy.bas","new",3)<0);reset_fault();assert(!program_store_mount(&reboot,&io));
+        char text[4];size_t length;assert(!program_store_read(&reboot,"legacy.bas",text,sizeof text,&length));
+        assert(length==3&&(!memcmp(text,"old",3)||!memcmp(text,"new",3)));
+    }
+    reset_fault();assert(!program_store_mkdir(&reboot,"lua"));assert(!program_store_save(&reboot,"lua/hello.lua","print(1)",8));
+    assert(!program_store_mount(&s,&io));assert(s.entry[program_store_find(&s,"lua")].directory);
+    expect(&s,"lua/hello.lua","print(1)");assert(program_store_read(&s,"lua",legacy,sizeof legacy,&n)==ERR_ISDIR);
+    const char *bad_paths[]={"/absolute","bas//bad","bas/../bad","bas/./bad","trailing/"};
+    for(unsigned i=0;i<sizeof bad_paths/sizeof *bad_paths;i++) assert(program_store_save(&s,bad_paths[i],"x",1)==ERR_INVAL);
     uint8_t table[4096];uint32_t base=7;memset(table,255,sizeof table);
     partition_entry(table,"factory",0,0,0x10000,0x3e0000);partition_entry(table+32,"wasmapps",1,0x41,0xa00000,0x200000);
     assert(program_store_partition(table,0x1000000,&base)==ERR_NOENT&&base==7);

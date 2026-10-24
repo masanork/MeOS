@@ -21,8 +21,8 @@ void *kmalloc(size_t n) {return malloc(n);}
 void kfree(void *p) {free(p);}
 void kprintf(const char *s,...) {(void)s;}
 void kputs(const char *s) {(void)s;}
-int vfs_mount(const char *p,const vfs_fs_t *v,void *ctx) {(void)ctx;assert(!strcmp(p,"/programs")&&!fs);fs=v;return 0;}
-int vfs_umount(const char *p) {assert(!strcmp(p,"/programs")&&fs);fs=NULL;return 0;}
+int vfs_mount(const char *p,const vfs_fs_t *v,void *ctx) {(void)ctx;assert(!strcmp(p,"/data")&&!fs);fs=v;return 0;}
+int vfs_umount(const char *p) {assert(!strcmp(p,"/data")&&fs);fs=NULL;return 0;}
 int esp_rom_spiflash_unlock(void) {assert(irq);return 0;}
 int esp_rom_spiflash_read(uint32_t off,uint32_t *out,int32_t n) {
     assert(irq&&n>0&&!(off&3)&&!((uintptr_t)out&3)&&!(n&3));
@@ -49,10 +49,10 @@ int main(void) {
     flash[0xa00000]=0x55;flash[0x400000]=0x66;flash[0x3f0000]=0x77;flash[0x10000]=0x88;
     assert(cmd("mount")==1&&!writes&&!erases);assert(!cmd("init")&&program_fs_ready()&&writes==2&&!erases);
     unsigned before=reads;assert(cmd("mount")==1&&reads==before); /* already mounted */
-    void *file;assert(!fs->open(NULL,"/hello.bas",VFS_O_WRITE|VFS_O_CREATE,&file));
+    void *file;assert(!fs->open(NULL,"/bas/hello.bas",VFS_O_WRITE|VFS_O_CREATE,&file));
     assert(fs->write(file,"10 PRINT 1\n",11)==11);assert(!fs->close(file)&&erases==5);
     assert(!cmd("unmount"));writes=erases=0;assert(!cmd("mount")&&!writes&&!erases);
-    assert(!fs->open(NULL,"/hello.bas",VFS_O_READ,&file));char out[32];assert(fs->read(file,out,sizeof out)==11&&!memcmp(out,"10 PRINT 1\n",11));assert(!fs->close(file));
+    assert(!fs->open(NULL,"/bas/hello.bas",VFS_O_READ,&file));char out[32];assert(fs->read(file,out,sizeof out)==11&&!memcmp(out,"10 PRINT 1\n",11));assert(!fs->close(file));
     assert(!cmd("unmount"));assert(flash[0xa00000]==0x55&&flash[0x400000]==0x66&&flash[0x3f0000]==0x77&&flash[0x10000]==0x88);
     /* Wrong region, encrypted table entries or small flash prevent writes. */
     put32(flash+0x8000+32+4,0xa00000);assert(cmd("init")==1&&!writes&&!erases);put32(flash+0x8000+32+4,0xc00000);

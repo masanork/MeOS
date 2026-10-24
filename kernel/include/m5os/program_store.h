@@ -7,9 +7,11 @@
 #define PROGRAM_STORE_SECTOR 4096u
 #define PROGRAM_STORE_BANK (5u*PROGRAM_STORE_SECTOR)
 #define PROGRAM_STORE_FILES 16u
-#define PROGRAM_STORE_HEADER 64u
+#define PROGRAM_STORE_HEADER 128u
+#define PROGRAM_STORE_LEGACY_MAX (PROGRAM_STORE_BANK-64u)
 #define PROGRAM_STORE_MAX (PROGRAM_STORE_BANK-PROGRAM_STORE_HEADER)
-#define PROGRAM_STORE_NAME 24u
+#define PROGRAM_STORE_NAME 88u
+#define PROGRAM_STORE_COMPONENT 23u
 
 /* I/O callbacks return 0 on complete success or a negative ERR_* code. */
 typedef struct {
@@ -21,7 +23,8 @@ typedef struct {
 typedef struct {
     char name[PROGRAM_STORE_NAME];
     uint32_t generation,size,checksum;
-    uint8_t bank,valid,deleted;
+    uint8_t bank,valid,deleted,directory;
+    uint16_t header_size;
 } program_store_entry;
 typedef struct {
     program_store_io io;
@@ -31,9 +34,11 @@ typedef struct {
 } program_store;
 int program_store_init(program_store *,const program_store_io *); /* blank only */
 int program_store_mount(program_store *,const program_store_io *);
+bool program_store_path_valid(const char *name);
 int program_store_find(const program_store *,const char *name);
 int program_store_read(program_store *,const char *name,void *data,size_t capacity,size_t *size);
 int program_store_save(program_store *,const char *name,const void *data,size_t size);
+int program_store_mkdir(program_store *,const char *name);
 int program_store_delete(program_store *,const char *name);
 
 /* Tab5 opt-in partition policy: data subtype 0x42, label programs, exactly

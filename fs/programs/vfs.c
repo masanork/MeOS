@@ -16,9 +16,24 @@ static bool mounted,writer;
 static void *allocate(size_t n) { void *p=kmalloc_psram(n);return p?p:kmalloc(n); }
 static const char *name_of(const char *rel)
 {
-    if(!rel || rel[0]!='/' || !rel[1] || strchr(rel+1,'/')) return NULL;
+    if(!rel || rel[0]!='/' || !program_store_path_valid(rel+1)) return NULL;
     return rel+1;
 }
+static int directory(const char *name)
+{
+    if(!*name) return 1;
+    int index=program_store_find(store,name);
+    if(index>=0) return store->entry[index].directory;
+    return index==ERR_NOENT && (!strcmp(name,"bas") || !strcmp(name,"scm"));
+}
+static int parent(const char *name)
+{
+    const char *slash=strrchr(name,'/');if(!slash) return ERR_OK;
+    char path[PROGRAM_STORE_NAME];size_t n=(size_t)(slash-name);memcpy(path,name,n);path[n]=0;
+    if(directory(path)) return ERR_OK;
+    int index=program_store_find(store,path);return index>=0?ERR_NOTDIR:index;
+}
+static const char *basename_of(const char *name) {const char *p=strrchr(name,'/');return p?p+1:name;}
 static int open_file(void *unused,const char *rel,uint32_t flags,void **out)
 {
     (void)unused;const char *name=name_of(rel);if(!name) return ERR_INVAL;
@@ -30,6 +45,8 @@ static int open_file(void *unused,const char *rel,uint32_t flags,void **out)
     mutex_lock(&lock);
     int rc=mounted&&store->ready ? ERR_OK : ERR_IO;
     if(rc==ERR_OK&&writes&&writer) rc=ERR_BUSY;
+    if(rc==ERR_OK&&directory(name)) rc=ERR_ISDIR;
+    if(rc==ERR_OK) rc=parent(name);
     int index=rc==ERR_OK ? program_store_find(store,name) : rc;
     if(rc==ERR_OK && index<0 && !(index==ERR_NOENT&&(flags&VFS_O_CREATE))) rc=index;
     handle *f=NULL;
@@ -37,9 +54,10 @@ static int open_file(void *unused,const char *rel,uint32_t flags,void **out)
     if(rc==ERR_OK) {
         memset(f,0,sizeof *f);memcpy(f->name,name,strlen(name)+1);f->flags=flags;
         f->size=index>=0 ? store->entry[index].size : 0;
-        f->data=allocate(writes ? PROGRAM_STORE_MAX : (f->size?f->size:1));
-        if(!f->data) rc=ERR_NOMEM;
-        else if(index>=0 && !(flags&VFS_O_TRUNC)) rc=program_store_read(store,name,f->data,f->size,&f->size);
+        if(writes && !(flags&VFS_O_TRUNC) && f->size>PROGRAM_STORE_MAX) rc=ERR_NOSPC;
+        if(rc==ERR_OK) f->data=allocate(writes ? PROGRAM_STORE_MAX : (f->size?f->size:1));
+        if(rc==ERR_OK&&!f->data) rc=ERR_NOMEM;
+        else if(rc==ERR_OK && index>=0 && !(flags&VFS_O_TRUNC)) rc=program_store_read(store,name,f->data,f->size,&f->size);
         if(flags&VFS_O_TRUNC) f->size=0;
         f->dirty=writes && (index==ERR_NOENT || (flags&VFS_O_TRUNC));
         if(flags&VFS_O_APPEND) f->pos=f->size;
@@ -86,45 +104,83 @@ static int seek_file(void *file,int32_t offset,int whence)
     if(base<0||pos<0||(uint64_t)pos>limit) {if(f->flags&VFS_O_WRITE) f->error=ERR_INVAL;mutex_unlock(&lock);return ERR_INVAL;}
     f->pos=(size_t)pos;mutex_unlock(&lock);return (int)pos;
 }
+static void info_for(vfs_info_t *out,const char *name)
+{
+    int i=program_store_find(store,name);
+    *out=(vfs_info_t){.type=directory(name)?FS_TYPE_DIR:FS_TYPE_FILE};
+    if(i>=0) out->size=store->entry[i].size;
+    const char *base=basename_of(name);memcpy(out->name,base,strlen(base)+1);
+}
 static int stat_file(void *unused,const char *rel,vfs_info_t *out)
 {
     (void)unused;if(!task_has_perm(APP_PERM_FS_READ)) return ERR_PERM;
     mutex_lock(&lock);int rc=mounted&&store->ready?ERR_OK:ERR_IO;
-    if(rc==ERR_OK && !strcmp(rel,"/")) {memset(out,0,sizeof *out);out->type=FS_TYPE_DIR;}
+    if(rc==ERR_OK && !strcmp(rel,"/")) {*out=(vfs_info_t){.type=FS_TYPE_DIR};}
     else if(rc==ERR_OK) {
-        const char *name=name_of(rel);int i=name?program_store_find(store,name):ERR_INVAL;
-        if(i<0) rc=i;else {*out=(vfs_info_t){.type=FS_TYPE_FILE,.size=store->entry[i].size};memcpy(out->name,name,strlen(name)+1);}
+        const char *name=name_of(rel);
+        if(!name) rc=ERR_INVAL;
+        else if((rc=parent(name))==ERR_OK) {
+            int i=program_store_find(store,name);
+            if(i<0&&!directory(name)) rc=i;else info_for(out,name);
+        }
     }
     mutex_unlock(&lock);return rc;
 }
 static int list_files(void *unused,const char *rel,int (*cb)(const vfs_info_t *,void *),void *ctx)
 {
     (void)unused;if(!task_has_perm(APP_PERM_FS_READ)) return ERR_PERM;
-    if(strcmp(rel,"/")) return ERR_NOTDIR;
-    /* VFS entries now hold UTF-8 long names; keep snapshots off small task stacks. */
-    vfs_info_t *list=kmalloc_psram(sizeof(*list)*PROGRAM_STORE_FILES);
-    if(!list) return ERR_NOMEM;
-    unsigned count=0;
+    const char *name=!strcmp(rel,"/")?"":name_of(rel);if(!name) return ERR_INVAL;
+    vfs_info_t *list=allocate(sizeof(*list)*(PROGRAM_STORE_FILES+2));if(!list) return ERR_NOMEM;
+    unsigned count=0;size_t prefix=strlen(name);
     mutex_lock(&lock);int rc=mounted&&store->ready?ERR_OK:ERR_IO;
-    if(!rc) for(unsigned i=0;i<PROGRAM_STORE_FILES;i++) if(store->entry[i].valid&&!store->entry[i].deleted) {
-        list[count]=(vfs_info_t){.type=FS_TYPE_FILE,.size=store->entry[i].size};
-        memcpy(list[count++].name,store->entry[i].name,PROGRAM_STORE_NAME);
+    if(!rc&&!directory(name)) rc=ERR_NOTDIR;
+    if(!rc) {
+        if(!prefix) {info_for(&list[count++],"bas");info_for(&list[count++],"scm");}
+        for(unsigned i=0;i<PROGRAM_STORE_FILES;i++) if(store->entry[i].valid&&!store->entry[i].deleted) {
+            const char *key=store->entry[i].name,*child=key;
+            if(prefix) {
+                if(strncmp(key,name,prefix)||key[prefix]!='/') continue;
+                child=key+prefix+1;
+            } else if(!strcmp(key,"bas")||!strcmp(key,"scm")) continue;
+            if(!*child||strchr(child,'/')) continue;
+            info_for(&list[count++],key);
+        }
+        opened++;
     }
-    /* Pin the mount but call outside its lock, matching VFS readdir users. */
-    if(!rc) opened++;
     mutex_unlock(&lock);if(rc<0) {kfree(list);return rc;}
     for(unsigned i=0;i<count;i++) if(cb&&cb(&list[i],ctx)) break;
     mutex_lock(&lock);opened--;mutex_unlock(&lock);kfree(list);return (int)count;
+}
+static int mkdir_file(void *unused,const char *rel)
+{
+    (void)unused;if(!task_has_perm(APP_PERM_FS_WRITE)) return ERR_PERM;
+    const char *name=name_of(rel);if(!name) return ERR_INVAL;
+    mutex_lock(&lock);int rc=!mounted||!store->ready?ERR_IO:writer?ERR_BUSY:ERR_OK;
+    if(!rc) {
+        int index=program_store_find(store,name);
+        if(index>=0||directory(name)) rc=ERR_EXIST;
+        else if((rc=parent(name))==ERR_OK) rc=program_store_mkdir(store,name);
+    }
+    mutex_unlock(&lock);return rc;
 }
 static int unlink_file(void *unused,const char *rel)
 {
     (void)unused;if(!task_has_perm(APP_PERM_FS_WRITE)) return ERR_PERM;
     const char *name=name_of(rel);if(!name) return ERR_INVAL;
-    mutex_lock(&lock);int rc=mounted&&!writer?program_store_delete(store,name):ERR_BUSY;
+    mutex_lock(&lock);int rc=!mounted||!store->ready?ERR_IO:writer?ERR_BUSY:ERR_OK;
+    if(!rc) {
+        if(directory(name)) {
+            if(!strcmp(name,"bas")||!strcmp(name,"scm")) rc=ERR_PERM;
+            size_t n=strlen(name);
+            for(unsigned i=0;!rc&&i<PROGRAM_STORE_FILES;i++) if(store->entry[i].valid&&!store->entry[i].deleted&&
+                !strncmp(store->entry[i].name,name,n)&&store->entry[i].name[n]=='/') rc=ERR_NOTEMPTY;
+        }
+        if(!rc) rc=program_store_delete(store,name);
+    }
     mutex_unlock(&lock);return rc;
 }
-static const vfs_fs_t fs={.name="programs",.open=open_file,.close=close_file,.read=read_file,.write=write_file,
-    .seek=seek_file,.stat=stat_file,.readdir=list_files,.unlink=unlink_file};
+static const vfs_fs_t fs={.name="data",.open=open_file,.close=close_file,.read=read_file,.write=write_file,
+    .seek=seek_file,.stat=stat_file,.readdir=list_files,.mkdir=mkdir_file,.unlink=unlink_file};
 int program_fs_mount(const program_store_io *io)
 {
     if(!task_has_perm(APP_PERM_FS_READ)) return ERR_PERM;
@@ -132,8 +188,12 @@ int program_fs_mount(const program_store_io *io)
     if(mounted) {mutex_unlock(&lock);return ERR_BUSY;}
     program_store *candidate=allocate(sizeof *candidate);
     int rc=candidate?program_store_mount(candidate,io):ERR_NOMEM;
-    if(!rc) rc=vfs_mount("/programs",&fs,NULL);
-    if(!rc) {store=candidate;mounted=true;} else kfree(candidate);
+    if(!rc) {
+        store=candidate;
+        for(unsigned i=0;!rc&&i<PROGRAM_STORE_FILES;i++) if(store->entry[i].valid&&!store->entry[i].deleted) rc=parent(store->entry[i].name);
+        if(!rc) rc=vfs_mount("/data",&fs,NULL);
+    }
+    if(!rc) mounted=true;else {store=NULL;kfree(candidate);}
     mutex_unlock(&lock);return rc;
 }
 int program_fs_init(const program_store_io *io)
@@ -148,7 +208,7 @@ int program_fs_init(const program_store_io *io)
 int program_fs_unmount(void)
 {
     if(!task_has_perm(APP_PERM_FS_WRITE)) return ERR_PERM;
-    mutex_lock(&lock);int rc=!mounted?ERR_NOENT:opened?ERR_BUSY:vfs_umount("/programs");
+    mutex_lock(&lock);int rc=!mounted?ERR_NOENT:opened?ERR_BUSY:vfs_umount("/data");
     if(!rc) {mounted=false;kfree(store);store=NULL;}
     mutex_unlock(&lock);return rc;
 }

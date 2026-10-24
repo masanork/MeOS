@@ -26,6 +26,9 @@ int main(void){
     assert(vfs_umount(mount)==ERR_BUSY);assert(vfs_close(fd)==ERR_OK&&vfs_umount(mount)==ERR_OK);
     char excessive[VFS_PATH_MAX+2];excessive[0]='/';memset(excessive+1,'z',VFS_PATH_MAX);excessive[VFS_PATH_MAX+1]=0;
     assert(vfs_normalize(excessive,out)==ERR_NAMETOOLONG);
+    char component[VFS_NAME_MAX+3];component[0]='/';
+    memset(component+1,'a',VFS_NAME_MAX+1);component[VFS_NAME_MAX+2]=0;
+    assert(vfs_normalize(component,out)==ERR_NAMETOOLONG);
     char label[96];filer_name_label("録音 🎵 long file name.mp3",label,12);
     assert(strlen(label)<sizeof label && !memchr(label,0xc0,strlen(label)));
     filer_name_label("\xf0",label,23);assert(label[0]=='?');

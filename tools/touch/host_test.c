@@ -6,7 +6,7 @@
 #include "../../drivers/tab5kbd/tab5touch.h"
 
 static uint8_t st[256], gt[65536];
-static bool have_st, have_gt, fail_read;
+static bool have_st, have_gt, fail_read, fail_fast;
 static uint16_t fail_reg;
 static unsigned writes, wakes;
 
@@ -29,6 +29,8 @@ bool hal_i2c_read_reg16(uint8_t addr, uint16_t reg, uint8_t *buf, size_t len)
     }
     return false;
 }
+bool hal_i2c_read_reg16_fast(uint8_t addr,uint16_t reg,uint8_t *buf,size_t len)
+{ assert(addr==0x55); return !fail_fast && hal_i2c_read_reg16(addr,reg,buf,len); }
 bool hal_i2c_write_reg16(uint8_t addr, uint16_t reg, uint8_t val)
 {
     assert(addr == 0x14); /* ST712x must never receive GT911 acknowledgement writes. */
@@ -110,6 +112,7 @@ int main(void)
     point(2, 720, 0); assert(tab5_touch_read_points(pts, 10) == 1 && pts[0].id == 9);
     fail_reg = 0x14; assert(tab5_touch_read_points(pts, 10) == 0); fail_reg = 0;
     assert(!tab5_touch_read_points(NULL, 10) && !tab5_touch_read_points(pts, 0));
+    fail_fast=true; assert(tab5_touch_read_points(pts,10)==1 && pts[0].id==9); fail_fast=false;
     /* GT911 packed eight-byte records, little endian, held snapshots and ACK. */
     reset(); gt_info(1280, 720); assert(tab5_touch_init());
     gt[0x814e] = 0x82;

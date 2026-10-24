@@ -78,9 +78,9 @@ static int probe(void)
 int programs_command(int argc,char **argv)
 {
     if(argc==1 || (argc==2&&!strcmp(argv[1],"status"))) {
-        kprintf("programs: %s; %s; %u recovered slot(s)\n",program_fs_mounted()?"mounted at /programs":"unmounted",
+        kprintf("data: %s; %s; %u recovered slot(s)\n",program_fs_mounted()?"mounted at /data":"unmounted",
                 program_fs_ready()?"ready":"not ready",program_fs_recovered());
-        kputs("Opt-in programs partition required; mount does not write flash; init writes only blank media.\n");return 0;
+        kputs("Opt-in data store partition required; mount does not write flash; init writes only blank media.\n");return 0;
     }
     int rc;
     if(argc==2&&!strcmp(argv[1],"unmount")) rc=program_fs_unmount();
@@ -91,9 +91,9 @@ int programs_command(int argc,char **argv)
             rc=program_fs_mount(&io);
             if(rc==ERR_NOENT&&!strcmp(argv[1],"init")) {rc=program_fs_init(&io);if(!rc) rc=program_fs_mount(&io);}
         }
-    } else {kputs("usage: programs [status|mount|init|unmount]\n");return 1;}
-    if(rc<0) kprintf("programs: %s failed (%d); no auto-format; close files and remount after a failed save\n",argv[1],rc);
-    else kprintf("programs: %s ok\n",argv[1]);
+    } else {kputs("usage: data [status|mount|init|unmount]\n");return 1;}
+    if(rc<0) kprintf("data: %s failed (%d); no auto-format; close files and remount after a failed save\n",argv[1],rc);
+    else kprintf("data: %s ok\n",argv[1]);
     return rc<0?1:0;
 }
 #endif

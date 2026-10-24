@@ -133,15 +133,23 @@ static void add_point(int rx, int ry, uint8_t id)
     tab5_touch_point_t *p = &s_points[s_count++];
     map_point(rx, ry, &p->x, &p->y); p->id = id;
 }
+/* M5GFX ST7123 uses the configurable fast I2C transaction path (up to
+ * 1MHz default). Restrict faster timing to ST runtime reports, with a slow
+ * retry on NACK; GT911 and every other system-bus device retain old timing. */
+static bool st_report(uint16_t reg,uint8_t *data,size_t len)
+{
+    return hal_i2c_read_reg16_fast(TAB5_ST7123_TOUCH_ADDR,reg,data,len) ||
+           hal_i2c_read_reg16(TAB5_ST7123_TOUCH_ADDR,reg,data,len);
+}
 static void read_st712x(void)
 {
     uint8_t status = 0, points[ST_MAX_TOUCHES * ST_POINT_BYTES];
     s_count = 0;
-    if (!hal_i2c_read_reg16(TAB5_ST7123_TOUCH_ADDR,ST_STATUS, &status, 1)) {
+    if (!st_report(ST_STATUS, &status, 1)) {
         s_errors++; return;
     }
     if (!(status & 0x08)) return;
-    if (!hal_i2c_read_reg16(TAB5_ST7123_TOUCH_ADDR,ST_POINTS, points,
+    if (!st_report(ST_POINTS, points,
                             (size_t)s_touch_slots * ST_POINT_BYTES)) {
         s_errors++; return;
     }

@@ -181,14 +181,16 @@ Integration / capture qualification:
 
 Optional persistent VFS extension (outside the interpreter):
 
-- fs/programs and user/basic/programs_tab5.c add explicit /programs mount/init
+- fs/programs and user/basic/programs_tab5.c add explicit /data mount/init
   commands for an opt-in 1 MiB partition at 0xC00000. No default-table edit,
   boot-time mount, actual board reset, flash or initialization is performed.
 - Per-file dual banks, generation/CRC checks, readback and last-word commit keep
   complete old/new versions. A failed/ambiguous transaction freezes writes until
   remount. Rejected buffered writes abort close without truncating the old file.
-- The VFS has permission checks, snapshot readers, one writer, 16 names of at most
-  23 ASCII bytes and 20416 bytes per file. Metadata is allocated only when needed,
+- The VFS has permission checks, snapshot readers, one writer, 16 file/custom-directory slots,
+  87-byte relative paths with 23-byte ASCII components and 20352 bytes per file.
+  /data/bas and /data/scm are implicit directories; mkdir adds other languages.
+  Legacy flat records remain readable; new writes require the new firmware. Metadata is allocated only when needed,
   preferring PSRAM; it does not consume a full static SRAM catalog at boot.
 - ROM access is bounded to a validated partition; provisioning refuses nonblank
   media. First provisioning interruption may require external recovery. CRC is

@@ -306,7 +306,7 @@ static int list_cb(const vfs_info_t *i, void *ctx)
 {
     list_t *l = ctx;
     size_t n = strlen(i->name);
-    if (i->type != FS_TYPE_FILE || n < 6 || strcmp(i->name + n - 5, ".wasm") != 0 || l->nn >= 16 || i->size > MAX_APP) return 0;
+    if (i->type != FS_TYPE_FILE || n < 6 || n > FS_NAME_MAX || strcmp(i->name + n - 5, ".wasm") != 0 || l->nn >= 16 || i->size > MAX_APP) return 0;
     strcpy(l->names[l->nn], i->name);
     l->fsize[l->nn++] = i->size;
     return 0;

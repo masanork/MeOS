@@ -35,7 +35,7 @@ int vfs_normalize(const char *path, char *out)
             if (len == 0) { out[0] = '/'; out[1] = 0; len = 1; }
             continue;
         }
-        if (len + n + 1 >= VFS_PATH_MAX) return ERR_NAMETOOLONG;
+        if (n > VFS_NAME_MAX || len + n + 1 >= VFS_PATH_MAX) return ERR_NAMETOOLONG;
         if (len > 1) out[len++] = '/';
         for (size_t i = 0; i < n; i++) out[len++] = c[i];
         out[len] = 0;

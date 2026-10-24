@@ -457,7 +457,7 @@ static int list_m5ex_cb(const vfs_info_t *i, void *ctx)
     while (i->name[n]) n++;
     if (i->type == FS_TYPE_FILE && n > 5 && i->name[n - 5] == '.' && i->name[n - 4] == 'm' && i->name[n - 3] == '5' &&
         i->name[n - 2] == 'e' && i->name[n - 1] == 'x') {
-        char base[FS_NAME_MAX + 1];                    /* name without ".m5ex" (kprintf has no %.*s) */
+        char base[VFS_NAME_MAX + 1];                    /* name without ".m5ex" (kprintf has no %.*s) */
         for (size_t k = 0; k < n - 5; k++) base[k] = i->name[k];
         base[n - 5] = 0;
         SH_PRINTF("  %-14s (%u bytes)\n", base, i->size);
@@ -1124,7 +1124,8 @@ static const command_t s_commands[] = {
     { "play", cmd_play, "play PATH       MP3 player (Q stops)" },
     { "audio", audio_command, "audio test      low-volume speaker test" },
 #endif
-    { "programs", programs_command, "programs [status|mount|init|unmount] opt-in source store" },
+    { "data", programs_command, "data [status|mount|init|unmount] persistent /data/bas, /data/scm" },
+    { "programs", programs_command, "alias for data" },
 
     { "write", cmd_write, "write [FILE.txt] prose editor / Japanese input" },
     { "scheme", cmd_scheme, "scheme [FILE.scm] workspace / editor / plot" },

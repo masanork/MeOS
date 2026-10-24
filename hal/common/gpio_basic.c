@@ -6,6 +6,7 @@
 #include "soc/gpio_sig_map.h"
 #include "esp_rom_gpio.h"
 #include "esp_rom_sys.h"
+#include "esp_cpu.h"
 
 void hal_gpio_config_output(int pin, int level)
 {
@@ -39,3 +40,10 @@ void hal_gpio_od_drive_low(int pin) { gpio_ll_output_enable(&GPIO, pin); }
 int  hal_gpio_read(int pin)         { return gpio_ll_get_level(&GPIO, pin); }
 void hal_gpio_write(int pin, int l) { gpio_ll_set_level(&GPIO, pin, l); }
 void hal_delay_us(uint32_t us)      { esp_rom_delay_us(us); }
+
+void hal_i2c_fast_tick(void)
+{
+    uint32_t cycles=esp_rom_get_cpu_ticks_per_us();
+    uint32_t began=esp_cpu_get_cycle_count();
+    while((uint32_t)(esp_cpu_get_cycle_count()-began)<cycles) __asm__ volatile("nop");
+}
