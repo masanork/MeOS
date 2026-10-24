@@ -48,7 +48,9 @@ static void check_file(const char *path,const char *content){
 }
 static int save(const fs_tx_ops_t *ops,void *ctx){
     const char *text=ctx;int fd=ops->open("/home/value",FS_O_WRITE|FS_O_CREATE|FS_O_TRUNC);
-    if(fd<0)return fd;int n=ops->write(fd,text,strlen(text));if(n!=(int)strlen(text))return ERR_IO;
+    if(fd<0)return fd;
+    int n=ops->write(fd,text,strlen(text));
+    if(n!=(int)strlen(text))return ERR_IO;
     return ops->close(fd);
 }
 static jmp_buf abandoned;
@@ -83,7 +85,7 @@ int main(void){
     assert(fs_write(pad,padding,sizeof padding)==(int)sizeof padding);
     assert(!fs_close(pad));assert(!fs_unmount());
     struct cow_bank io[2];for(int i=0;i<2;i++)io[i]=(struct cow_bank){{&banks[i],CAP,rd,wr,sync_io},reset};
-    struct cow_store store;assert(!cow_store_format(&store,io,42,SECTORS,base,0));
+    static struct cow_store store;assert(!cow_store_format(&store,io,42,SECTORS,base,0));
     assert(!cow_store_reserve(&store,8));
     blockdev_t bd;cow_blockdev_init(&bd,&store.view);
     fs_tx_backend_t backend={&store,cow_store_begin,cow_store_commit,recover};

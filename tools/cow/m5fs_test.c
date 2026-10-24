@@ -37,7 +37,8 @@ static int wr(void *ctx,uint32_t o,const void *p,size_t n){
     (void)ctx;assert(o+n<=CAP);size_t take=n;
     if(budget>=0&&(size_t)budget<take)take=(size_t)budget;
     memcpy(disk+o,p,take);if(budget>=0)budget-=(int)take;
-    if(take!=n)_exit(90);return 0;
+    if(take!=n)_exit(90);
+    return 0;
 }
 static int sync_io(void *ctx){(void)ctx;return 0;}
 static struct cow_io io={0,CAP,rd,wr,sync_io};

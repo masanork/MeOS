@@ -9,7 +9,10 @@ static unsigned position,opens,closes,short_read;
 static int stat_error,open_error,read_error,close_error;
 int vfs_stat(const char *p,vfs_info_t *s){(void)p;*s=(vfs_info_t){.type=FS_TYPE_FILE,.size=sizeof stored};return stat_error;}
 int vfs_open(const char *p,uint32_t flags){(void)p;assert(flags==VFS_O_READ);opens++;position=0;return open_error?open_error:4;}
-int vfs_read(int fd,void *p,size_t n){assert(fd==4);if(read_error)return read_error;if(short_read&&n>short_read)n=short_read;
+int vfs_read(int fd,void *p,size_t n){
+    assert(fd==4);
+    if(read_error)return read_error;
+    if(short_read&&n>short_read)n=short_read;
     if(n>sizeof stored-position)n=sizeof stored-position;
     memcpy(p,stored+position,n);position+=(unsigned)n;return (int)n;
 }
