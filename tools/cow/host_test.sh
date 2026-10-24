@@ -21,3 +21,6 @@ ${CC:-cc} -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -pthrea
     fs/cow/blockdev.c fs/m5fs/m5fs.c fs/m5fs/m5fs_test.c \
     drivers/ramdisk/ramdisk.c kernel/lib/crc32.c -o "$OUT/atomic_test"
 "$OUT/atomic_test"
+${CC:-cc} -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
+    -Ikernel/include tools/cow/mount_test.c fs/m5fs/m5fs.c kernel/lib/crc32.c -o "$OUT/mount_test"
+"$OUT/mount_test"

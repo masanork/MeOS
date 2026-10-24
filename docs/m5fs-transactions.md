@@ -73,3 +73,8 @@ real SD sync/FTL ordering, physical power cuts and collection latency remain
 unqualified. Applications must reopen handles invalidated by recovery. Whole-file
 atomic replacement through VFS and language/editor save paths is a later PR;
 individual open/truncate/write/close operations are not one atomic save.
+
+Review hardening: mount rejects wrapped and out-of-range extents using subtraction
+bounds, before later operations can use their sector ranges. A malformed-metadata
+regression checks six invalid ranges, an exact end-of-volume range and allocation
+cleanup on rejected mounts. The on-disk format is unchanged.

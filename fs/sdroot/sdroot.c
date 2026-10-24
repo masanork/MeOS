@@ -120,7 +120,8 @@ static int recover(void *ctx){
     return store.view.sealed?cow_store_compact(&store):0;
 }
 int sdroot_mount(void) {
-    if(active)return ERR_BUSY;
+    /* Refuse competing owners before prepare can reset/probe the SD bus. */
+    if(active||mounted||fat_is_mounted())return ERR_BUSY;
     int rc=prepare();if(rc)return rc;
     if(lfs_mount(&lfs,&cfg))return ERR_CORRUPT;
     mounted=true;

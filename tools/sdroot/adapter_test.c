@@ -40,8 +40,16 @@ int main(void){
     assert(sdroot_mount()<0);assert(!write_requests);
     fail_reads=true;assert(sdroot_mount()<0);fail_reads=false;assert(!write_requests);
     assert(sdroot_format(SECTORS-1)<0);assert(!write_requests);
-    fat_busy=true;assert(sdroot_format(SECTORS)<0);fat_busy=false;assert(!write_requests);
+    fat_busy=true;unsigned blocked_probes=probe_attempts;
+    assert(sdroot_mount()==ERR_BUSY);assert(probe_attempts==blocked_probes&&!write_requests);
+    assert(sdroot_format(SECTORS)<0);fat_busy=false;assert(!write_requests);
     assert(!sdroot_format(SECTORS));assert(write_requests>0);
+    /* Model the outer littlefs volume being open before M5FS is attached. */
+    assert(!lfs_mount(&lfs,&cfg));mounted=true;
+    unsigned outer_probes=probe_attempts,outer_writes=write_requests;
+    assert(sdroot_mount()==ERR_BUSY);
+    assert(probe_attempts==outer_probes&&write_requests==outer_writes);
+    close_files();
     probe_failures=2;unsigned attempts=probe_attempts,delays=probe_delays;
     assert(!sdroot_mount());assert(probe_attempts-attempts==3&&probe_delays-delays==2);
     unsigned before=write_requests,probed=probe_attempts;

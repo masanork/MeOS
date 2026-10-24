@@ -382,7 +382,8 @@ static int mount_locked(blockdev_t *bd, uint32_t base_lba)
         if (e->parent != M5FS_ROOT && (e->parent >= M5FS_DIR_ENTRIES || V.dir[e->parent].type != M5FS_T_DIR)) good = false;
         for (int x = 0; x < M5FS_EXTENTS; x++) {
             if (e->extent[x].count &&
-                (e->extent[x].start < sb.data_start || e->extent[x].start + e->extent[x].count > sb.total_blocks)) good = false;
+                (e->extent[x].start < sb.data_start || e->extent[x].start >= sb.total_blocks ||
+                 e->extent[x].count > sb.total_blocks - e->extent[x].start)) good = false;
         }
         if (e->type == M5FS_T_FILE && (uint64_t)e->size > (uint64_t)file_blocks(e) * M5FS_BLOCK_SIZE) good = false;
     }
