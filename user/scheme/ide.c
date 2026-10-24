@@ -333,7 +333,7 @@ static void save(ide *i)
         ok = false;
     if (ok) {
         i->buffer.modified = false;
-        message(i, "Saved to VFS (RAM disk files do not survive reboot)");
+        message(i, "Saved to VFS (persistence depends on mounted storage)");
     } else
         message(i, "Save failed: file may be partial; source retained");
 }

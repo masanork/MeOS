@@ -12,6 +12,7 @@
  * takes ~45 ms), like the SSH key store.
  */
 #include <m5os/wasm.h>
+#include "wasm_cache.h"
 #include <m5os/vfs.h>
 #include <m5os/fs.h>
 #include <m5os/errno.h>
@@ -213,10 +214,12 @@ static int put_file(const char *name, const uint8_t *data, uint32_t size)
 {
     char path[VFS_PATH_MAX];
     app_path(name, path);
+    if(wasm_cache_matches(path,data,size))return ERR_OK;
     int fd = vfs_open(path, VFS_O_WRITE | VFS_O_CREATE | VFS_O_TRUNC);
     if (fd < 0) return fd;
     int n = size ? vfs_write(fd, data, size) : 0;
-    vfs_close(fd);
+    int closed = vfs_close(fd);
+    if(closed<0)return closed;
     return n == (int)size ? ERR_OK : (n < 0 ? n : ERR_NOSPC);
 }
 
