@@ -156,3 +156,28 @@ recorded separately below. Physical power-cut qualification remains open. Existi
 editor save calls remain individual filesystem transactions; only explicit grouped
 saves provide whole-buffer atomic replacement. The outer littlefs namespace is
 not yet a general `/sd` asset mount; FAT cards remain the existing game/media path.
+
+### Combined verification (2026-10-24)
+
+Local host suites, clean-source simulator and unchanged-glyph checks passed. The
+combined default, WAD-free Doom and Quake images compile/link within the unchanged
+app partition; Quake's 1,048 stack-frame reports pass. The imported engine-specific
+play receipts remain separate from combined-image play qualification.
+
+Default firmware source `cd95cc15e6ee` was application-only flashed and verified on
+the Tab5. It booted the already formatted SD root, preserved `qualification-099`,
+restored `snake.wasm` and `shooter.wasm`, ran BASIC (`10 PRINT 2+3` -> `5`), saved
+`/home/integration.bas`, and loaded/ran that file after another reset. `sd probe`
+was rejected while the SD root was active. The initial combined-image attempt had
+fallen back to RAM after an early SD probe failure; a bounded three-attempt probe
+and failure diagnostics were added, with host coverage of success after two
+failures and complete exhaustion. Subsequent combined boots used SD successfully;
+the original transient's hardware cause is not established.
+
+The sanitized receipt is `tools/integration/device-results-20261024.json`. A settled
+combined sample reported 28,672 KiB PSRAM heap, 731 KiB used / 27,940 KiB free; this
+is a different workload from the isolated SD-root 7.94 MiB comparison. Raw serial
+logs remain private because background network logs may contain identity/link data.
+No card was reformatted during this combined qualification. Physical power removal,
+manual Scheme/writing-editor use, sound/camera input and optional-engine interactive
+coexistence on this exact image remain unqualified.
