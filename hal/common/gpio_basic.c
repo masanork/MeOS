@@ -1,12 +1,15 @@
 /* GPIO helpers built on hal/gpio_ll.h (inline register access) and two ROM
  * functions.  No IDF driver/gpio.c (it takes FreeRTOS spinlocks). */
 #include <m5os/hal_gpio.h>
+#include <m5os/board_config.h>
 #include "hal/gpio_ll.h"
 #include "soc/gpio_struct.h"
 #include "soc/gpio_sig_map.h"
 #include "esp_rom_gpio.h"
 #include "esp_rom_sys.h"
+#if M5OS_BOARD_TAB5
 #include "esp_cpu.h"
+#endif
 
 void hal_gpio_config_output(int pin, int level)
 {
@@ -43,7 +46,11 @@ void hal_delay_us(uint32_t us)      { esp_rom_delay_us(us); }
 
 void hal_i2c_fast_tick(void)
 {
+#if M5OS_BOARD_TAB5
     uint32_t cycles=esp_rom_get_cpu_ticks_per_us();
     uint32_t began=esp_cpu_get_cycle_count();
     while((uint32_t)(esp_cpu_get_cycle_count()-began)<cycles) __asm__ volatile("nop");
+#else
+    esp_rom_delay_us(1); /* the cycle-counter fast path is only used by Tab5 touch */
+#endif
 }
