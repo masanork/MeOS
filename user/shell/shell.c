@@ -37,6 +37,8 @@
 
 #include "../scheme/ide.h"
 #include "../write/write.h"
+
+#include <m5os/doom.h>
 #include "../../apps/calculator/expr.h"
 #include "sd.h"
 #include <m5os/audio.h>
@@ -1111,6 +1113,10 @@ static int cmd_history(int argc, char **argv)
 
 static const command_t s_commands[] = {
     { "basic", cmd_basic, "basic [FILE.bas] numeric BASIC" },
+
+#if M5OS_DOOM
+    { "doom", doom_command, "doom [WAD-path] [--demo SECONDS] [--silent]" },
+#endif
     { "help",    cmd_help,    "list commands" },
 #if M5OS_BOARD_TAB5
 #if M5OS_BOARD_TAB5

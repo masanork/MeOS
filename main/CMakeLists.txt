@@ -26,6 +26,10 @@ elseif("$ENV{M5OS_BOARD}" STREQUAL "tab5")
     list(FILTER M5OS_SRCS EXCLUDE REGEX "_cores3\\.c$|_cardputer\\.c$|/hal/esp32s3/|/drivers/(touch|button|keyboard)/|/drivers/sd/sd_spi\\.c$|/drivers/lcd/(ili9342|st7789|display)\\.c$|/drivers/camera/camera_stub\\.c$|/drivers/wifi/wifi_stub\\.c$|/m5ex/images\\.c$")
     set(M5OS_BOARD_DEF M5OS_BOARD_TAB5=1)
     set(M5OS_ARCH_REQUIRES riscv esp_psram esp_mm esp_lcd esp_driver_cam esp_driver_isp esp_driver_ledc usb)
+    if("$ENV{M5OS_DOOM}" STREQUAL "1")
+        list(APPEND M5OS_ARCH_REQUIRES doomengine)
+        list(APPEND M5OS_BOARD_DEF M5OS_DOOM=1 DOOMGENERIC_RESX=320 DOOMGENERIC_RESY=200)
+    endif()
 else()
     list(FILTER M5OS_SRCS EXCLUDE REGEX "_cardputer\\.c$|/hal/esp32p4/|${M5OS_NO_WASM_RE}|/third_party/fatfs/|/fs/fat/|/drivers/sd/sd_tab5\\.c$|/drivers/(keyboard|usbkbd|tab5kbd|ime)/|/drivers/lcd/(st7789|display_tab5)\\.c$|/drivers/camera/camera_tab5\\.c$|/drivers/wifi/wifi_tab5\\.c$|/m5ex/images_none\\.c$")
     set(M5OS_BOARD_DEF M5OS_BOARD_CORES3=1)
@@ -61,6 +65,62 @@ if(NOT M5OS_BUILD_ID)
 endif()
 target_compile_definitions(${COMPONENT_LIB} PRIVATE ${M5OS_BOARD_DEF} ${M5OS_DEFS}
     M5OS_BUILD_ID="${M5OS_BUILD_ID}")
+
+if("$ENV{M5OS_BOARD}" STREQUAL "tab5" AND "$ENV{M5OS_DOOM}" STREQUAL "1")
+    # The engine archive refers back to the private libc adapter in libmain.
+    # Retain that adapter even when libmain is scanned before libdoomengine.
+    target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,--undefined=doom_malloc")
+    set_source_files_properties(${M5OS_ROOT}/apps/doom/doom.c ${M5OS_ROOT}/apps/doom/libc.c ${M5OS_ROOT}/apps/doom/input.c ${M5OS_ROOT}/apps/doom/sound.c ${M5OS_ROOT}/apps/doom/mixer.c ${M5OS_ROOT}/apps/doom/video.c ${M5OS_ROOT}/drivers/lcd/display_tab5.c
+        ${M5OS_ROOT}/hal/common/i2c_bitbang.c ${M5OS_ROOT}/hal/common/gpio_basic.c
+        PROPERTIES COMPILE_OPTIONS "-O2;-fno-builtin")
+    set_source_files_properties(${M5OS_ROOT}/drivers/lcd/display_tab5.c
+        PROPERTIES COMPILE_OPTIONS "-O3;-funroll-loops;-fno-builtin")
+    target_include_directories(${COMPONENT_LIB} PRIVATE ${M5OS_ROOT}/third_party/doomgeneric)
+    option(M5OS_DOOM_EMBED_WAD "Embed local game data (never for public candidates)" ON)
+    set(DOOM_WAD_SIZE 0)
+    set(DOOM_WAD_EMBEDDED false)
+    if(M5OS_DOOM_EMBED_WAD)
+        set(DOOM_WAD "$ENV{M5OS_DOOM_WAD}")
+        if(NOT DOOM_WAD)
+            set(DOOM_WAD "${M5OS_ROOT}/tools/doom/cache/doom1.wad")
+        endif()
+        if(DOOM_WAD AND EXISTS "${DOOM_WAD}")
+            set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                "${DOOM_WAD}" "${M5OS_ROOT}/tools/doom/pack_wad.py")
+            execute_process(COMMAND ${PYTHON} ${M5OS_ROOT}/tools/doom/pack_wad.py
+                "${DOOM_WAD}" "${CMAKE_BINARY_DIR}/doom_wad.z" RESULT_VARIABLE DOOM_PACK_RESULT)
+            if(NOT DOOM_PACK_RESULT EQUAL 0)
+                message(FATAL_ERROR "Doom WAD validation/compression failed")
+            endif()
+            file(SIZE "${DOOM_WAD}" DOOM_WAD_SIZE)
+            target_compile_definitions(${COMPONENT_LIB} PRIVATE DOOM_EMBED_RAW_SIZE=${DOOM_WAD_SIZE})
+            target_add_binary_data(${COMPONENT_LIB} "${CMAKE_BINARY_DIR}/doom_wad.z" BINARY RENAME_TO doom_wad_z)
+        endif()
+    else()
+        message(STATUS "Doom: game-data embedding explicitly disabled")
+    endif()
+    if(DOOM_WAD_SIZE GREATER 0)
+        set(DOOM_WAD_EMBEDDED true)
+    endif()
+    if(M5OS_DOOM_EMBED_WAD)
+        set(DOOM_EMBED_ALLOWED true)
+    else()
+        set(DOOM_EMBED_ALLOWED false)
+    endif()
+    execute_process(COMMAND git -C "${M5OS_ROOT}" rev-parse HEAD
+        OUTPUT_VARIABLE DOOM_SOURCE_REV OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET RESULT_VARIABLE DOOM_REV_RESULT)
+    if(NOT DOOM_REV_RESULT EQUAL 0)
+        set(DOOM_SOURCE_REV "unknown")
+        if(EXISTS "${M5OS_ROOT}/SOURCE_REVISION")
+            file(READ "${M5OS_ROOT}/SOURCE_REVISION" DOOM_SOURCE_REV)
+            string(STRIP "${DOOM_SOURCE_REV}" DOOM_SOURCE_REV)
+        endif()
+    endif()
+    configure_file("${M5OS_ROOT}/tools/doom/build-info.json.in"
+        "${CMAKE_BINARY_DIR}/doom-build.json" @ONLY)
+
+endif()
 
 # wasm3 (third_party/wasm3, MIT): the interpreter behind .wasm apps.  Vendored as is except for the allocator hook in
 # m3_core.c; its own warnings are not ours to fix.  Optimised for speed: it is the hot loop of every WebAssembly app.

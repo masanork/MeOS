@@ -21,6 +21,7 @@
 #include <m5os/board.h>
 #include <m5os/hal_gpio.h>
 #include <m5os/hal_mem.h>
+#include <m5os/hal_time.h>
 #include <m5os/kprintf.h>
 #include <m5os/tab5.h>
 #include "font8x8.h"
@@ -478,13 +479,23 @@ void display_draw_bitmap_resized(int x,int y,int w,int h,const uint16_t *px,int 
         fb_flush_rows(DISPLAY_WIDTH-1-last,DISPLAY_WIDTH-1-first);
 }
 
-void display_draw_indexed_bitmap_resized(int x,int y,int w,int h,const uint8_t *indices,
-    const uint16_t palette[256],int dw,int dh)
+static uint32_t s_copy_us,s_flush_us;
+void display_last_present_times(uint32_t *copy,uint32_t *flush) { *copy=s_copy_us; *flush=s_flush_us; }
+void display_draw_indexed_bitmap_prefix(int x,int y,int w,int h,const uint8_t *indices,
+    const uint16_t palette[256],int dw,int dh,int clip_rows)
 {
     if (!s_fb) return;
     int first,last;
-    if (tab5_indexed_resize(s_draw,x,y,w,h,indices,palette,dw,dh,&first,&last))
+    uint64_t start=hal_time_now_us();
+    if (tab5_indexed_resize_rows(s_draw,x,y,w,h,indices,palette,dw,dh,&first,&last,clip_rows)) {
+        uint64_t copied=hal_time_now_us();
         fb_flush_rows(DISPLAY_WIDTH-1-last,DISPLAY_WIDTH-1-first);
+        s_copy_us=(uint32_t)(copied-start); s_flush_us=(uint32_t)(hal_time_now_us()-copied);
+    }
 }
 
 bool display_is_ready(void) { return s_fb && s_frames; }
+
+void display_draw_indexed_bitmap_resized(int x,int y,int w,int h,const uint8_t *indices,
+    const uint16_t palette[256],int dw,int dh)
+{ display_draw_indexed_bitmap_prefix(x,y,w,h,indices,palette,dw,dh,dh); }

@@ -415,3 +415,5 @@ See [user/basic/README.md](user/basic/README.md) for this branch's application w
 See [user/scheme/README.md](user/scheme/README.md) for this branch's application work, validation and limitations.
 
 See [tools/sim/README.md](tools/sim/README.md) for this branch's application work, validation and limitations.
+
+See [tools/doom/RELEASING.md](tools/doom/RELEASING.md) for this branch's application work, validation and limitations.

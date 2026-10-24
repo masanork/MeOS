@@ -52,3 +52,6 @@ void display_release_claim(const void *owner);
 
 
 bool display_is_ready(void); /* Tab5 framebuffer allocated and scanout active */
+
+void display_last_present_times(uint32_t *copy_us,uint32_t *flush_us);
+void display_draw_indexed_bitmap_prefix(int x,int y,int source_w,int source_h,const uint8_t *indices,const uint16_t palette[256],int dest_w,int dest_h,int clip_rows);
