@@ -27,7 +27,9 @@ WASM apps from Flash; byte-identical existing files are read/compared and reused
 rather than truncated at every boot. Read/close errors cannot establish equality,
 and replacement propagates close errors. App-save atomicity is a later change.
 
-An active littlefs root excludes `sd probe`, FAT mount/unmount and SD benchmarks;
+Mount requests also reject mounted FAT or an already-open outer littlefs volume
+before probing/resetting the SD bus. This protects direct API callers as well as
+the shell paths. An active littlefs root excludes `sd probe`, FAT mount/unmount and SD benchmarks;
 `sd status` remains available. Explicit SD-root formatting refuses active/mounted
 roots and mounted FAT media. Mount selection and these ownership guards are kept
 in the same PR to avoid exposing the live root through another filesystem path.
