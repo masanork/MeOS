@@ -1,4 +1,5 @@
 #include <m5os/app_cleanup.h>
+#include <m5os/errno.h>
 #if M5OS_DOOM
 #include <m5os/doom.h>
 static int stop_doom(uint32_t id) { doom_app_cleanup(id); return ERR_OK; }
