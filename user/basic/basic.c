@@ -124,7 +124,7 @@ int basic_session_submit(basic_session *s, const char *line)
                 "Math: SIN COS TAN SQR/SQRT LOG/LN LOG10 EXP ABS INT FIX, PI, ^. RAD default; DEG/RAD change angle mode.\n"
                 "DIM A(9): indices 0..9, 1024 total elements. INPUT [\"prompt\";] A or A(index).\n"
                 "FOR X=start TO end STEP delta: floating/descending loops; default is integer +1.\n"
-                "128 lines, 127 input bytes, 100000 executed lines per RUN. SAVE uses VFS; /home is currently volatile, /sd read-only. BYE discards unsaved source.\n");
+                "128 lines, 127 input bytes, 100000 executed lines per RUN. SAVE uses VFS; storage reports whether files survive reboot. BYE discards unsaved source.\n");
         return 0;
     }
     if (command(line, "NEW")) { s->source.count = 0; ubasic_init("", s->output, s->opaque, 1); return 0; }
