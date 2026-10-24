@@ -29,6 +29,7 @@
 #include <m5os/wall_time.h>
 #include <m5os/hal_i2c.h>
 #include "hardware.h"
+#include "../../apps/calculator/expr.h"
 #include "sd.h"
 #include <m5os/audio.h>
 #include <m5os/player.h>
@@ -152,6 +153,37 @@ static int cmd_play(int argc,char **argv) {
 }
 #endif
 static int cmd_crash(int argc,char **argv) { (void)argc; (void)argv; crash_print_previous(); return 0; }
+
+#if M5OS_BOARD_TAB5
+static calc_context s_calc = { .degrees = 1 };
+static int cmd_calc(int argc, char **argv)
+{
+    if (argc == 2 && (sh_streq(argv[1], "deg") || sh_streq(argv[1], "rad"))) {
+        s_calc.degrees = sh_streq(argv[1], "deg");
+        SH_PRINTF("calc: %s\n", s_calc.degrees ? "DEG" : "RAD"); return 0;
+    }
+    char text[LINE_MAX], output[24];
+    size_t len = 0, error_pos = 0;
+    if (argc < 2) { sh_puts("usage: calc EXPR | deg | rad   (sin cos tan sqrt log ln exp abs; pi e Ans)\n"); return 1; }
+    for (int i = 1; i < argc; i++) {
+        if (i > 1) {
+            if (len + 1 >= sizeof text) { sh_puts("calc: expression too long\n"); return 1; }
+            text[len++] = ' ';
+        }
+        for (const char *p = argv[i]; *p; p++) {
+            if (len + 1 >= sizeof text) { sh_puts("calc: expression too long\n"); return 1; }
+            text[len++] = *p;
+        }
+    }
+    text[len] = 0;
+    double value;
+    const char *error = calc_eval_context(text, &s_calc, &value, &error_pos);
+    if (error) { SH_PRINTF("calc: %s (column %u)\n", error, (unsigned)error_pos + 1); return 1; }
+    if (!calc_format(value, output, sizeof output)) { sh_puts("calc: cannot format result\n"); return 1; }
+    SH_PRINTF("%s\n", output);
+    return 0;
+}
+#endif
 
 static int cmd_ps(int argc, char **argv)
 {
@@ -953,6 +985,7 @@ static const command_t s_commands[] = {
     { "play", cmd_play, "play PATH       MP3 player (Q stops)" },
     { "audio", audio_command, "audio test      low-volume speaker test" },
 #endif
+    { "calc", cmd_calc, "calc EXPR | deg | rad  numeric expressions" },
     { "devices", cmd_devices, "board devices: detected, untested, or unsupported (read-only)" },
     { "power",   cmd_power,   "battery voltage/current, estimated level and charger state (read-only)" },
     { "sd", shell_sd, "sd [status|probe|mount [ro|rw]|unmount] microSD" },

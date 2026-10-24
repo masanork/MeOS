@@ -2,7 +2,10 @@
 # one.  The real structure is the directory tree at the repository root.
 set(M5OS_ROOT ${CMAKE_CURRENT_LIST_DIR}/..)
 
-file(GLOB_RECURSE M5OS_SRCS
+if(NOT CMAKE_SCRIPT_MODE_FILE)
+    set(M5OS_GLOB_OPTIONS CONFIGURE_DEPENDS)
+endif()
+file(GLOB_RECURSE M5OS_SRCS ${M5OS_GLOB_OPTIONS}
     ${M5OS_ROOT}/kernel/*.c   ${M5OS_ROOT}/kernel/*.S
     ${M5OS_ROOT}/drivers/*.c  ${M5OS_ROOT}/hal/*.c  ${M5OS_ROOT}/hal/*.S
     ${M5OS_ROOT}/fs/*.c       ${M5OS_ROOT}/user/*.c ${M5OS_ROOT}/apps/*.c
