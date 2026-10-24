@@ -1,3 +1,4 @@
+#include <sys/types.h>
 #pragma once
 /* Included only in the Doom engine's translation units. Never redirects MeOS libc globally. */
 #include <stdio.h>
