@@ -69,3 +69,8 @@ int main(void) {
 
 void ime_clear_anchor(void) {}
 void ime_set_anchor(int x,int y) { (void)x; (void)y; }
+
+int vfs_replace_file(const char *path,const void *data,size_t len,size_t *written)
+{
+    return vfs_write_file(path,data,len,written);
+}

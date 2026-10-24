@@ -107,3 +107,8 @@ int main(void) {
     assert(vfs_stat("/data/lua",&info)==ERR_NOENT);
     assert(!program_fs_unmount()&&!allocations);free(s);puts("program VFS / BASIC save-remount-load / failure tests PASS");
 }
+
+int vfs_replace_file(const char *path,const void *data,size_t len,size_t *written)
+{
+    return vfs_write_file(path,data,len,written);
+}

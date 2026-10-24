@@ -17,3 +17,8 @@ Run `sh tools/basic/host_test.sh`. Device evidence from the experimental combine
 checkout does not qualify this integrated revision. Full device regression and flash
 write/cache/power-loss acceptance remain required. MeOS licensing is unchanged;
 uBASIC provenance and notices are in `third_party/ubasic`.
+
+SAVE and EDIT use whole-buffer VFS replacement. Transactional M5FS preserves a
+complete old/new file across uncertain commits; raw RAM/FAT and other legacy
+mounts keep their existing streaming semantics. Errors retain the source buffer
+and never retry through a different save method. See `docs/atomic-save.md`.

@@ -118,12 +118,15 @@ not collect during one evaluation; large plots/functions can exhaust the heap.
 
 ## Files and verification
 
-Saving explicitly overwrites the selected VFS file, loops over short writes and
-checks close errors. There is no VFS rename transaction, so an I/O error can leave
-a partial file; the in-memory source and modified state are retained. Loading
+Saving uses whole-buffer VFS replacement. Transactional M5FS commits truncate,
+write and close together; uncertain commits recover the old or complete new file.
+A reported failure does not imply rollback. Legacy backends such as writable FAT
+retain streaming/partial-file behavior. Backend errors are final and never trigger
+a streaming retry; in-memory source and modified state are retained. Loading
 stages and validates a complete regular UTF-8 file before replacing the buffer.
-On the present Tab5 configuration `/home` is RAM-backed and `/sd` is read-only:
-saving to `/home` does not establish reboot persistence.
+Persistence depends on the mounted storage; use `storage` to distinguish a RAM
+root from an SD root. The host SDL adapter uses the streaming helper and does not
+qualify transactional storage or reboot persistence.
 
 Run `sh tools/scheme/host_test.sh` for ASan/UBSan interpreter and scripted IDE
 integration tests. These exercise lexical closures, repeated GC, Japanese text,

@@ -49,8 +49,9 @@ immediate execution by wrapping a statement as source line 1. Direct GOTO/GOSUB
 does not jump into the stored program; use RUN to execute stored lines.
 Live program storage is RAM only, max 128 lines and 127 bytes per input line.
 The session now dispatches LOAD/SAVE/EDIT to a VFS adapter outside the interpreter.
-LOAD stages source before committing; SAVE overwrites and is not atomic. BYE
-discards the live program. File persistence depends on the mounted filesystem. MeOS allocates the session from PSRAM first, with normal heap
+LOAD stages source before committing. SAVE uses whole-buffer VFS replacement:
+transactional M5FS recovers complete old/new contents; legacy mounts retain
+streaming semantics and may leave partial files. BYE discards the live program. File persistence depends on the mounted filesystem. MeOS allocates the session from PSRAM first, with normal heap
 fallback and an explicit out-of-memory error.
 
 Validation: sh tools/basic/host_test.sh (ASan/UBSan), including malformed-input
