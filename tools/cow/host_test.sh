@@ -12,3 +12,15 @@ ${CC:-cc} -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
 ${CC:-cc} -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
     -Ikernel/include tools/cow/blockdev_test.c fs/cow/cow.c fs/cow/blockdev.c -o "$OUT/blockdev_test"
 "$OUT/blockdev_test"
+${CC:-cc} -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
+    -Ikernel/include tools/cow/m5fs_test.c fs/cow/cow.c fs/cow/blockdev.c \
+    fs/m5fs/m5fs.c kernel/lib/crc32.c -o "$OUT/m5fs_test"
+"$OUT/m5fs_test"
+${CC:-cc} -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -pthread \
+    -Ikernel/include tools/cow/atomic_test.c fs/cow/cow.c fs/cow/store.c \
+    fs/cow/blockdev.c fs/m5fs/m5fs.c fs/m5fs/m5fs_test.c \
+    drivers/ramdisk/ramdisk.c kernel/lib/crc32.c -o "$OUT/atomic_test"
+"$OUT/atomic_test"
+${CC:-cc} -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
+    -Ikernel/include tools/cow/mount_test.c fs/m5fs/m5fs.c kernel/lib/crc32.c -o "$OUT/mount_test"
+"$OUT/mount_test"
