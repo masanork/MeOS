@@ -37,7 +37,7 @@ int vfs_stat(const char *p,vfs_info_t *out) {return mounted_fs?mounted_fs->stat(
 static void output(const char *p,size_t n,void *ctx) {(void)p;(void)n;(void)ctx;}
 static int listed(const vfs_info_t *info,void *ctx) {
     unsigned *n=ctx;assert(!depth);(*n)++;assert(info->type==FS_TYPE_FILE);
-    vfs_info_t stat;char path[64];snprintf(path,sizeof path,"/programs/%s",info->name);assert(!vfs_stat(path,&stat));
+    vfs_info_t stat;char path[VFS_PATH_MAX];snprintf(path,sizeof path,"/programs/%s",info->name);assert(!vfs_stat(path,&stat));
     assert(program_fs_unmount()==ERR_BUSY);return 0;
 }
 int main(void) {
