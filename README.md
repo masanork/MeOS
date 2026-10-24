@@ -399,3 +399,11 @@ physical write reliability or power-loss recovery.
 `sh tools/sd/host_test.sh` covers read-only regression, CMD24/status/timeouts,
 FAT12/16/32 create/append/truncate/delete/remount, permissions, open-file locking,
 disk full, and failed/torn writes. Fixtures are generated memory-backed images.
+
+### microSD throughput benchmark
+
+`sd bench` measures 128 x 1KiB VFAT files and an 8MiB sequential file.
+`sd bench FILES SMALL_BYTES LARGE_MiB` selects a workload. Data is read back and
+verified, then test files are removed. Only a newly created MEOSBENCH directory
+is used. See [tools/sd/BENCHMARK.md](tools/sd/BENCHMARK.md) for limits and device
+log capture. These are end-to-end, write-through VFS measurements on SPI.
