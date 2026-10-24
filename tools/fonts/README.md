@@ -101,3 +101,9 @@ can vary across FreeType versions). Keep `licenses/BIZ-UD-OFL.txt` with distribu
 The generated coverage is about 2.38 MB plus the glyph index; no other typeface is
 merged or used for fallback. Unknown characters display a box. Full JIS combining
 sequence and IVS shaping is not implemented by this first simple renderer.
+
+The encoder searches up to 32 recent matches for each three-byte prefix, keeping
+exactly the existing runtime format. This saves 135,138 bytes versus the initial
+atlas. `python3 tools/fonts/check_bizud.py` independently decodes all 11,741 glyphs
+and checks a digest of their metrics and pixels against the original atlas. No
+characters, coverage levels, sizes or fallback behavior changed.

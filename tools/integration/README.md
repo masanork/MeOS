@@ -59,11 +59,28 @@ read/write/remount suites. The older original checkout is preserved for comparis
 `pr/*` feature. No default branch setting, upstream ref or original working file
 is changed by this integration.
 
+## Combined image size and Linux CI fixes
+
+The initial combined Doom image exceeded the unchanged 0x3e0000 app slot.
+Doom builds now select ESP-IDF size optimization; the engine/adapter/MP3 retain
+-O2 and WASM retains -O3. BIZ UD's existing glyph codec now searches more candidate
+matches, saving 135,138 bytes with all 11,741 decoded glyphs and metrics unchanged.
+The fixed partition map and font coverage are preserved. For a pre-existing Doom
+sdkconfig, explicitly select `CONFIG_COMPILER_OPTIMIZATION_SIZE=y` and disable the
+DEBUG choice, or regenerate the ignored config from defaults before building.
+The opt-in generated defaults do not silently replace an existing sdkconfig.
+
+The BASIC storage fault test keeps its GCC warning fix. Dictionary candidate bounds
+use standard C `memchr` instead of a POSIX-only `strnlen` declaration, and build
+entrypoints re-execute Bash when invoked by a POSIX shell such as Linux dash, so
+ESP-IDF can identify its installation. These issues were found in Linux CI.
+
 ## Verification
 
 Run from the integration checkout:
 
 ```sh
+python3 tools/fonts/check_bizud.py
 sh tools/host_checks.sh
 sh tools/common/host_test.sh
 sh tools/basic/host_test.sh

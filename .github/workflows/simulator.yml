@@ -28,5 +28,7 @@ jobs:
       - name: Install SDL2 (macOS)
         if: runner.os == 'macOS'
         run: brew install sdl2
+      - name: Verify unchanged font metrics and pixels
+        run: python3 tools/fonts/check_bizud.py
       - name: Build and test a fresh source-only clone
         run: sh tools/sim/check-clean.sh

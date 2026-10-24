@@ -20,13 +20,20 @@ for cp in sorted(TTFont(p).getBestCmap()):
   flagpos=len(encoded);encoded.append(0);flags=0
   for bit in range(8):
    if pos>=len(packed):break
-   key=tuple(packed[pos:pos+3]);prev=seen.get(key,-1);length=0
-   if len(key)==3 and prev>=0 and pos-prev<=4095:
-    while length<18 and pos+length<len(packed) and packed[prev+length]==packed[pos+length]:length+=1
+   key=tuple(packed[pos:pos+3]);prev=-1;length=0
+   if len(key)==3:
+    # A repeated prefix can have different suffixes. Choose the longest recent
+    # match rather than only the last occurrence; the decoder format is unchanged.
+    for candidate in reversed(seen.get(key, [])[-32:]):
+     if pos-candidate>4095:break
+     match=0
+     while match<18 and pos+match<len(packed) and packed[candidate+match]==packed[pos+match]:match+=1
+     if match>length:prev=candidate;length=match
+     if length==18:break
    if length>=3:
     flags|=1<<bit;token=((pos-prev)<<4)|(length-3);encoded.extend([token>>8,token&255]);step=length
    else:encoded.append(packed[pos]);step=1
-   for k in range(pos,pos+step):seen[tuple(packed[k:k+3])]=k
+   for k in range(pos,pos+step):seen.setdefault(tuple(packed[k:k+3]), []).append(k)
    pos+=step
   encoded[flagpos]=flags
  flag=32768
