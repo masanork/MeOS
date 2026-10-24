@@ -16,7 +16,12 @@ import zipfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 LOCK = json.loads((ROOT / 'tools/doom/dependencies.json').read_text())
-FLASH_FILES = {0x2000: 'bootloader/bootloader.bin', 0x8000: 'partition_table/partition-table.bin', 0x10000: 'm5os.bin'}
+FLASH_FILES = {
+    0x2000: 'bootloader/bootloader.bin',
+    0x8000: 'partition_table/partition-table.bin',
+    0x10000: 'm5os.bin',
+    0x400000: 'ota_data_initial.bin',
+}
 
 
 def require(condition, message):
@@ -30,6 +35,20 @@ def run(*args, cwd=None):
 
 def digest(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def verify_flash_file(offset, name, data):
+    if offset in (0x2000, 0x10000):
+        require(len(data) >= 24 and data[0] == 0xe9 and struct.unpack_from('<H', data, 12)[0] == 18,
+                'not an ESP32-P4 image: ' + name)
+    elif offset == 0x8000:
+        require(data[:2] == b'\xaa\x50', 'not an ESP partition table')
+    elif offset == 0x400000:
+        require(len(data) == 0x2000 and data == b'\xff' * 0x2000,
+                'otadata initializer must be exactly 8 KiB of erased bytes')
+    else:
+        require(False, 'unexpected flash offset')
+    require(offset != 0x10000 or len(data) <= 0x3e0000, 'app exceeds the partition')
 
 
 def elf_symbols(data):
@@ -92,11 +111,7 @@ def verify(build):
         path = build / name
         require(path.is_file() and not path.is_symlink(), 'missing or symlinked flash file: ' + name)
         data = path.read_bytes()
-        if offset != 0x8000:
-            require(len(data) >= 24 and data[0] == 0xe9 and struct.unpack_from('<H', data, 12)[0] == 18, 'not an ESP32-P4 image: ' + name)
-        else:
-            require(data[:2] == b'\xaa\x50', 'not an ESP partition table')
-        require(offset != 0x10000 or len(data) <= 0x3e0000, 'app exceeds the partition')
+        verify_flash_file(offset, name, data)
         hashes[name] = {'sha256': digest(path), 'bytes': len(data)}
     project = json.loads((build / 'project_description.json').read_text())
     require(project['target'] == 'esp32p4' and pathlib.Path(project['project_path']).resolve() == ROOT, 'wrong project')
