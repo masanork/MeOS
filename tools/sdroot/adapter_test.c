@@ -8,11 +8,12 @@
 #include <m5os/sdcard.h>
 #define SECTORS 65536u
 static unsigned char *card;
-static unsigned probe_failures,probe_attempts,probe_delays;
+static unsigned probe_failures,probe_attempts,probe_delays,write_requests;
+static bool fail_reads;
 void hal_delay_us(uint32_t us){assert(us==100000);probe_delays++;}
 static blockdev_t device;
-static int read_sd(blockdev_t *d,uint32_t l,uint32_t n,void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);memcpy(p,card+(size_t)l*512,n*512);return 0;}
-static int write_sd(blockdev_t *d,uint32_t l,uint32_t n,const void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);memcpy(card+(size_t)l*512,p,n*512);return 0;}
+static int read_sd(blockdev_t *d,uint32_t l,uint32_t n,void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);if(fail_reads)return -1;memcpy(p,card+(size_t)l*512,n*512);return 0;}
+static int write_sd(blockdev_t *d,uint32_t l,uint32_t n,const void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);write_requests++;memcpy(card+(size_t)l*512,p,n*512);return 0;}
 static bool fat_busy;
 bool fat_is_mounted(void){return fat_busy;}
 blockdev_t *sdcard_probe(void){probe_attempts++;if(probe_failures){probe_failures--;return NULL;}return &device;}
@@ -36,11 +37,16 @@ int main(void){
     card=malloc((size_t)SECTORS*512);assert(card);memset(card,0xff,(size_t)SECTORS*512);
     device=(blockdev_t){.name="test-sd",.block_size=512,.block_count=SECTORS,.read=read_sd,.write=write_sd};
     probe_failures=3;assert(sdroot_mount()<0);assert(probe_attempts==3&&probe_delays==2);
-    assert(sdroot_mount()<0);assert(sdroot_format(SECTORS-1)<0);
-    fat_busy=true;assert(sdroot_format(SECTORS)<0);fat_busy=false;
-    assert(!sdroot_format(SECTORS));
+    assert(sdroot_mount()<0);assert(!write_requests);
+    fail_reads=true;assert(sdroot_mount()<0);fail_reads=false;assert(!write_requests);
+    assert(sdroot_format(SECTORS-1)<0);assert(!write_requests);
+    fat_busy=true;assert(sdroot_format(SECTORS)<0);fat_busy=false;assert(!write_requests);
+    assert(!sdroot_format(SECTORS));assert(write_requests>0);
     probe_failures=2;unsigned attempts=probe_attempts,delays=probe_delays;
     assert(!sdroot_mount());assert(probe_attempts-attempts==3&&probe_delays-delays==2);
+    unsigned before=write_requests,probed=probe_attempts;
+    assert(sdroot_format(SECTORS)<0);assert(sdroot_mount()<0);
+    assert(write_requests==before&&probe_attempts==probed);
     assert(!sdroot_save_probe("first-boot"));verify("first-boot");
     assert(!fs_unmount());close_files();
     assert(!sdroot_mount());verify("first-boot");
