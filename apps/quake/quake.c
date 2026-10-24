@@ -1,5 +1,6 @@
 #include <m5os/board_config.h>
 #include <m5os/quake.h>
+#include <m5os/keyboard_raw.h>
 #if M5OS_QUAKE
 #include <m5os/app.h>
 #include <m5os/task.h>
@@ -13,6 +14,8 @@
 #include "../../drivers/lcd/fbcon.h"
 #include "../../drivers/tab5kbd/tab5touch.h"
 #include "runtime.h"
+#include "input.h"
+#include "layout.h"
 #define QUAKE_COMPAT_DECLARATIONS_ONLY
 #include "../../components/quakeengine/compat.h"
 #include "../../third_party/quakegeneric/source/quakedef.h"
@@ -27,10 +30,9 @@ static bool pending,screen;
 static uint16_t palette[256];
 static unsigned frames;
 static uint64_t began,profile_at;
-static unsigned profile_frames;
-static bool held[256],wanted[256],sampled,capture_next;
-static int keyboard;
-static uint64_t key_until;
+static unsigned profile_frames,native_events;
+static bool native_ready;
+static bool sampled,capture_next;
 static void reset_engine(void) {
     memset(_quake_bss_start,0,(size_t)(_quake_bss_end-_quake_bss_start));
     memset(_quake_common_start,0,(size_t)(_quake_common_end-_quake_common_start));
@@ -40,6 +42,7 @@ void quake_exit(int code) { longjmp(escape,code?2:1); }
 int quake_app_cleanup(uint32_t id) {
     if(id!=quake_owner||!id)return 0;
     quake_io_close_all();
+    keyboard_raw_release(&quake_owner);
     if(screen) { display_set_target(NULL);ime_bypass(false);kconsole_set_focus(0);fbcon_pause(false); }
     display_release_claim(&quake_owner);screen=false;
     if(initial)reset_engine();
@@ -48,6 +51,19 @@ int quake_app_cleanup(uint32_t id) {
 void QG_Init(void) {}
 void QG_Quit(void) { quake_exit(0); }
 void QG_SetPalette(unsigned char p[768]) { for(int i=0;i<256;i++)palette[i]=RGB565(p[i*3],p[i*3+1],p[i*3+2]); }
+static uint32_t paint_mask;
+static void paint_buttons(uint32_t mask,bool all){
+    for(unsigned i=0;i<QUAKE_BUTTON_COUNT;i++){
+        if(!all&& !((mask^paint_mask)&(1u<<i)))continue;
+        const quake_button *b=&quake_buttons[i];uint16_t color=i==QB_FIRE?RGB565(140,60,25):i==QB_JUMP?RGB565(30,90,60):RGB565(35,55,75);
+        if(i==QB_EXIT)color=RGB565(100,35,35);
+        if(mask&(1u<<i))color=RGB565(90,135,170);
+        display_fill_rect(b->x,b->y,b->w,b->h,color);display_draw_rect(b->x,b->y,b->w,b->h,RGB565(90,115,135));
+        int scale=strlen(b->label)==1?3:2;int tx=b->x+(b->w-(int)strlen(b->label)*8*scale)/2;
+        display_draw_text(tx,b->y+(b->h-8*scale)/2,b->label,COLOR_WHITE,color,scale);
+    }
+    paint_mask=mask;
+}
 static void capture(const uint8_t *pixels) {
     static const char digits[]="0123456789abcdef";
     char line[641];kprintf("QSHOT 320 200 %u\n",frames);
@@ -70,6 +86,7 @@ void QG_DrawFrame(void *pixels) {
         unsigned fps10=profile_at&&now>profile_at?(unsigned)((uint64_t)count*10000000/(now-profile_at)):0;
         kprintf("quake: %u frames, %u.%u presentations/s\n",frames,fps10/10,fps10%10);
         profile_at=now;profile_frames=frames;
+        kprintf("quake keyboard: %s, %u native transitions\n",native_ready?"ready":"waiting",native_events);
         task_stack_info_t stack;
         if(!task_stack_inspect(task_current()->id,&stack))
             kprintf("quake stack: %u/%u bytes, guard %s\n",(unsigned)stack.used,(unsigned)stack.size,stack.guard_ok?"OK":"BAD");
@@ -77,28 +94,22 @@ void QG_DrawFrame(void *pixels) {
     task_yield();
 }
 static void sample_inputs(void) {
-    memset(wanted,0,sizeof wanted);
-    int ch;while((ch=kconsole_getc())>=0) {
-        if(ch==3||ch=='q')quake_exit(0);
-        if(ch=='p'){capture_next=true;continue;}
-        keyboard=ch=='w'?K_UPARROW:ch=='s'?K_DOWNARROW:ch=='a'?K_LEFTARROW:ch=='d'?K_RIGHTARROW:ch=='f'?(key_dest==key_menu?K_ENTER:K_CTRL):ch;
-        key_until=hal_time_now_us()+180000;
-    }
-    if(hal_time_now_us()<key_until && keyboard>0&&keyboard<256)wanted[keyboard]=true;
-    tab5_touch_point_t points[10];int count=tab5_touch_read_points(points,10);
-    for(int i=0;i<count;i++) {
-        int x=points[i].x,y=points[i].y,key=0;
-        if(x<160)key=y<240?K_UPARROW:y<480?K_DOWNARROW:K_ESCAPE;
-        else if(x>=1120)key=y<180?(key_dest==key_menu?K_ENTER:K_CTRL):y<360?K_SPACE:y<540?K_LEFTARROW:K_RIGHTARROW;
-        if(key)wanted[key]=true;
-    }
+    uint32_t now=(uint32_t)(hal_time_now_us()/1000);
+    int ch;for(unsigned i=0;i<64 && (ch=kconsole_getc())>=0;i++)quake_input_byte(ch,(int)key_dest,now);
+    keyboard_raw_state keys;keyboard_raw_read(&quake_owner,&keys);
+    native_ready=keys.ready;native_events+=keys.count;
+    tab5_touch_point_t points[10];unsigned count=tab5_touch_read_points(points,10);
+    quake_input_sample((int)key_dest,&keys,points,count,now);
+    paint_buttons(quake_input_touch_buttons(),false);
+    int action=quake_input_action();if(action==1)quake_exit(0);if(action==2)capture_next=true;
 }
 int QG_GetKey(int *down,int *key) {
     if(!sampled){sample_inputs();sampled=true;}
-    for(int i=0;i<256;i++)if(held[i]!=wanted[i]){held[i]=wanted[i];*key=i;*down=held[i];return 1;}
-    return 0;
+    int n=quake_input_next(down,key);
+    if(quake_input_action()==1)quake_exit(0);
+    return n;
 }
-void QG_GetMouseMove(int *x,int *y){*x=*y=0;}
+void QG_GetMouseMove(int *x,int *y){quake_input_mouse(x,y);}
 void QG_GetJoyAxes(float *axes){for(int i=0;i<QUAKEGENERIC_JOY_MAX_AXES;i++)axes[i]=0;}
 void quake_main(void *arg) {
     (void)arg;pending=false;
@@ -111,17 +122,21 @@ void quake_main(void *arg) {
     size_t n=(size_t)(_quake_data_end-_quake_data_start);
     if(!n||n>256u*1024u||(uintptr_t)_quake_bss_end<=(uintptr_t)_quake_bss_start){kputs("quake: invalid linker state\n");return;}
     if(!initial){initial=kmalloc_psram(n);if(!initial)return;memcpy(initial,_quake_data_start,n);}
-    reset_engine();memset(held,0,sizeof held);memset(wanted,0,sizeof wanted);sampled=false;capture_next=false;keyboard=0;key_until=0;
+    reset_engine();quake_input_reset();native_events=0;native_ready=false;sampled=false;capture_next=false;
+    if(!keyboard_raw_claim(&quake_owner)){kputs("quake: native keyboard is busy\n");return;}
     kconsole_set_focus(task_current()->id);ime_bypass(true);fbcon_pause(true);screen=true;task_sleep(60);
     display_set_target(NULL);display_clear(COLOR_BLACK);
-    display_draw_text(12,60,"FWD",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(12,300,"BACK",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(12,580,"MENU",COLOR_WHITE,COLOR_BLACK,2);
-    display_draw_text(1140,60,"FIRE/OK",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,260,"JUMP",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,440,"LEFT",COLOR_WHITE,COLOR_BLACK,2);display_draw_text(1140,620,"RIGHT",COLOR_WHITE,COLOR_BLACK,2);
+    display_fill_rect(0,0,160,720,RGB565(15,22,30));display_fill_rect(1120,0,160,720,RGB565(15,22,30));
+    display_draw_text(48,284,"MOVE",COLOR_WHITE,RGB565(15,22,30),2);
+    display_draw_text(1168,188,"LOOK",COLOR_WHITE,RGB565(15,22,30),2);
+    paint_mask=0;paint_buttons(0,true);
     frames=0;began=hal_time_now_us();
     if(!setjmp(escape)) {
         quakeparms_t parms={0};parms.memsize=12*1024*1024;parms.membase=quake_malloc(parms.memsize);parms.basedir=quake_basedir;
         char *args[]={"quake","-basedir",quake_basedir,"-nosound","-nocdaudio",NULL};
         COM_InitArgv(5,args);parms.argc=com_argc;parms.argv=com_argv;
         Host_Init(&parms);
+        Cbuf_AddText("bind w +forward\nbind s +back\nbind a +moveleft\nbind d +moveright\nbind f +attack\nbind e \"impulse 10\"\nbind / \"impulse 10\"\nbind UPARROW +forward\nbind DOWNARROW +back\nbind LEFTARROW +left\nbind RIGHTARROW +right\n+mlook\n");
         frames=0;profile_frames=0;began=profile_at=hal_time_now_us();
         kputs("quake: Host_Init complete; interactive loop\n");
         uint64_t last=hal_time_now_us();

@@ -9,8 +9,9 @@ is local only. No PAK, game assets or firmware release is included.
 - The Quake 1 software-renderer engine and MeOS adapters link for ESP32-P4 using
   ESP-IDF 5.4.4 and the existing RISC-V toolchain.
 - 320x200 indexed rendering expands to the 960x720 center viewport; rails carry
-  basic touch keys. Keyboard W/S move, A/D turn, F fires, Space jumps,
-  Enter selects, Escape opens the menu, Q/Ctrl-C stops the app.
+  visible touch controls. Keyboard WASD moves/strafes, arrows turn/move,
+  Ctrl or F fires, Space jumps, E changes weapon, Enter selects, Escape opens
+  the menu, and Ctrl-C stops the app. Q remains available for game text input.
 - Quake uses a separate image, not a concurrent Doom/Quake configuration. The
   default MeOS build remains Quake-disabled.
 - The engine has a 12 MiB PSRAM arena. Large renderer scratch arrays move to
@@ -120,5 +121,15 @@ renderer frames. Those fixed work arrays now live in resettable PSRAM BSS.
 bounds failures now name the rejected task, which can differ from the currently
 running task stored by the panic recorder. Stack guards remain enabled.
 
-Touch rails: FWD/BACK are menu up/down; MENU is back/Escape; FIRE/OK selects
-in menus and fires in-game. Keyboard/serial F follows the same context rule.
+Touch rails place the movement cross on the left and turn, JUMP and FIRE on
+the right. MENU/WEAPON and EXIT/OK are at the top. Movement buttons navigate
+menus; FIRE and OK select. Drag inside the viewport to look around.
+
+Tab5 keyboard gameplay temporarily uses the official Normal matrix-event mode
+for independent key presses/releases, including simultaneous keys and modifiers.
+USB boot keyboards provide equivalent raw reports. The app releases ownership
+on cleanup and the Tab5 driver restores HID text mode for the shell/IME. Queue
+errors or overflow clear held keys; release and press again to resume. Serial
+input remains supported with ANSI arrows and bounded holds; its single Escape
+uses a short sequence timeout. Physical keyboards use actual release events.
+The debug frame capture shortcut is serial P.
