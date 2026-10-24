@@ -13,7 +13,7 @@ static void drain(void){int down,key;unsigned n=0;while(quake_input_next(&down,&
 static void sample(int mode,uint32_t now,const tab5_touch_point_t *points,unsigned n){keyboard_raw_state s;keyboard_raw_read(&owner,&s);quake_input_sample(mode,&s,points,n,now);drain();assert(!irq);}
 static void reset(void){keyboard_raw_release(&owner);assert(keyboard_raw_claim(&owner));quake_input_reset();memset(live,0,sizeof live);memset(downs,0,sizeof downs);memset(ups,0,sizeof ups);}
 int main(void){
- reset();assert(!keyboard_raw_claim(&other_owner));uint32_t epoch=keyboard_raw_generation();
+ reset();quake_input_byte(20,0,0);assert(quake_input_action()==3);quake_input_byte(3,0,0);quake_input_byte(20,0,0);assert(quake_input_action()==1);assert(!keyboard_raw_claim(&other_owner));uint32_t epoch=keyboard_raw_generation();
  keyboard_raw_matrix(epoch,0xa2);keyboard_raw_matrix(epoch,0xb4);keyboard_raw_matrix(epoch,0xcd);sample(0,100,NULL,0);
  assert(live['w']&&live['d']&&live[K_SPACE]);keyboard_raw_matrix(epoch,0x34);sample(0,110,NULL,0);assert(live['w']&&!live['d']&&live[K_SPACE]);
  sample(0,5000,NULL,0);assert(live['w']);keyboard_raw_matrix(epoch,0x22);keyboard_raw_matrix(epoch,0x4d);sample(0,5010,NULL,0);assert(!live['w']&&!live[K_SPACE]);

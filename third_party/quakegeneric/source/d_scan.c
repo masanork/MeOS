@@ -385,7 +385,9 @@ void D_DrawZSpans (espan_t *pspan)
 	int				izi;
 	short			*pdest;
 	unsigned		ltemp;
-	double			zi;
+	/* zi is already computed in float. Scaling by powers of two preserves
+     * its significand; keep it in the P4's hardware FP32 domain. */
+    float           zi;
 	float			du, dv;
 
 // FIXME: check for clamping/range problems

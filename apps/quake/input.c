@@ -24,6 +24,7 @@ static void text_key(int c,int mode,uint32_t now){
  if(mode!=0){enqueue(c,false,false);enqueue(c,true,false);enqueue(c,false,false);}else hold(c,now);
 }
 void quake_input_byte(int c,int mode,uint32_t now){
+ if(c==20){if(action!=1)action=3;return;} /* serial-only profiling A/B toggle */
  if(escape_state==1 && (c=='['||c=='O')){escape_state=2;return;}
  if(escape_state==2){
   if(c>='0'&&c<='9'){escape_param=(unsigned)(c-'0');escape_state=3;return;}

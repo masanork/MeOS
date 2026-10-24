@@ -95,3 +95,32 @@ keyboard transitions reached 26 during gameplay; this does not qualify every key
 or touch target. The device is left in the Introduction game for user operation.
 Game assets, firmware and captures remain outside the repository. Exact summary:
 `native-assets-device-2026-10-24.json`.
+
+## FPS follow-up (CPU backend)
+
+Profiling now separates engine frames, hardware LCD refresh, indexed copy/flush,
+input and explicit waits. The ST7121 refresh counter measured about 65.4 Hz; the
+70 MHz requested DPI clock is integer-divided by this SDK, so the request alone
+is not an actual refresh measurement. The viewport remains 320x200 -> 960x720.
+
+The original full-copy path spent about 28 ms in copying per frame. Removing
+redundant yield/sleep improved the demo from about 12.6 to 16-18 engine FPS.
+Speed-oriented LCD compilation alone left the copy near 25 ms. Exact per-column
+source damage tracking reduced static-scene presentation to about 3 ms. Software
+double floor division/depth scaling and vector square roots were replaced with
+mathematically equivalent integer/FP32 operations, with scalar O3 compilation.
+A million reference cases and a 130-frame ASan render (SHA256 unchanged) pass.
+128-byte cache lines improved the starting-view intervals to 30.6-33.4 FPS.
+
+A final 10-second serial camera-rotation test reported 30.5, 25.0 and 27.9 FPS;
+the first interval includes the transition into motion. **Constant 30 FPS is not
+qualified**. Earlier user-controlled intervals ranged about 23-50 FPS, dependent
+on viewpoint and motion. These phase ranges are not camera-identical A/B runs.
+Stack samples remained 11,584 / 49,152 with guard OK. Native keyboard events
+continued, normal quits restored text mode, and Doom/simulator checks passed.
+
+An optional PPA prototype passed two offscreen quadrant/orientation/guard tests
+on the physical P4. Its revised ownership/cached-buffer implementation and game
+FPS still need qualification; a concurrent atomic-editor device session took
+the serial port before that final test. The CPU mode remains the default.
+Exact CPU observations: `performance-device-2026-10-24.json`.

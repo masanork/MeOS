@@ -169,3 +169,61 @@ and verifies stored size/CRC after transfer. On macOS it holds a temporary
 `caffeinate` assertion for the transfer so host sleep cannot strand a binary
 packet at the shell after the device's receive timeout. It closes the connection
 and releases the assertion on exit; system power settings are unchanged.
+
+## Frame profiling / exact damage updates
+
+`quake bench` enters the Introduction (`start`) map directly for a reproducible
+starting view. It does not download or write any game data. Normal `quake` still
+starts with the usual demo/menu behavior. Serial Ctrl-T toggles the old extra
+per-frame yield/sleep for diagnostics; physical keyboard routing is unchanged.
+`quake perf` lines report wall time per engine frame, LCD refresh interrupts,
+indexed copy/cache flush, input, explicit wait and remaining host work. These
+are elapsed times including preemption, not isolated CPU samples. Filtered
+(non-rendering) iterations still sleep; regular MeOS preemption is retained.
+
+Quake's private 64,000-byte previous-index buffer tracks exact dirty source
+bounds in each column. Unchanged HUD/background pixels need no framebuffer
+writes. Palette changes force a complete repaint. Output remains 320x200 scaled
+to the same 960x720 viewport with the same nearest-neighbor sample positions.
+The host test compares whole physical framebuffers against the original blitter,
+including moving scenes, sparse changes, palette edits and untouched rails.
+The original full-copy API remains available to other clients.
+
+Existing ignored `sdkconfig.quake` files are not overwritten by defaults. For
+older DEBUG configs, use `CONFIG_COMPILER_OPTIMIZATION_SIZE=y` and disable DEBUG,
+as the integrated build defaults already specify. Explicit game/LCD hot-path
+options retain speed optimization while the fixed app partition stays unchanged.
+
+New Quake configurations select 128-byte L2 lines for framebuffer streaming.
+The LCD writeback range now derives its alignment from the configured line size;
+64-byte Doom/default builds retain their existing setting. Existing ignored Quake
+configs also need `CONFIG_CACHE_L2_CACHE_LINE_128B=y` to reproduce this profile.
+The L2 capacity stays 128 KiB; no SRAM is reassigned to a larger cache.
+
+## Experimental PPA smooth backend
+
+`quake smooth` enters the Introduction with an opt-in P4 PPA SRM backend. The
+vertical sampling positions remain the same, while horizontal 3x expansion uses
+the PPA's bilinear filter; this intentionally changes pixel-edge appearance.
+The existing `quake` / `quake bench` exact nearest-neighbor backend is retained.
+`quake ppatest` runs only an offscreen quadrant/guard test and exits, with no PAK
+needed. A busy accelerator, failed test or hardware timeout retains CPU rendering.
+
+This local kernel adapter uses LL register access rather than FreeRTOS PPA/DMA
+queues. It only acquires clock-gated PPA and DMA2D modules, checks again atomically
+before acquisition, masks peripheral interrupts and polls completion with a
+bounded deadline. The test validates rotation, offsets and guard regions before
+any game DMA writes the LCD. One conversion buffer and one test buffer (about
+465 KiB) are kernel-owned reusable caches, allocated only on first smooth/test
+use. They survive app exits. A hardware fault disables this backend until reboot
+and quarantines those buffers, preventing late AXI operations from touching
+recycled app allocations. App cleanup waits/resets its owned hardware before
+restoring shell display/input. This is not an accelerator-sharing implementation.
+
+The PPA stage is asynchronous: the next game computation can overlap DMA; source
+reuse waits for the previous job. In `ppa-smooth` profile lines, `copy` includes
+CPU staging, cache maintenance and any previous-job wait, not GPU-exclusive time.
+Hardware LCD refresh and engine frame counts remain separate measurements.
+
+Reference: ESP-IDF v5.4 PPA SRM and DMA2D LL/driver implementation; Espressif's
+[PPA documentation](https://docs.espressif.com/projects/esp-idf/en/release-v5.4/esp32p4/api-reference/peripherals/ppa.html).

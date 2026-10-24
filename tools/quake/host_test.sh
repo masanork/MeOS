@@ -19,3 +19,9 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DM5OS_BOARD_T
 "$OUT/keyboard-mode-test"
 
 python3 tools/quake/upload_test.py
+
+cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -Ikernel/include tools/quake/delta_test.c -o "$OUT/delta-test"
+"$OUT/delta-test"
+
+cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined tools/quake/math_test.c -lm -o "$OUT/math-test"
+"$OUT/math-test"

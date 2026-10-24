@@ -479,7 +479,6 @@ D_PolysetSetUpForLineScan
 void D_PolysetSetUpForLineScan(fixed8_t startvertu, fixed8_t startvertv,
 		fixed8_t endvertu, fixed8_t endvertv)
 {
-	double		dm, dn;
 	int			tm, tn;
 	adivtab_t	*ptemp;
 
@@ -500,12 +499,13 @@ void D_PolysetSetUpForLineScan(fixed8_t startvertu, fixed8_t startvertv,
 	}
 	else
 	{
-		dm = (double)tm;
-		dn = (double)tn;
-
-		FloorDivMod (dm, dn, &ubasestep, &erroradjustup);
-
-		erroradjustdown = dn;
+        /* Integer endpoints need floor division, not software double math.
+         * C division truncates toward zero: repair negative remainders. */
+        if (tn <= 0) Sys_Error("D_PolysetSetUpForLineScan: bad denominator");
+        ubasestep = tm / tn;
+        erroradjustup = tm % tn;
+        if (erroradjustup < 0) { ubasestep--; erroradjustup += tn; }
+        erroradjustdown = tn;
 	}
 }
 
