@@ -71,3 +71,27 @@ logged `keyboard: text input restored`. These observations qualify the actual
 I2C mode handoff and serial path, not physical key presses, USB keyboards, finger
 hit targets or gameplay with this new input revision. Host tests cover matrix
 chords/releases, bounded event routing and normal HID/text restoration.
+
+
+## Native SD bulk assets — completed
+
+The same 16 GB littlefs/COW SD-root card now stores the separately supplied
+shareware PAK at `/assets/quake/id1/pak0.pak`. No format, M5FS resize or root-store
+replacement was performed. A dedicated littlefs-backed VFS directory avoids the
+8 MiB M5FS capacity limit; internal base/delta files remain outside its namespace.
+
+The successful USB upload took 1,528.9 seconds. Received size/CRC and an independent
+full SD reread both returned 18,689,235 bytes / `74e3b084`, matching the source.
+An earlier attempt was interrupted by macOS sleep; receive timeout removed the
+incomplete file. Scoped `caffeinate` prevented a repeat. First-copy and full-file
+verification performance remain slow; this is not a storage-speed improvement.
+
+After a hardware reset (no new flash), the native root and `/assets` mounted,
+`pak0.pak` retained its size, and `/home/sd-boot.txt` still read `qualification-099`.
+Quake recognized 339 PAK entries from the native path, played its demo and entered
+NEW GAME / `maps/start.bsp`. Post-load intervals reported 15.6 and 15.4 display
+presentations/s, with 15,424 / 49,152 sampled stack bytes and guard OK. Real native
+keyboard transitions reached 26 during gameplay; this does not qualify every key
+or touch target. The device is left in the Introduction game for user operation.
+Game assets, firmware and captures remain outside the repository. Exact summary:
+`native-assets-device-2026-10-24.json`.
