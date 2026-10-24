@@ -9,12 +9,12 @@
 #include <m5os/vfs.h>
 #define SECTORS 65536u
 static unsigned char *card;
-static unsigned probe_failures,probe_attempts,probe_delays,write_requests;
+static unsigned probe_failures,probe_attempts,probe_delays,write_requests,max_read_blocks,max_write_blocks;
 static bool fail_reads;
 void hal_delay_us(uint32_t us){assert(us==100000);probe_delays++;}
 static blockdev_t device;
-static int read_sd(blockdev_t *d,uint32_t l,uint32_t n,void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);if(fail_reads)return -1;memcpy(p,card+(size_t)l*512,n*512);return 0;}
-static int write_sd(blockdev_t *d,uint32_t l,uint32_t n,const void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);write_requests++;memcpy(card+(size_t)l*512,p,n*512);return 0;}
+static int read_sd(blockdev_t *d,uint32_t l,uint32_t n,void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);if(n>max_read_blocks)max_read_blocks=n;if(fail_reads)return -1;memcpy(p,card+(size_t)l*512,n*512);return 0;}
+static int write_sd(blockdev_t *d,uint32_t l,uint32_t n,const void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);if(n>max_write_blocks)max_write_blocks=n;write_requests++;memcpy(card+(size_t)l*512,p,n*512);return 0;}
 static bool fat_busy;
 bool fat_is_mounted(void){return fat_busy;}
 blockdev_t *sdcard_probe(void){probe_attempts++;if(probe_failures){probe_failures--;return NULL;}return &device;}
@@ -47,7 +47,7 @@ int main(void){
     fat_busy=true;unsigned blocked_probes=probe_attempts;
     assert(sdroot_mount()==ERR_BUSY);assert(probe_attempts==blocked_probes&&!write_requests);
     assert(sdroot_format(SECTORS)<0);fat_busy=false;assert(!write_requests);
-    assert(!sdroot_format(SECTORS));assert(write_requests>0);
+    assert(!sdroot_format(SECTORS));assert(write_requests>0&&max_write_blocks>=8);
     /* Model the outer littlefs volume being open before M5FS is attached. */
     assert(!lfs_mount(&lfs,&cfg));mounted=true;
     unsigned outer_probes=probe_attempts,outer_writes=write_requests;
@@ -61,10 +61,10 @@ int main(void){
     assert(write_requests==before&&probe_attempts==probed);
     assert(!sdroot_save_probe("first-boot"));verify("first-boot");
     assert(!fs_unmount());close_files();
-    assert(!sdroot_mount());verify("first-boot");
+    assert(!sdroot_mount());verify("first-boot");assert(max_read_blocks>=8);
     for(int i=0;i<30;i++)assert(!sdroot_save_probe("second-boot"));
     assert(!cow_store_compact(&store));verify("second-boot");
     assert(!fs_unmount());close_files();assert(!sdroot_mount());verify("second-boot");
     assert(!fs_unmount());close_files();free(card);
-    puts("SDROOT littlefs integration PASS: explicit format, wrong-card size rejection, sparse base, indexed COW, remount persistence, continued saves, compaction");
+    puts("SDROOT littlefs integration PASS: 4 KiB multi-sector cache/erase, explicit format, wrong-card size rejection, sparse base, indexed COW, remount persistence, continued saves, compaction");
 }

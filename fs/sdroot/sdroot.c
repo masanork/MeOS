@@ -20,18 +20,23 @@
 #define ROOT_SECTORS 16384u /* 8 MiB logical M5FS, sparse zero-filled RO base */
 #define BANK_BYTES (12u*1024u*1024u) /* full 8 MiB snapshot + transaction headroom */
 #define ERASE_BYTES 4096u
+#define CACHE_BYTES 4096u
 static mutex_t lfs_mutex=MUTEX_INIT;
 static int lock_lfs(const struct lfs_config *c){(void)c;mutex_lock(&lfs_mutex);return 0;}
 static int unlock_lfs(const struct lfs_config *c){(void)c;mutex_unlock(&lfs_mutex);return 0;}
 static blockdev_t *sd;
 static lfs_t lfs;
 static struct lfs_config cfg;
-static unsigned char read_cache[512],prog_cache[512],lookahead[128];
-static unsigned char bounce[512];
+static unsigned char lookahead[128];
+struct root_buffers {
+    unsigned char read_cache[CACHE_BYTES],prog_cache[CACHE_BYTES];
+    unsigned char bounce[ERASE_BYTES],base_cache[CACHE_BYTES];
+    unsigned char bank_cache[2][CACHE_BYTES];
+};
+static struct root_buffers *buffers;
 static lfs_file_t base_file;
 static struct lfs_file_config base_cfg;
-static unsigned char base_cache[512];
-struct bank_file { lfs_file_t file; struct lfs_file_config cfg; unsigned char cache[512]; };
+struct bank_file { lfs_file_t file; struct lfs_file_config cfg; };
 static struct bank_file files[2];
 static struct cow_store store;
 static blockdev_t root_bd;
@@ -45,9 +50,8 @@ static int disk_prog(const struct lfs_config *c,lfs_block_t b,lfs_off_t off,cons
     (void)c;return sd->write(sd,b*8+off/512,n/512,p)?LFS_ERR_IO:0;
 }
 static int disk_erase(const struct lfs_config *c,lfs_block_t b) {
-    (void)c;memset(bounce,0xff,sizeof bounce);
-    for(unsigned i=0;i<8;i++)if(sd->write(sd,b*8+i,1,bounce))return LFS_ERR_IO;
-    return 0;
+    (void)c;memset(buffers->bounce,0xff,sizeof buffers->bounce);
+    return sd->write(sd,b*8,ERASE_BYTES/512,buffers->bounce)?LFS_ERR_IO:0;
 }
 static int disk_sync(const struct lfs_config *c) {
     (void)c; /* CMD24 waits for ready and checks CMD13 after every sector. */
@@ -62,10 +66,11 @@ static int prepare(void) {
         if(attempt<2)hal_delay_us(100000);
     }
     if(!sd)return ERR_NODEV;
+    if(!buffers){buffers=kmalloc_psram(sizeof *buffers);if(!buffers)return ERR_NOMEM;}
     cfg=(struct lfs_config){.lock=lock_lfs,.unlock=unlock_lfs,.read=disk_read,.prog=disk_prog,.erase=disk_erase,.sync=disk_sync,
         .read_size=512,.prog_size=512,.block_size=ERASE_BYTES,.block_count=sd->block_count/8,
-        .block_cycles=500,.cache_size=512,.lookahead_size=sizeof lookahead,
-        .read_buffer=read_cache,.prog_buffer=prog_cache,.lookahead_buffer=lookahead};
+        .block_cycles=500,.cache_size=CACHE_BYTES,.lookahead_size=sizeof lookahead,
+        .read_buffer=buffers->read_cache,.prog_buffer=buffers->prog_cache,.lookahead_buffer=lookahead};
     return cfg.block_count>=128?0:ERR_INVAL;
 }
 /* Bytes beyond EOF represent zero sectors, not an image-sized RAM buffer.
@@ -95,21 +100,21 @@ static void close_files(void) {
     kfree(index_map);index_map=NULL;active=false;
 }
 static int open_base(int flags) {
-    memset(&base_cfg,0,sizeof base_cfg);base_cfg.buffer=base_cache;
+    memset(&base_cfg,0,sizeof base_cfg);base_cfg.buffer=buffers->base_cache;
     return lfs_file_opencfg(&lfs,&base_file,"base.img",flags,&base_cfg);
 }
 static int base_identity(void) {
     lfs_soff_t size=lfs_file_size(&lfs,&base_file);if(size<=0||size>64*1024)return -1;
     uint32_t sum=0;
     for(uint32_t off=0;off<(uint32_t)size;off+=512){
-        if(file_read(&base_file,off,bounce,sizeof bounce))return -1;
-        sum=crc32_update(sum,bounce,sizeof bounce);
+        if(file_read(&base_file,off,buffers->bounce,512))return -1;
+        sum=crc32_update(sum,buffers->bounce,512);
     }
     identity=((uint64_t)sum<<32)|ROOT_SECTORS;return 0;
 }
 static int open_banks(bool create) {
     for(int i=0;i<2;i++){
-        memset(&files[i],0,sizeof files[i]);files[i].cfg.buffer=files[i].cache;
+        memset(&files[i],0,sizeof files[i]);files[i].cfg.buffer=buffers->bank_cache[i];
         if(lfs_file_opencfg(&lfs,&files[i].file,i?"delta-b.log":"delta-a.log",LFS_O_RDWR|(create?LFS_O_CREAT:0),&files[i].cfg)){
             while(i-->0)lfs_file_close(&lfs,&files[i].file);
             lfs_file_close(&lfs,&base_file);return -1;
@@ -177,7 +182,7 @@ static int save(const fs_tx_ops_t *ops,void *ctx){
 }
 int sdroot_save_probe(const char *text){return active?fs_transaction(save,(void *)text):ERR_NODEV;}
 /* Separate bulk files share littlefs, never the base image or COW bank paths. */
-struct asset_file { lfs_file_t file; struct lfs_file_config cfg; unsigned char cache[512]; };
+struct asset_file { lfs_file_t file; struct lfs_file_config cfg; unsigned char cache[]; };
 static int asset_error(int n){
     if(n>=0)return n;
     switch(n){case LFS_ERR_NOENT:return ERR_NOENT;case LFS_ERR_EXIST:return ERR_EXIST;
@@ -204,7 +209,8 @@ static int asset_open(void *ctx,const char *rel,uint32_t flags,void **out){
     if(flags&VFS_O_CREATE)mode|=LFS_O_CREAT;
     if(flags&VFS_O_TRUNC)mode|=LFS_O_TRUNC;
     if(flags&VFS_O_APPEND)mode|=LFS_O_APPEND;
-    struct asset_file *f=kcalloc(1,sizeof *f);if(!f)return ERR_NOMEM;f->cfg.buffer=f->cache;
+    struct asset_file *f=kmalloc_psram(sizeof *f+CACHE_BYTES);if(!f)return ERR_NOMEM;
+    memset(f,0,sizeof *f+CACHE_BYTES);f->cfg.buffer=f->cache;
     rc=lfs_file_opencfg(&lfs,&f->file,path,mode,&f->cfg);
     if(rc){kfree(f);return asset_error(rc);}*out=f;return 0;
 }

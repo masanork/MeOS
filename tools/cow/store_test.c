@@ -6,9 +6,10 @@
 #define CAP (512u+12u*COW_RECORD)
 struct bank {unsigned char live[CAP],durable[CAP];};
 static struct bank banks[2],saved[2];
-static int budget=-1,buffered,fail_sync,syncs,fail_after,fail_read,reads;
+static int budget=-1,buffered,fail_sync,syncs,fail_after,fail_read,reads,bank_reads[2];
 static int rd(void *ctx,uint32_t o,void *p,size_t n){
     struct bank *b=ctx;assert(o<=CAP&&n<=CAP-o);
+    bank_reads[b==&banks[1]]++;
     if(++reads==fail_read)return -1;
     memcpy(p,b->live+o,n);return 0;
 }
@@ -43,6 +44,8 @@ int main(void){
     assert(!cow_store_format(&s,io,42,SECTORS,base,0));transaction(&s,11);
     assert(!cow_store_compact(&s));transaction(&s,11);
     memcpy(saved,banks,sizeof saved);
+    bank_reads[0]=bank_reads[1]=0;open_store(&s);
+    assert(bank_reads[1-s.selected]==1); /* inactive bank header only */
     /* Both banks already contain published states. Cut every byte of target
      * reuse: reset + header + one changed sector + snapshot commit. */
     unsigned cases=0;unsigned bytes=CAP+512+2*COW_RECORD;

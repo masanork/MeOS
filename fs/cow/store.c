@@ -25,20 +25,29 @@ static int header(struct cow_store *s,int i,uint64_t epoch){
 }
 int cow_store_recover(struct cow_store *s){
     if(!s)return -1;
-    s->faulted=1;int best=-1;uint64_t epoch=0;struct cow winner;
+    s->faulted=1;int order[2],count=0;uint64_t epochs[2]={0,0};struct cow winner;
     for(int i=0;i<2;i++){
-        unsigned char h[HEADER];struct cow candidate;
+        unsigned char h[HEADER];
         if(s->bank[i].io.read(s->bank[i].io.ctx,0,h,sizeof h))return -1;
         if(get(h)!=0x31424f43||get(h+4)!=1||get(h+508)!=crc(h,508))continue;
         if(get64(h+8)!=s->base_id||get(h+16)!=s->sectors)return -1;
-        uint64_t e=get64(h+24);if(!e)return -1;
-        if(cow_mount(&candidate,log_io(&s->bank[i]),s->base_id,s->sectors,s->base_read,s->base_ctx))return -1;
-        if(!candidate.generation)continue; /* snapshot commit is the publication */
-        if(best>=0&&e==epoch)return -1;
-        if(best<0||e>epoch){best=i;epoch=e;winner=candidate;}
+        epochs[i]=get64(h+24);if(!epochs[i])return -1;
+        order[count++]=i;
     }
-    if(best<0)return -1;
-    s->view=winner;s->selected=best;s->epoch=epoch;s->faulted=0;return 0;
+    if(count==2){
+        if(epochs[0]==epochs[1])return -1;
+        if(epochs[order[0]]<epochs[order[1]]){int t=order[0];order[0]=order[1];order[1]=t;}
+    }
+    /* The bank header and its first durable transaction publish an epoch.
+     * Scan the newest candidate first; the older bank is recovery media and
+     * does not belong on the normal boot path. */
+    for(int n=0;n<count;n++){
+        int i=order[n];struct cow candidate;
+        if(cow_mount(&candidate,log_io(&s->bank[i]),s->base_id,s->sectors,s->base_read,s->base_ctx))return -1;
+        if(!candidate.generation)continue;
+        winner=candidate;s->view=winner;s->selected=i;s->epoch=epochs[i];s->faulted=0;return 0;
+    }
+    return -1;
 }
 int cow_store_open(struct cow_store *s,const struct cow_bank b[2],uint64_t id,uint32_t n,int (*r)(void *,uint32_t,void *),void *ctx){
     if(config(s,b,id,n,r,ctx))return -1;
