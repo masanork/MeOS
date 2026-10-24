@@ -18,7 +18,7 @@ void mutex_lock(mutex_t *m) { (void)m; assert(!depth); depth++; }
 void mutex_unlock(mutex_t *m) { (void)m; assert(depth == 1); depth--; }
 void *kmalloc(size_t n) { return malloc(n); }
 void kfree(void *p) { free(p); }
-bool task_has_perm(uint32_t p) { assert(p == APP_PERM_FS_READ); return permitted; }
+bool task_has_perm(uint32_t p) { assert(p == APP_PERM_FS_READ || p == APP_PERM_FS_WRITE); return permitted; }
 int vfs_mount(const char *path, const vfs_fs_t *v, void *data)
 {
     (void)data; assert(!strcmp(path, "/sd") && !fs); fs = v; return ERR_OK;

@@ -310,7 +310,7 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
   or external power. The monitor must already be in continuous shunt+bus conversion mode; a missing,
   mismatched, unreadable or differently configured monitor produces an explicit unavailable result.
 * `storage` identifies the current root backing and its persistence. Tab5 still uses an 8 MiB RAM disk;
-  `sd mount` mounts Tab5 microSD as read-only FAT12/16/32 at `/sd`, with UTF-8 VFAT long names.
+  `sd mount` mounts Tab5 microSD as read/write FAT12/16/32 at `/sd`, with UTF-8 VFAT long names.
   exFAT, card writes and formatting are disabled. The separate flash-backed WASM app store survives reboot.
 * `play "/sd/path/track.mp3"` opens the Tab5 streaming MP3 player; the filer also opens MP3 files.
   Space pauses, +/- adjusts volume, Q/Esc stops. See [player notes](tools/player/README.md) for limits
@@ -381,3 +381,21 @@ Run `sh tools/host_checks.sh` for host regressions. GitHub Actions runs GCC/Clan
 host checks and ESP-IDF 5.4.4 Tab5 builds with watchdog disabled/enabled, retaining
 firmware, ELF, map and configuration artifacts. CI success is not physical
 RTC, reset retention, audio handoff or watchdog timeout qualification.
+
+### microSD write support
+
+`sd mount` now permits creation, overwrite/truncation, append, directory creation
+and deletion under `/sd`, including UTF-8 VFAT names. `sd mount ro` retains
+read-only operation. There is no format command and no automatic mount or retry.
+Close all files/apps and run `sd unmount` before removing the card.
+
+The SPI driver uses CMD24 with CRC16, checks the data response, waits for
+programming completion and verifies CMD13 status. File writes synchronize both
+data and metadata before reporting success. Media I/O errors latch the mount
+unavailable until explicit unmount/remount. FAT is not journaled; interrupted
+writes can damage files or the filesystem. Host failure tests do not qualify
+physical write reliability or power-loss recovery.
+
+`sh tools/sd/host_test.sh` covers read-only regression, CMD24/status/timeouts,
+FAT12/16/32 create/append/truncate/delete/remount, permissions, open-file locking,
+disk full, and failed/torn writes. Fixtures are generated memory-backed images.
