@@ -17,7 +17,9 @@ static int read_reply(void *opaque,char *buf,size_t cap) {
 }
 static void script(const char *a,const char *b,const char *c) {
     memset(statuses,0,sizeof statuses); reply_pos=0; reply_count=0;
-    if (a) replies[reply_count++]=a; if (b) replies[reply_count++]=b; if (c) replies[reply_count++]=c;
+    if (a) replies[reply_count++]=a;
+    if (b) replies[reply_count++]=b;
+    if (c) replies[reply_count++]=c;
 }
 static void immediate(basic_session *s,const char *line) { assert(!basic_session_submit(s,line)); }
 static void run(const char *src,const char *error) {
