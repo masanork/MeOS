@@ -29,6 +29,15 @@
 #include <m5os/wall_time.h>
 #include <m5os/hal_i2c.h>
 #include "hardware.h"
+#include "../basic/basic.h"
+#include "../basic/file.h"
+#include "../basic/console.h"
+#include "../basic/graphics.h"
+#include <m5os/program_fs.h>
+
+#include "../scheme/ide.h"
+#include "../write/write.h"
+
 #include <m5os/doom.h>
 #include <m5os/quake.h>
 #include "../../apps/calculator/expr.h"
@@ -36,6 +45,9 @@
 #include <m5os/audio.h>
 #include <m5os/player.h>
 #include <m5os/microphone.h>
+#if defined(M5OS_BOARD_TAB5)
+#include <m5os/sdroot.h>
+#endif
 #include <m5os/vfs.h>
 #include <m5os/task.h>
 #include <m5os/kprintf.h>
@@ -132,6 +144,7 @@ static bool resolve(const char *arg, char *out)       /* relative to cwd -> norm
 /* --------------------------------------------------------------- commands */
 
 static int read_line_ex(char *line, bool echo);
+static int read_byte(void);
 
 typedef struct { const char *name; int (*fn)(int, char **); const char *help; } command_t;
 static const command_t s_commands[];
@@ -186,6 +199,109 @@ static int cmd_calc(int argc, char **argv)
     return 0;
 }
 #endif
+
+static void basic_write(const char *buf, size_t len, void *opaque)
+{
+    (void)opaque; sh_write(buf, len);
+}
+typedef struct {
+    basic_session *session;
+    unsigned ticks;
+    basic_console console;
+    basic_graphics graphics;
+    char last_path[VFS_PATH_MAX];
+} basic_shell;
+static int basic_cancel(void *opaque)
+{
+    basic_shell *ctx = opaque;
+    if (!(++ctx->ticks % 32)) task_sleep(1);
+    return basic_console_feed(&ctx->console, kconsole_getc());
+}
+static const char *basic_draw(void *opaque, int op, const int32_t args[5], const char *text, size_t len)
+{
+    basic_shell *ctx = opaque;
+    return basic_graphics_command(&ctx->graphics, op, args, text, len, basic_cancel, opaque);
+}
+static int basic_input_key(void *opaque)
+{
+    (void)opaque; return read_byte();
+}
+static int basic_input(void *opaque, char *buffer, size_t capacity)
+{
+    basic_shell *ctx = opaque;
+    return basic_console_readline(&ctx->console, buffer, capacity, basic_input_key, basic_write, opaque);
+}
+static int basic_files(void *opaque, int action, const char *filename)
+{
+    basic_shell *ctx = opaque;
+    char path[VFS_PATH_MAX];
+    if (!*filename) filename = ctx->last_path;
+    if (!*filename) { sh_puts("basic: specify a file path first\n"); return ERR_INVAL; }
+    if (!resolve(filename, path)) { fail("basic", "bad path", ERR_INVAL); return ERR_INVAL; }
+    if (action == BASIC_EDIT) {
+#if M5OS_HAS_KEYBOARD
+        vfs_info_t info;
+        int rc = vfs_stat(path, &info);
+        if (rc == ERR_OK && info.type != FS_TYPE_FILE) rc = ERR_INVAL;
+        if (rc != ERR_OK && rc != ERR_NOENT) { fail("basic", path, rc); return rc; }
+        size_t len = basic_session_export(ctx->session);
+        fbcon_pause(true);
+        task_sleep(FILER_PAUSE_SETTLE_MS);
+        dq_clear();
+        bool saved = edit_file_with_text(path, ctx->session->program, len);
+        fbcon_pause(false);
+        if (!saved) { sh_puts("basic: editor returned; current program kept\n"); return ERR_OK; }
+        action = BASIC_LOAD;
+#else
+        sh_puts("basic: EDIT requires a keyboard\n"); return ERR_NOSYS;
+#endif
+    }
+    basic_file_result result;
+    int rc = action == BASIC_LOAD ? basic_file_load(ctx->session, path, &result)
+                                 : basic_file_save(ctx->session, path, &result);
+    if (rc < 0) {
+        if (result.line) SH_PRINTF("basic: %s: source line %u: %s\n", path, result.line, result.detail);
+        else SH_PRINTF("basic: %s: %s: %s (%d)\n", path, result.detail, err_text(rc), rc);
+        return rc;
+    }
+    ksnprintf(ctx->last_path, sizeof ctx->last_path, "%s", path);
+    SH_PRINTF("basic: %s %s (%u bytes)\n", result.detail, path, (unsigned)result.bytes);
+    return ERR_OK;
+}
+static int cmd_basic(int argc, char **argv)
+{
+#if !M5OS_BOARD_TAB5
+    (void)argc; (void)argv;
+    sh_puts("basic: floating-point BASIC currently requires Tab5\n"); return 1;
+#else
+
+    if (argc > 2) { sh_puts("usage: basic [FILE.bas]\n"); return 1; }
+    basic_session *session = kmalloc_psram(sizeof *session);
+    if (!session) session = kmalloc(sizeof *session);
+    if (!session) { sh_puts("basic: out of memory\n"); return 1; }
+    basic_shell ctx = { .session = session };
+    basic_session_init(session, basic_write, basic_cancel, &ctx);
+    session->file = basic_files;
+    session->input = basic_input;
+    session->graphics = basic_draw;
+    if (argc == 2) {
+        int rc = basic_files(&ctx, BASIC_LOAD, argv[1]);
+        if (rc == ERR_OK) rc = basic_session_run(session);
+        kfree(session);
+        return rc == 0 ? 0 : 1;
+    }
+    sh_puts("MeOS numeric BASIC. HELP for commands; BYE exits. SAVE writes via VFS.\n");
+    char line[LINE_MAX];
+    for (;;) {
+        ctx.console = (basic_console){0};
+        sh_puts("Ready> ");
+        if (read_line_ex(line, true) <= 0) continue;
+        if (basic_session_submit(session, line)) break;
+    }
+    kfree(session);
+    return 0;
+#endif
+}
 
 static int cmd_ps(int argc, char **argv)
 {
@@ -345,7 +461,7 @@ static int list_m5ex_cb(const vfs_info_t *i, void *ctx)
     while (i->name[n]) n++;
     if (i->type == FS_TYPE_FILE && n > 5 && i->name[n - 5] == '.' && i->name[n - 4] == 'm' && i->name[n - 3] == '5' &&
         i->name[n - 2] == 'e' && i->name[n - 1] == 'x') {
-        char base[FS_NAME_MAX + 1];                    /* name without ".m5ex" (kprintf has no %.*s) */
+        char base[VFS_NAME_MAX + 1];                    /* name without ".m5ex" (kprintf has no %.*s) */
         for (size_t k = 0; k < n - 5; k++) base[k] = i->name[k];
         base[n - 5] = 0;
         SH_PRINTF("  %-14s (%u bytes)\n", base, i->size);
@@ -576,6 +692,26 @@ static int cmd_stop(int argc, char **argv)
 }
 
 #if M5OS_HAS_KEYBOARD
+#if M5OS_BOARD_TAB5
+static int cmd_write(int argc, char **argv)
+{
+    char path[VFS_PATH_MAX];
+    if (argc > 2) { SH_PRINTF("usage: write [FILE.txt]\n"); return 1; }
+    if (!resolve(argc == 2 ? argv[1] : "note.txt", path)) return fail("write", "bad path", ERR_INVAL);
+    if (!write_file(path)) return fail("write", path, ERR_INVAL);
+    return 0;
+}
+
+static int cmd_scheme(int argc, char **argv)
+{
+    char path[VFS_PATH_MAX];
+    if (argc > 2) { SH_PRINTF("usage: scheme [FILE.scm]\n"); return 1; }
+    if (argc == 2 && !resolve(argv[1], path)) return fail("scheme", "bad path", ERR_INVAL);
+    scheme_ide(argc == 2 ? path : NULL);
+    return 0;
+}
+#endif
+
 static int cmd_files(int argc, char **argv)
 {
     char path[VFS_PATH_MAX];
@@ -910,6 +1046,18 @@ static int cmd_mount(int argc, char **argv)
 }
 
 #if M5OS_BOARD_TAB5
+static int cmd_sdroot(int argc, char **argv)
+{
+    uint32_t sectors;
+    if (argc == 1) { sdroot_status(); return 0; }
+    if (argc == 3 && sh_streq(argv[1], "format") && parse_uint(argv[2], &sectors)) {
+        int rc = sdroot_format(sectors); SH_PRINTF("sdroot format rc=%d\n", rc); return rc != 0;
+    }
+    if (argc == 3 && sh_streq(argv[1], "save")) {
+        int rc = sdroot_save_probe(argv[2]); SH_PRINTF("SDROOT SAVE rc=%d\n", rc); return rc != 0;
+    }
+    sh_puts("usage: sdroot [format EXPECTED_SECTORS | save TEXT]\n"); return 1;
+}
 static int cmd_devices(int argc, char **argv)
 {
     (void)argc; (void)argv; hardware_print_devices(); return 0;
@@ -980,6 +1128,8 @@ static int cmd_history(int argc, char **argv)
 }
 
 static const command_t s_commands[] = {
+    { "basic", cmd_basic, "basic [FILE.bas] numeric BASIC" },
+
 #if M5OS_QUAKE
     { "quake",quake_command,"quake [/sd]  experimental silent native Quake" },
 #endif
@@ -993,10 +1143,16 @@ static const command_t s_commands[] = {
     { "play", cmd_play, "play PATH       MP3 player (Q stops)" },
     { "audio", audio_command, "audio test      low-volume speaker test" },
 #endif
+    { "data", programs_command, "data [status|mount|init|unmount] persistent /data/bas, /data/scm" },
+    { "programs", programs_command, "alias for data" },
+
+    { "write", cmd_write, "write [FILE.txt] prose editor / Japanese input" },
+    { "scheme", cmd_scheme, "scheme [FILE.scm] workspace / editor / plot" },
     { "calc", cmd_calc, "calc EXPR | deg | rad  numeric expressions" },
     { "devices", cmd_devices, "board devices: detected, untested, or unsupported (read-only)" },
     { "power",   cmd_power,   "battery voltage/current, estimated level and charger state (read-only)" },
     { "sd", shell_sd, "sd [status|probe|mount [ro|rw]|unmount] microSD" },
+    { "sdroot", cmd_sdroot, "SD littlefs/COW root status, explicit format, atomic probe save" },
     { "storage", cmd_storage, "root backing, persistence and microSD support (read-only)" },
 #endif
     { "history", cmd_history, "show command history (or use Up/Down arrows)" },

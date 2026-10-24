@@ -24,5 +24,7 @@ apps/wasm/*.wasm
 /SOURCE_REVISION
 /SOURCE_DATE_EPOCH
 
+# Font research downloads; generated previews stay in ignored build directories.
+tools/fonts/cache/
 /sdkconfig.quake*
 /tools/quake/cache/

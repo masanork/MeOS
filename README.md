@@ -1,5 +1,9 @@
 # MeOS
 
+The `masanork` integration combines the language/editor, simulator, media and optional
+native-engine work with a persistent Tab5 SD root. See [integration provenance](tools/integration/README.md)
+and [SD layout and qualification](docs/sd-root-device.md).
+
 An educational and experimental lightweight operating system built from scratch for M5Stack devices (**M5Stack CoreS3**, **M5Cardputer**, and **M5Stack Tab5**).
 MeOS implements its own **preemptive/cooperative scheduler, task management, timer, IPC message queues, memory allocator, VFS, custom filesystem (M5FS), dynamic binary loader (M5EX), GUI/TUI window system, camera driver, SDIO Wi-Fi stack, and SSH-2 client**—without ever starting FreeRTOS.
 
@@ -309,7 +313,7 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
   DC is shown as unknown. Charge permission and raw `CHG_STAT` are not treated as proof of actual charging
   or external power. The monitor must already be in continuous shunt+bus conversion mode; a missing,
   mismatched, unreadable or differently configured monitor produces an explicit unavailable result.
-* `storage` identifies the current root backing and its persistence. Tab5 still uses an 8 MiB RAM disk;
+* `storage` identifies the current root backing and its persistence. Tab5 uses an 8 MiB RAM disk unless a valid littlefs/COW SD root is available;
   `sd mount` mounts Tab5 microSD as read/write FAT12/16/32 at `/sd`, with UTF-8 VFAT long names.
   exFAT, card writes and formatting are disabled. The separate flash-backed WASM app store survives reboot.
 * `play "/sd/path/track.mp3"` opens the Tab5 streaming MP3 player; the filer also opens MP3 files.
@@ -400,4 +404,117 @@ physical write reliability or power-loss recovery.
 FAT12/16/32 create/append/truncate/delete/remount, permissions, open-file locking,
 disk full, and failed/torn writes. Fixtures are generated memory-backed images.
 
-See [tools/doom/RELEASING.md](tools/doom/RELEASING.md) for this branch's application work, validation and limitations.
+### microSD throughput benchmark
+
+`sd bench` measures 128 x 1KiB VFAT files and an 8MiB sequential file.
+`sd bench FILES SMALL_BYTES LARGE_MiB` selects a workload. Data is read back and
+verified, then test files are removed. Only a newly created MEOSBENCH directory
+is used. See [tools/sd/BENCHMARK.md](tools/sd/BENCHMARK.md) for limits and device
+log capture. These are end-to-end, write-through VFS measurements on SPI.
+
+### Integrated applications
+
+Application details, validation and limitations:
+
+- [Shared numeric functions and calculator](tools/common/README.md)
+- [BASIC](user/basic/README.md)
+- [Scheme and writing editor](user/scheme/README.md)
+- [Application simulator](tools/sim/README.md)
+- [Doom](tools/doom/RELEASING.md)
+
+### Optional persistent data store (`/data`, Tab5)
+
+An opt-in hierarchical VFS store supports language sources without changing the default
+partition table or boot path. The optional `programs` data partition is exactly
+1 MiB at 0xC00000 (subtype 0x42), after the existing 0xA00000..0xBFFFFF WASM store.
+The configuration preparer refuses overlaps and retains all existing entries:
+
+```sh
+python3 tools/basic/prepare_programs_config.py sdkconfig.tab5   build-programs/sdkconfig --table-out build-programs/partitions.csv
+```
+
+Build with that separate sdkconfig and build directory. Preparing or building
+this configuration does not flash it or initialize the store. Device deployment
+must happen in an agreed hardware time slot. With the matching table deployed,
+these commands are run from the MeOS shell:
+
+```text
+data status
+data init
+basic
+10 PRINT "persistent source"
+SAVE /data/bas/demo.bas
+BYE
+```
+
+`data init` first attempts a read-only mount; only an entirely erased region
+is initialized. It never erases unknown or damaged data. `data status` does
+not probe or write flash. On later boots, explicitly run `data mount`, then
+`basic /data/bas/demo.bas`. No automatic mount or migration is added. Existing
+`/home` persists when booted from the littlefs/COW SD root; otherwise it is RAM-backed.
+On VFAT cards, `/sd` supports explicit read/write or read-only mounts. LOAD/SAVE and both BASIC
+EDIT and shell `edit` use `/data` through the same VFS interfaces.
+
+The ROM adapter checks the live partition table, exact label/type/offset/size,
+flags, available chip size and overlaps before allowing access. It uses bounded,
+aligned internal buffers around ROM flash calls; it does not call FreeRTOS-backed
+ESP-IDF VFS/flash services. Host adapter tests verify that app, SSH-key, dictionary
+and WASM-store sentinel bytes remain unchanged.
+
+`/data/bas` and `/data/scm` are available immediately after mounting. Use
+`mkdir /data/lua` to add another language directory, or create nested directories.
+Scheme sources can be kept at `/data/scm/example.scm`; BASIC sources at
+`/data/bas/example.bas`. `programs` remains an alias for the `data` command, and
+the physical partition label remains `programs` so existing tables still match.
+
+The store has 16 slots shared by files and custom directories; the built-in
+`bas` and `scm` directories consume no slots. Relative paths are at most 87 bytes,
+with ASCII components up to 23 bytes, and files hold up to 20,352 data bytes
+(enough for BASIC's maximum source). Legacy flat files remain at `/data/NAME`
+without automatic relocation. Legacy records, including their larger payloads,
+remain readable; writing uses the new path-aware record format. Old firmware
+cannot read new records, so downgrading after writes is unsupported. An oversized
+legacy file must be reduced before updating without truncation. A legacy root
+file named `bas` or `scm` takes precedence over the corresponding default directory.
+A single writer is permitted at a time;
+readers see snapshots. Each file has two 20 KiB banks. A new version is written
+and read back in the inactive bank; its commit marker is written last. Successful
+close commits the buffered file. Rejected writes/seeks abort that handle on close,
+preserving the old file. Each update erases five inactive sectors; actual latency
+and flash endurance are not qualified yet. Deletion uses a committed tombstone.
+
+An interrupted save is recovered by remounting: either the prior full version or
+the new full version is selected using generation and CRC checks. An uncertain
+I/O result freezes further store access until files are closed and the store is
+unmounted/remounted; retrying writes against stale metadata is refused. A valid
+backup can recover one damaged bank. Committed corruption without a valid copy
+is an error; CRC is an integrity check, not authentication. Initial provisioning
+interruption can leave an uninitialized/corrupt format header requiring deliberate
+external recovery; no destructive repair or format command is supplied.
+
+Host tests cover small and maximum-size update fault points (including partial
+and completed-but-reported-failed writes), new-file creation, deletion, remount,
+quotas, generation bounds, CRC failure, permissions, writer conflicts, seek/append,
+BASIC SAVE/LOAD, configuration preparation and ROM-access boundaries. These are
+simulated flash/remount tests, not a physical reboot or power-cut qualification.
+The earlier flat-store version was built separately in normal and Doom-enabled
+configurations. Those results do not qualify this integrated revision.
+Real flash initialization, reboot persistence and hardware power-loss recovery
+remain unqualified. Neither board firmware nor its partition table was written
+as part of this implementation.
+
+
+### Tab5 persistent SD root
+
+`sdroot` reports whether the current root is the SD-backed M5FS view. A prepared
+littlefs card contains an immutable sparse base plus two alternating COW logs;
+boot uses the latest complete generation. The kernel/bootloader remain in Flash.
+There is no automatic format. `sdroot format EXPECTED_SECTORS` explicitly replaces
+the card filesystem, refuses an active SD root or mounted FAT filesystem, and
+requires the exact geometry reported by the device. Reboot afterward to use it.
+`sdroot save TEXT` is an atomic qualification probe at `/home/sd-boot.txt`.
+
+An active SD-root card cannot simultaneously be probed/mounted as VFAT. The outer
+littlefs namespace is not yet exposed for general asset import; normal VFAT cards
+retain the existing explicit `/sd` path. See the SD guide for trial device evidence,
+recovery backup, memory results and remaining physical power-cut qualification.

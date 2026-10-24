@@ -30,3 +30,6 @@ typedef struct { uint32_t ok, nack, timeout, invalid; } hal_i2c_stats_t;
 hal_i2c_result_t hal_i2c_sys_read_regs_ex(uint8_t addr,uint8_t reg,uint8_t *buf,size_t len);
 hal_i2c_result_t hal_i2c_sys_write_reg_ex(uint8_t addr,uint8_t reg,uint8_t value);
 void hal_i2c_get_stats(hal_i2c_stats_t *out);
+
+/* System bus only; caller selects a fast-capable device. */
+bool hal_i2c_read_reg16_fast(uint8_t addr7,uint16_t reg,uint8_t *buf,size_t len);

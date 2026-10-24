@@ -1,5 +1,6 @@
 /* Read-only diagnostics. Never initialize cameras, mount cards, scan Wi-Fi or toggle power. */
 #include "hardware.h"
+#include "sd.h"
 #include <m5os/board_config.h>
 #include <m5os/kprintf.h>
 #if M5OS_BOARD_TAB5
@@ -12,6 +13,7 @@
 #include <m5os/errno.h>
 #include <m5os/fs.h>
 #include <m5os/tab5.h>
+#include <m5os/sdcard.h>
 #include "../../drivers/keyboard/keyboard.h"
 #include "../../drivers/tab5kbd/tab5touch.h"
 #include "../../drivers/tab5kbd/osk.h"
@@ -56,13 +58,13 @@ void hardware_print_power(void)
 
 void hardware_print_storage(void)
 {
-    kputs(rootfs_is_persistent() ? "Root /: M5FS on SD (persistent)\n" : "Root /: M5FS on RAM disk (volatile; files lost at reset)\n");
+    kputs(rootfs_is_persistent() ? "Root /: M5FS on SD littlefs/COW (persistent)\n" : "Root /: M5FS on RAM disk (volatile; files lost at reset)\n");
     fs_stat_t s;
     if (fs_statfs(&s) == ERR_OK)
         kprintf("Root capacity: %u KB, free: %u KB\n", s.total_blocks * s.block_size / 1024u, s.free_blocks * s.block_size / 1024u);
     else kputs("Root capacity: read error\n");
-    kputs("microSD: unsupported on Tab5; insertion/capacity/content unknown\n");
-    kputs("FAT/exFAT: not implemented; no card is probed, mounted or formatted\n");
+    shell_sd_status();
+    kputs("Use sd mount ro or sd mount rw explicitly, then access /sd; exFAT/format unsupported\n");
     kputs("WASM apps: separate flash store, restored to /apps at boot\n");
 }
 
@@ -88,7 +90,8 @@ void hardware_print_devices(void)
     power_sample_t p;
     power_read(&p);
     row("INA226", power_result_name(p.result), "system I2C 0x41; details: power");
-    row("microSD", "unsupported", "Tab5 SDMMC driver absent; details: storage");
+    sdcard_status_t sd; sdcard_status(&sd);
+    row("microSD", !sd.probed ? "not tested" : sd.ready ? "ready (SPI)" : "not ready", sd.detail);
     row("RTC", "driver available", "RX8130CE; rtc reads; presence not probed here");
     row("IMU", "unsupported", "BMI270; presence not probed");
     row("audio", "output driver", "ES8388 output; ES7210 input bring-up: mic test");

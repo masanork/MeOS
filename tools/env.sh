@@ -7,7 +7,7 @@ if [ "$M5OS_BOARD" = "tab5" ]; then
     elif [ -d "$HOME/esp32/esp-idf-v5.4.4" ]; then
         export IDF_PATH=$HOME/esp32/esp-idf-v5.4.4
     else
-        export IDF_PATH=${M5OS_IDF_P4:-$HOME/esp/esp-idf}
+        export IDF_PATH=${M5OS_IDF_P4:-${IDF_PATH:-$HOME/esp/esp-idf}}
     fi
     unset IDF_PYTHON_ENV_PATH
 else

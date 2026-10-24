@@ -1,4 +1,7 @@
 #!/bin/sh
+if [ -z "${BASH_VERSION:-}" ] && [ -z "${ZSH_VERSION:-}" ]; then
+    exec bash "$0" "$@"
+fi
 set -eu
 cd "$(dirname "$0")/../.."
 export M5OS_BOARD=tab5 M5OS_QUAKE=1

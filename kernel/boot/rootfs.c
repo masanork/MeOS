@@ -13,6 +13,10 @@
 #include <m5os/errno.h>
 #include <m5os/kprintf.h>
 #include <m5os/kmalloc.h>
+#include <m5os/board_config.h>
+#if defined(M5OS_BOARD_TAB5)
+#include <m5os/sdroot.h>
+#endif
 #include "../../drivers/ramdisk/ramdisk.h"
 
 #define RAMDISK_BLOCKS_PSRAM_LARGE 16384u     /* 8 MiB on boards with >= 16 MiB PSRAM (Tab5) */
@@ -35,7 +39,12 @@ static void seed(const char *path, const char *text)
 bool rootfs_mount(blockdev_t *sd)
 {
     bool persistent = false;
-    if (sd) {
+#if defined(M5OS_BOARD_TAB5)
+    int sdrc = sdroot_mount();
+    persistent = sdrc == ERR_OK;
+    kprintf("sdroot: mount %d (no automatic format)\n", sdrc);
+#endif
+    if (sd && !persistent) {
         int rc = fs_mount(sd, 0);
         if (rc == ERR_OK) {
             persistent = true;
@@ -73,5 +82,8 @@ bool rootfs_mount(blockdev_t *sd)
         }
     }
     wasm_store_boot();                           /* installed WebAssembly apps come back from flash (Tab5 only) */
+#if defined(M5OS_BOARD_TAB5)
+    if (sdroot_active()) kputs("SDROOT BOOT PASS: persistent root; RAM disk not allocated; kernel remains in Flash\n");
+#endif
     return true;
 }

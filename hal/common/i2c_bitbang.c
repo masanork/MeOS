@@ -52,7 +52,13 @@ static bool scl_hi_pin(int scl)
 static void scl_lo_pin(int scl) { hal_gpio_od_drive_low(scl); }
 static void sda_hi_pin(int sda) { hal_gpio_od_release(sda); }
 static void sda_lo_pin(int sda) { hal_gpio_od_drive_low(sda); }
-static void tick(void)          { hal_delay_us(I2C_HALF_PERIOD_US); }
+/* Protected by s_lock, including restoration before leaving a fast transfer. */
+static unsigned s_half_period_us = I2C_HALF_PERIOD_US;
+static void tick(void)
+{
+    if(s_half_period_us==1) hal_i2c_fast_tick();
+    else hal_delay_us(s_half_period_us);
+}
 
 void hal_i2c_init(void)
 {
@@ -237,4 +243,14 @@ void hal_i2c_get_stats(hal_i2c_stats_t *out)
 {
     if(!out) return;
     bool locked=bus_lock(); *out=s_stats; bus_unlock(locked);
+}
+
+bool hal_i2c_read_reg16_fast(uint8_t addr,uint16_t reg,uint8_t *buf,size_t len)
+{
+    bool locked=bus_lock();
+    s_half_period_us=1;
+    bool ok=transfer(PIN_I2C_SCL,PIN_I2C_SDA,addr,reg,2,NULL,buf,len);
+    s_half_period_us=I2C_HALF_PERIOD_US;
+    bus_unlock(locked);
+    return ok;
 }
