@@ -152,9 +152,8 @@ Additional integration behavior:
 The existing SD-root receipt describes the smaller trial firmware. It proves
 format/boot/reset/100 saves/collection and 7.94 MiB recovery for that trial, not
 all features on this combined image. Combined host/build and device evidence is
-recorded separately below. Physical power-cut qualification remains open. Existing
-editor save calls remain individual filesystem transactions; only explicit grouped
-saves provide whole-buffer atomic replacement. The outer littlefs namespace is
+recorded separately below. Physical power-cut qualification remains open. BASIC, Scheme, writing and text-editor saves now use whole-buffer replacement
+on transactional M5FS. See `docs/atomic-editor-save.md` for failure and fallback semantics. The outer littlefs namespace is
 not yet a general `/sd` asset mount; FAT cards remain the existing game/media path.
 
 ### Combined verification (2026-10-24)
@@ -181,3 +180,18 @@ logs remain private because background network logs may contain identity/link da
 No card was reformatted during this combined qualification. Physical power removal,
 manual Scheme/writing-editor use, sound/camera input and optional-engine interactive
 coexistence on this exact image remain unqualified.
+
+
+## Atomic editor save integration
+
+`docs/atomic-editor-save.md` documents the whole-buffer VFS path now used by BASIC,
+Scheme, the Japanese writing editor and `edit` (including BASIC EDIT). Transactional
+SD-root saves have one commit; readonly/permission/space/IO errors never trigger a
+streaming retry. Other providers retain prior behavior. The optional backend hint
+reserves room for the whole save before truncation and can trigger collection first.
+
+Host coverage includes 987 real M5FS/VFS cut points (16/32 KiB, empty and new files),
+rollback and uncertain final sync, pin cleanup, readonly/write-only permissions,
+legacy short writes/close errors and app buffers retained on failure. Simulator
+source exports now include the shared streaming helper. Physical power-cut and
+manual keyboard/display qualification remain separate.

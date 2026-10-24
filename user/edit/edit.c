@@ -266,19 +266,10 @@ static int load(void)
 
 static bool save(void)
 {
-    int fd = vfs_open(s_path, VFS_O_WRITE | VFS_O_CREATE | VFS_O_TRUNC);
-    if (fd < 0) { s_save_failed = true; ksnprintf(s_status, sizeof s_status, "save failed: cannot open (error %d)", fd); return false; }
-    int total = 0, rc = 0;
-    while (total < s_len) {
-        int w = vfs_write(fd, s_buf+total, (size_t)(s_len-total));
-        if (w <= 0) { rc = w < 0 ? w : ERR_NOSPC; break; }
-        total += w;
-    }
-    int close_rc = vfs_close(fd);
-    if (!rc && close_rc < 0) rc = close_rc;
+    int rc = vfs_replace_file(s_path,s_buf,(size_t)s_len,NULL);
     if (rc < 0) {
         s_save_failed = true;
-        ksnprintf(s_status, sizeof s_status, "save failed: wrote %d of %d bytes (error %d)", total, s_len, rc);
+        ksnprintf(s_status, sizeof s_status, "save failed (error %d); buffer retained", rc);
         return false;
     }
     s_save_failed = false;

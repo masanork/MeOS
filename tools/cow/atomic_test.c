@@ -1,6 +1,8 @@
 #include "../../fs/cow/blockdev.h"
 #include "../../fs/cow/store.h"
 #include <m5os/fs.h>
+#include <m5os/vfs.h>
+#include <m5os/app.h>
 #include <m5os/errno.h>
 #include <m5os/kmalloc.h>
 #include <m5os/mutex.h>
@@ -12,6 +14,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+static uint32_t allowed = APP_PERM_FS_READ | APP_PERM_FS_WRITE;
+bool task_has_perm(uint32_t p){return (allowed&p)==p;}
+task_t *task_current(void){return NULL;}
+uint32_t arch_irq_disable(void){return 0;}
+void arch_irq_restore(uint32_t flags){(void)flags;}
+const vfs_fs_t vfs_devfs={.name="test-dev"};
 #define SECTORS 128u
 #define CAP (512u+40u*COW_RECORD)
 static unsigned char image[SECTORS*512];
@@ -42,6 +50,7 @@ static int wr(void *ctx,uint32_t o,const void *p,size_t n){struct bank *b=ctx;as
 static int reset(void *ctx){struct bank *b=ctx;memset(b,0,sizeof *b);return 0;}
 static int sync_io(void *ctx){(void)ctx;return ++syncs==fail_sync?-1:0;}
 static int recover(void *ctx){budget=-1;fail_sync=0;return fail_recover?-1:cow_store_abort(ctx);}
+static int reserve_hint(void *ctx,uint32_t records){return cow_store_reserve(ctx,records);}
 static void check_file(const char *path,const char *content){
     char b[128]={0};int fd=fs_open(path,FS_O_READ);assert(fd>=0);int n=fs_read(fd,b,sizeof b);
     assert(n==(int)strlen(content)&&!memcmp(b,content,(size_t)n));assert(!fs_close(fd));
@@ -78,6 +87,11 @@ int main(void){
     assert(fs_selftest());assert(!allocated);
     blockdev_t raw={.block_size=512,.block_count=SECTORS,.read=raw_rd,.write=raw_wr};
     assert(!fs_format(&raw,0,SECTORS));assert(!fs_mount(&raw,0));
+    assert(!vfs_mount("/",&vfs_m5fs,NULL));
+    size_t confirmed=99;
+    assert(!vfs_replace_file("/home/legacy","raw",3,&confirmed)&&confirmed==3);
+    check_file("/home/legacy","raw");assert(!fs_delete("/home/legacy"));
+    assert(!vfs_umount("/"));
     /* Leave six data sectors free so short-write rollback is exercised before
      * the overlay log runs out of room. This padding lives in the RO base. */
     static unsigned char padding[104*512];
@@ -88,8 +102,43 @@ int main(void){
     static struct cow_store store;assert(!cow_store_format(&store,io,42,SECTORS,base,0));
     assert(!cow_store_reserve(&store,8));
     blockdev_t bd;cow_blockdev_init(&bd,&store.view);
-    fs_tx_backend_t backend={&store,cow_store_begin,cow_store_commit,recover};
-    assert(!fs_mount_atomic(&bd,0,&backend));assert(!fs_transaction(save,"old"));check_file("/home/value","old");
+    fs_tx_backend_t backend={.ctx=&store,.begin=cow_store_begin,.commit=cow_store_commit,.recover=recover};
+    assert(!fs_mount_atomic(&bd,0,&backend));
+    assert(!vfs_mount("/",&vfs_m5fs,NULL));
+    assert(!fs_transaction(save,"old"));check_file("/home/value","old");
+    uint32_t generation=store.view.generation;
+    assert(!vfs_replace_file("/home/./value","stable",6,&confirmed)&&confirmed==6);
+    assert(store.view.generation==generation+1);check_file("/home/value","stable");
+    allowed=APP_PERM_FS_WRITE;
+    assert(!vfs_replace_file("/home/value","stable",6,&confirmed)&&confirmed==6);
+    allowed=APP_PERM_FS_READ;generation=store.view.generation;confirmed=99;
+    assert(vfs_replace_file("/home/value","denied",6,&confirmed)==ERR_PERM&&confirmed==0);
+    assert(store.view.generation==generation);allowed|=APP_PERM_FS_WRITE;
+    check_file("/home/value","stable");
+    budget=13;assert(vfs_replace_file("/home/value","torn",4,&confirmed)<0&&confirmed==0);
+    check_file("/home/value","stable");assert(!vfs_count_owned(0));
+    static unsigned char too_large[SECTORS*512];
+    assert(vfs_replace_file("/home/value",too_large,sizeof too_large,&confirmed)==ERR_NOSPC&&confirmed==0);
+    check_file("/home/value","stable");
+    assert(vfs_replace_file("/home/absent",too_large,sizeof too_large,&confirmed)==ERR_NOSPC);
+    fs_info_t absent;assert(fs_stat("/home/absent",&absent)==ERR_NOENT);
+    fail_sync=syncs+1;assert(vfs_replace_file("/home/value","uncommitted",11,&confirmed)<0&&confirmed==0);
+    check_file("/home/value","stable");
+    fail_sync=syncs+2;assert(vfs_replace_file("/home/value","complete",8,&confirmed)<0&&confirmed==0);
+    check_file("/home/value","complete");assert(!vfs_replace_file("/home/value",NULL,0,&confirmed)&&confirmed==0);
+    check_file("/home/value","");assert(!vfs_replace_file("/home/value","old",3,NULL));
+    assert(!vfs_count_owned(0));
+    /* Near a log boundary, the save's size hint triggers collection BEFORE
+     * truncation instead of failing halfway through a perfectly valid save. */
+    while ((store.view.log.capacity-store.view.end)/COW_RECORD >= 20)
+        assert(!fs_transaction(save,"old"));
+    assert(!fs_unmount());backend.reserve=reserve_hint;
+    assert(!fs_mount_atomic(&bd,0,&backend));
+    uint64_t epoch=store.epoch;
+    assert(!vfs_replace_file("/home/value","old",3,&confirmed));
+    assert(store.epoch>epoch);check_file("/home/value","old");
+    assert(!fs_unmount());backend.reserve=NULL;
+    assert(!fs_mount_atomic(&bd,0,&backend));assert(!cow_store_reserve(&store,8));
     int stale=fs_open("/home/value",FS_O_READ);assert(stale>=0);
     assert(fs_transaction(abort_save,"discard")==ERR_INVAL);check_file("/home/value","old");
     int fresh=fs_open("/home/value",FS_O_READ);assert(fresh>=0&&fresh!=stale);
@@ -120,7 +169,9 @@ int main(void){
     assert(fs_write(fd,"api",3)==3);assert(!fs_close(fd));check_file("/home/api","api");
     assert(!fs_unmount());assert(!fs_mount_readonly(&bd,0));
     assert(fs_open("/home/value",FS_O_WRITE|FS_O_TRUNC)==ERR_PERM);
-    assert(fs_mkdir("/home/no")==ERR_PERM);check_file("/home/value","repeat");
+    assert(fs_mkdir("/home/no")==ERR_PERM);
+    assert(vfs_replace_file("/home/value","no",2,&confirmed)==ERR_PERM&&confirmed==0);
+    check_file("/home/value","repeat");
     assert(!fs_sync());assert(!fs_unmount());assert(!allocated);
     assert(!fs_mount_atomic(&bd,0,&backend));fail_recover=1;
     assert(fs_transaction(abort_save,"unrecoverable")==ERR_IO);
@@ -129,5 +180,6 @@ int main(void){
     assert(!fs_mount_atomic(&bd,0,&backend));check_file("/home/value","repeat");
     int before_sync=syncs;
     assert(!fs_discard());assert(syncs==before_sync);assert(!allocated);
-    puts("M5FS ATOMIC PASS: legacy selftest, grouped save, rollback, sticky errors, short write, stale descriptors, torn IO, uncertain commit, continued saves, abandoned owner recovery, serialized reader, failed recovery stays offline, RO teardown, no heap leaks");
+    assert(!vfs_umount("/"));
+    puts("M5FS/VFS ATOMIC SAVE PASS: permissions, single commit, old-file rollback, empty replace, capacity, pin cleanup; legacy selftest, grouped save, rollback, sticky errors, short write, stale descriptors, torn IO, uncertain commit, continued saves, abandoned owner recovery, serialized reader, failed recovery stays offline, RO teardown, no heap leaks");
 }

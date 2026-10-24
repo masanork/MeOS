@@ -37,7 +37,14 @@ static int m_readdir(void *data,const char *rel,int (*cb)(const vfs_info_t *,voi
 static int m_mkdir(void *fsd, const char *rel)       { (void)fsd; if (!task_has_perm(APP_PERM_FS_WRITE)) return ERR_PERM; return fs_mkdir(rel); }
 static int m_unlink(void *fsd, const char *rel)      { (void)fsd; if (!task_has_perm(APP_PERM_FS_WRITE)) return ERR_PERM; return fs_delete(rel); }
 
+static int m_replace(void *data,const char *path,const void *bytes,size_t len,size_t *written)
+{
+    (void)data;
+    if (!task_has_perm(APP_PERM_FS_WRITE)) return ERR_PERM;
+    return fs_replace_file(path,bytes,len,written);
+}
+
 const vfs_fs_t vfs_m5fs = {
     .name = "m5fs", .open = m_open, .close = m_close, .read = m_read, .write = m_write,
-    .seek = m_seek, .stat = m_stat, .readdir = m_readdir, .mkdir = m_mkdir, .unlink = m_unlink,
+    .seek = m_seek, .stat = m_stat, .readdir = m_readdir, .mkdir = m_mkdir, .unlink = m_unlink, .replace = m_replace,
 };

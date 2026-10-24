@@ -314,23 +314,7 @@ static bool load(ide *i, const char *path, bool allow_missing)
 }
 static void save(ide *i)
 {
-    int fd = vfs_open(i->path, VFS_O_WRITE | VFS_O_CREATE | VFS_O_TRUNC);
-    if (fd < 0) {
-        message(i, "Save failed: source retained in memory");
-        return;
-    }
-    size_t n = 0;
-    bool ok = true;
-    while (n < i->buffer.length) {
-        int rc = vfs_write(fd, i->buffer.text + n, i->buffer.length - n);
-        if (rc <= 0) {
-            ok = false;
-            break;
-        }
-        n += (size_t)rc;
-    }
-    if (vfs_close(fd) < 0)
-        ok = false;
+    bool ok = vfs_replace_file(i->path, i->buffer.text, i->buffer.length, NULL) == ERR_OK;
     if (ok) {
         i->buffer.modified = false;
         message(i, "Saved to VFS (persistence depends on mounted storage)");

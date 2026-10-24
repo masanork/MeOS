@@ -78,7 +78,7 @@ The table is a trusted internal API, not an untrusted-app capability boundary.
 
 A full atomic save must group open/truncate, writes and close. Separate ordinary
 open/truncate and write calls are separate commits and can leave an empty file
-between them. Existing VFS/app save paths have NOT yet been migrated to group saves.
+between them. Editor save paths now use `vfs_replace_file`; see `atomic-editor-save.md`.
 
 ```c
 static int save(const fs_tx_ops_t *fs, void *context)
@@ -118,8 +118,8 @@ recover pending state before reattaching it. No automatic media formatting occur
 Run `sh tools/cow/host_test.sh` with ASan/UBSan:
 
 - 6,628 byte-cut cases (indexed and unindexed) for data/commit records, with immediate and buffered durability.
-- 210 crash cases through the actual `fs_transaction` API: create, grow, truncate,
-  delete, mkdir and two open files. Separate processes drop volatile state; compare
+- 987 crash cases through the transaction/whole-buffer VFS APIs: create, grow, truncate,
+  delete, mkdir, two open files and 16/32 KiB whole-buffer replacements. Separate processes drop volatile state; compare
   EVERY recovered sector with the complete old/new image, then mount M5FS read-only.
 - 17,506 byte cuts across inactive-bank reset, header, snapshot and publication,
   including reuse of a previously populated bank. Verify committed contents and

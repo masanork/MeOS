@@ -49,17 +49,7 @@ int basic_file_save(basic_session *s, const char *path, basic_file_result *resul
     if (rc == ERR_OK && info.type != FS_TYPE_FILE) { result->detail = "not a regular file"; return ERR_INVAL; }
     if (rc != ERR_OK && rc != ERR_NOENT) return rc;
     size_t len = basic_session_export(s);
-    int fd = vfs_open(path, VFS_O_WRITE | VFS_O_CREATE | VFS_O_TRUNC);
-    if (fd < 0) return fd;
-    rc = ERR_OK;
-    while (result->bytes < len) {
-        int n = vfs_write(fd, s->program+result->bytes, len-result->bytes);
-        if (n < 0) { rc = n; break; }
-        if (!n) { rc = ERR_NOSPC; break; }
-        result->bytes += (size_t)n;
-    }
-    int close_rc = vfs_close(fd);
-    if (rc == ERR_OK && close_rc < 0) rc = close_rc;
+    rc = vfs_replace_file(path, s->program, len, &result->bytes);
     if (rc == ERR_OK) result->detail = "saved";
     else result->detail = "save failed (file may be partial)";
     return rc;

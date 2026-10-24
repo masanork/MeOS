@@ -8,11 +8,11 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined,float-cast-ove
     third_party/ubasic/tokenizer.c kernel/lib/number.c kernel/lib/number_math.c -DM5OS_BOARD_TAB5=1 -Ikernel/include -lm -o "$OUT/test"
 "$OUT/test"
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined,float-cast-overflow -DM5OS_BOARD_TAB5=1 -Ikernel/include \
-    tools/basic/file_test.c user/basic/file.c user/basic/basic.c \
+    tools/basic/file_test.c fs/vfs/write_file.c user/basic/file.c user/basic/basic.c \
     third_party/ubasic/ubasic.c third_party/ubasic/tokenizer.c kernel/lib/number.c kernel/lib/number_math.c -DM5OS_BOARD_TAB5=1 -Ikernel/include -lm -o "$OUT/file_test"
 "$OUT/file_test"
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined,float-cast-overflow -DM5OS_BOARD_TAB5=1 -Ikernel/include \
-    tools/basic/editor_test.c user/edit/edit.c -lm -o "$OUT/editor_test"
+    tools/basic/editor_test.c fs/vfs/write_file.c user/edit/edit.c -lm -o "$OUT/editor_test"
 "$OUT/editor_test"
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined,float-cast-overflow \
     tools/basic/input_test.c user/basic/basic.c user/basic/console.c \
@@ -51,7 +51,7 @@ cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DM5OS_BOARD_T
     tools/basic/store_test.c fs/programs/store.c kernel/lib/crc32.c -o "$OUT/store_test"
 "$OUT/store_test"
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined,float-cast-overflow -DM5OS_BOARD_TAB5=1 -Ikernel/include \
-    tools/basic/program_fs_test.c fs/programs/store.c fs/programs/vfs.c kernel/lib/crc32.c \
+    tools/basic/program_fs_test.c fs/vfs/write_file.c fs/programs/store.c fs/programs/vfs.c kernel/lib/crc32.c \
     user/basic/file.c user/basic/basic.c third_party/ubasic/ubasic.c third_party/ubasic/tokenizer.c \
     kernel/lib/number.c kernel/lib/number_math.c -lm -o "$OUT/program_fs_test"
 "$OUT/program_fs_test"

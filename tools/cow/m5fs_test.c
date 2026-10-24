@@ -1,6 +1,8 @@
 #define _DEFAULT_SOURCE
 #include "../../fs/cow/blockdev.h"
 #include <m5os/fs.h>
+#include <m5os/vfs.h>
+#include <m5os/app.h>
 #include <m5os/kmalloc.h>
 #include <m5os/mutex.h>
 #include <m5os/errno.h>
@@ -11,8 +13,15 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
+static uint32_t allowed = APP_PERM_FS_READ | APP_PERM_FS_WRITE;
+bool task_has_perm(uint32_t p){return (allowed&p)==p;}
+task_t *task_current(void){return NULL;}
+uint32_t arch_irq_disable(void){return 0;}
+void arch_irq_restore(uint32_t flags){(void)flags;}
+const vfs_fs_t vfs_devfs={.name="test-dev"};
+void kprintf(const char *fmt,...){(void)fmt;}
 #define SECTORS 128u
-#define CAP (64u*COW_RECORD)
+#define CAP (96u*COW_RECORD)
 static unsigned char base_image[SECTORS*512];
 static unsigned char old_image[SECTORS*512],new_image[SECTORS*512];
 static unsigned char *disk;
@@ -71,9 +80,18 @@ static void run_child(int op,int cut){
     pid_t pid=fork();assert(pid>=0);
     if(!pid){
         struct cow c;blockdev_t bd;budget=cut;mount_overlay(&c,&bd);
-        fs_tx_backend_t backend={&c,begin,commit,recover_unused};
+        fs_tx_backend_t backend={.ctx=&c,.begin=begin,.commit=commit,.recover=recover_unused};
         assert(!fs_mount_atomic(&bd,0,&backend));
-        assert(!fs_transaction(execute,&op));_exit(0);
+        if(op<6)assert(!fs_transaction(execute,&op));
+        else {
+            assert(!vfs_mount("/",&vfs_m5fs,NULL));
+            unsigned char payload[32768];memset(payload,22,sizeof payload);
+            const char *path=op<8?"/home/seed":"/home/new";
+            size_t len=op==6?16384:op==9?sizeof payload:0,confirmed=99;
+            assert(!vfs_replace_file(path,payload,len,&confirmed)&&confirmed==len);
+            assert(!vfs_count_owned(0));
+        }
+        _exit(0);
     }
     int status;assert(waitpid(pid,&status,0)==pid);assert(WIFEXITED(status));
     assert(WEXITSTATUS(status)==0||WEXITSTATUS(status)==90);
@@ -96,7 +114,7 @@ int main(void){
     assert(!fs_format(&raw,0,SECTORS));assert(!fs_mount(&raw,0));
     write_file("/home/seed",11,600,FS_O_CREATE);assert(!fs_unmount());
     memcpy(old_image,base_image,sizeof old_image);unsigned cases=0;
-    for(int op=0;op<6;op++){
+    for(int op=0;op<10;op++){
         memset(disk,0,CAP);run_child(op,-1);struct cow c;blockdev_t bd;mount_overlay(&c,&bd);
         uint32_t bytes=c.committed;assert(bytes>0&&c.generation==1);
         for(unsigned i=0;i<SECTORS;i++)assert(!cow_read(&c,i,new_image+i*512));
@@ -108,5 +126,5 @@ int main(void){
             assert(!memcmp(base_image,old_image,sizeof old_image));cases++;
         }
     }
-    assert(!munmap(disk,CAP));printf("M5FS COW PASS: %u crash cases; create/grow/truncate/delete/mkdir/multiple-open; full recovered block image old-or-new\n",cases);
+    assert(!munmap(disk,CAP));printf("M5FS COW PASS: %u crash cases; create/grow/truncate/delete/mkdir/multiple-open/VFS-whole-file-save; full recovered block image old-or-new\n",cases);
 }

@@ -90,13 +90,7 @@ static void paint(writer *w,const char *path,const ime_view *view) {
     display_set_target(NULL);
 }
 static bool save(writer *w,const char *path) {
-    int fd=vfs_open(path,VFS_O_WRITE|VFS_O_CREATE|VFS_O_TRUNC);int rc=fd;
-    size_t total=0;
-    if(fd>=0) {
-        rc=0;
-        while(total<w->b.length) { int n=vfs_write(fd,w->b.text+total,w->b.length-total);if(n<=0){rc=-1;break;}total+=(size_t)n; }
-        int close=vfs_close(fd);if(close<0)rc=close;
-    }
+    int rc=vfs_replace_file(path,w->b.text,w->b.length,NULL);
     if(rc<0)ksnprintf(w->status,sizeof w->status,"保存に失敗しました (%d)",rc);
     else { w->b.modified=false;ksnprintf(w->status,sizeof w->status,"保存しました"); }
     return rc>=0;
