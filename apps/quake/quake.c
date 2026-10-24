@@ -26,7 +26,7 @@ char quake_basedir[96]="/sd";
 extern char _quake_data_start[],_quake_data_end[],_quake_bss_start[],_quake_bss_end[],_quake_common_start[],_quake_common_end[];
 static void *initial;
 static jmp_buf escape;
-static bool pending,screen;
+static bool pending,screen,controls_only;
 static uint16_t palette[256];
 static unsigned frames;
 static uint64_t began,profile_at;
@@ -132,6 +132,32 @@ void quake_main(void *arg) {
     paint_mask=0;paint_buttons(0,true);
     frames=0;began=hal_time_now_us();
     if(!setjmp(escape)) {
+        if(controls_only) {
+            display_draw_text(240,100,"QUAKE CONTROLS",COLOR_WHITE,COLOR_BLACK,3);
+            display_draw_text(240,160,"WASD MOVE / ARROWS TURN",COLOR_WHITE,COLOR_BLACK,2);
+            display_draw_text(240,200,"SPACE JUMP / CTRL OR F FIRE",COLOR_WHITE,COLOR_BLACK,2);
+            display_draw_text(240,240,"DRAG VIEW TO LOOK / E WEAPON",COLOR_WHITE,COLOR_BLACK,2);
+            display_draw_text(240,280,"EXIT BUTTON OR CTRL-C TO CLOSE",COLOR_WHITE,COLOR_BLACK,2);
+            kputs("quake controls: input preview; no game data needed\n");
+            bool ready=false;
+            for(;;) {
+                sample_inputs();int down,key;
+                while(quake_input_next(&down,&key)) {
+                    char line[64];ksnprintf(line,sizeof line,"KEY %d %s",key,down?"DOWN":"UP");
+                    display_fill_rect(240,400,700,32,COLOR_BLACK);
+                    display_draw_text(240,400,line,COLOR_WHITE,COLOR_BLACK,2);
+                    kprintf("quake controls: %s\n",line);
+                }
+                if(native_ready!=ready) {
+                    ready=native_ready;
+                    display_fill_rect(240,340,700,32,COLOR_BLACK);
+                    display_draw_text(240,340,ready?"KEYBOARD READY":"KEYBOARD WAITING",COLOR_WHITE,COLOR_BLACK,2);
+                    kprintf("quake controls: keyboard %s\n",ready?"ready":"waiting");
+                }
+                int dx,dy;quake_input_mouse(&dx,&dy);
+                task_sleep(20);
+            }
+        }
         quakeparms_t parms={0};parms.memsize=12*1024*1024;parms.membase=quake_malloc(parms.memsize);parms.basedir=quake_basedir;
         char *args[]={"quake","-basedir",quake_basedir,"-nosound","-nocdaudio",NULL};
         COM_InitArgv(5,args);parms.argc=com_argc;parms.argv=com_argv;
@@ -150,8 +176,9 @@ int quake_command(int argc,char **argv) {
     if(quake_owner||pending)return 1;
     if(argc>=2&&!strcmp(argv[1],"receive"))return quake_receive(argc,argv);
     if(argc==2&&!strcmp(argv[1],"verify"))return quake_verify();
-    if(argc>2||(argc==2&&strcmp(argv[1],"/sd"))){kputs("usage: quake [/sd]\n");return 1;}
-    vfs_info_t info;if(vfs_stat("/sd/id1/pak0.pak",&info)<0){kputs("quake: mount SD with /id1/pak0.pak first\n");return 1;}
+    controls_only=argc==2&&!strcmp(argv[1],"controls");
+    if(argc>2||(argc==2&&!controls_only&&strcmp(argv[1],"/sd"))){kputs("usage: quake [/sd|controls]\n");return 1;}
+    vfs_info_t info;if(!controls_only&&vfs_stat("/sd/id1/pak0.pak",&info)<0){kputs("quake: mount SD with /id1/pak0.pak first\n");return 1;}
     pending=true;uint32_t id;int rc=app_start("quake",&id);if(rc<0)pending=false;return rc<0;
 }
 #else

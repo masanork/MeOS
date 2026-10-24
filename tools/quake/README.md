@@ -133,3 +133,6 @@ errors or overflow clear held keys; release and press again to resume. Serial
 input remains supported with ANSI arrows and bounded holds; its single Escape
 uses a short sequence timeout. Physical keyboards use actual release events.
 The debug frame capture shortcut is serial P.
+
+Use `quake controls` for an asset-free physical input/layout preview. It uses the
+same input routing, shows the latest key edge, and exits via EXIT or Ctrl-C.

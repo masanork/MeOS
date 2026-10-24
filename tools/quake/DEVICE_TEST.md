@@ -53,3 +53,21 @@ termination, camera verification of LCD output and audio remain separate checks.
 The final FIRE/OK context mapping is a follow-up to the serial Enter qualification;
 it was also exercised through serial F to enter New Game, but physical finger
 interaction must not be inferred from that test.
+
+## Input revision and combined SD-root boot
+
+The follow-up visible rail controls and raw keyboard lease were integrated with
+`integration/tab5-sdroot` at d10b54b. The installed 16 GB card now contains the
+littlefs/COW-backed M5FS root from that separate work, so the earlier FAT PAK
+qualification does not apply to this card's current contents. No formatting was
+performed during input qualification. A new app-partition backup was retained
+outside the repository before replacing the installed image.
+
+The combined input image booted the existing persistent SD root. Asset-free
+`quake controls` started on the physical Tab5, logged `keyboard: game input
+active` and `quake controls: keyboard ready`. Serial W produced separate key 119
+down/up edges. Serial Ctrl-C exited normally and the production accessory driver
+logged `keyboard: text input restored`. These observations qualify the actual
+I2C mode handoff and serial path, not physical key presses, USB keyboards, finger
+hit targets or gameplay with this new input revision. Host tests cover matrix
+chords/releases, bounded event routing and normal HID/text restoration.
