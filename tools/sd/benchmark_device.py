@@ -24,19 +24,22 @@ with a.output.open('x') as log:
     def command(text,wait=5):
         log.write('\nSEND '+text+'\n');log.flush();s.write((text+'\r').encode());s.flush()
         return collect(wait)
+    started=False
     try:
         collect(10);state=command('sd status',2)
         if 'FAT: mounted' in state and 'not mounted' not in state:raise RuntimeError('card already mounted; close apps and unmount before running benchmark')
         mounted=command('sd mount',5)
         if 'mounted /sd read/write' not in mounted:raise RuntimeError('read/write mount failed')
         s.write(f'sd bench {a.files} {a.small_bytes} {a.large_mib}\r'.encode());s.flush()
+        started=True
         # All five phases are bounded in firmware; retain complete output even on failure.
-        text='';end=time.monotonic()+1800
+        text='';end=time.monotonic()+3300
         while time.monotonic()<end:
             text+=collect(10,until='SDBENCH PASS')
             if 'SDBENCH PASS' in text or 'SDBENCH FAIL' in text or 'sd bench: failed' in text:break
         collect(1)
         command('sd unmount',3)
+        started=False
         command('mem',2);command('ps',2);command('sd status',2)
         if 'SDBENCH PASS verified=1 cleaned=1' not in text:raise RuntimeError('benchmark failed; see retained directory in log')
         phases=[]
@@ -50,4 +53,10 @@ with a.output.open('x') as log:
                     transport='bit-banged SPI, CMD17/CMD24',mode='VFS write-through; content verification included in reads',phases=phases)
         a.output.with_suffix('.json').write_text(json.dumps(result,indent=2)+'\n')
         print('DEVICE_BENCHMARK_PASS',flush=True)
+    except BaseException:
+        if started:
+            try:
+                s.write(b'\x03');s.flush();collect(3);command('sd unmount',3)
+            except Exception:pass
+        raise
     finally:s.close()
