@@ -411,3 +411,5 @@ log capture. These are end-to-end, write-through VFS measurements on SPI.
 See [tools/common/README.md](tools/common/README.md) for this branch's application work, validation and limitations.
 
 See [user/basic/README.md](user/basic/README.md) for this branch's application work, validation and limitations.
+
+See [user/scheme/README.md](user/scheme/README.md) for this branch's application work, validation and limitations.
