@@ -17,6 +17,7 @@
  * Panel-specific values (init sequence, video timing) are from M5Stack's board support package.
  */
 #include <string.h>
+#include "sdkconfig.h"
 #include <m5os/display.h>
 #include <m5os/board.h>
 #include <m5os/hal_gpio.h>
@@ -42,7 +43,7 @@
 #define PANEL_W            720          /* physical, portrait */
 #define PANEL_H            1280
 #define BYTES_PER_PIXEL    2
-#define CACHE_LINE         64u          /* ESP32-P4 L2 cache line */
+#define CACHE_LINE         CONFIG_CACHE_L2_CACHE_LINE_SIZE
 #define GLYPH_SIZE         8
 
 #define DSI_LANES          2
@@ -494,8 +495,30 @@ void display_draw_indexed_bitmap_prefix(int x,int y,int w,int h,const uint8_t *i
     }
 }
 
+uint32_t display_scanout_count(void){return s_frames;}
+
 bool display_is_ready(void) { return s_fb && s_frames; }
 
 void display_draw_indexed_bitmap_resized(int x,int y,int w,int h,const uint8_t *indices,
     const uint16_t palette[256],int dw,int dh)
 { display_draw_indexed_bitmap_prefix(x,y,w,h,indices,palette,dw,dh,dh); }
+
+void display_draw_indexed_viewport_delta(int x,const uint8_t *pixels,uint8_t *previous,
+    const uint16_t palette[256],bool force){
+    if(!s_fb||s_draw!=s_fb)return;
+    uint64_t start=hal_time_now_us();int first,last;
+    bool changed=tab5_indexed_viewport_delta(s_draw,x,pixels,previous,palette,force,&first,&last);
+    uint64_t copied=hal_time_now_us();
+    if(changed)fb_flush_rows(DISPLAY_WIDTH-1-last,DISPLAY_WIDTH-1-first);
+    s_copy_us=(uint32_t)(copied-start);s_flush_us=(uint32_t)(hal_time_now_us()-copied);
+}
+
+#if M5OS_QUAKE
+#include "ppa_tab5.h"
+bool display_smooth_begin(uint32_t owner){return s_draw==s_fb&&tab5_ppa_begin(owner,s_fb);}
+bool display_smooth_present(const uint8_t *pixels,const uint16_t palette[256]){
+    uint64_t start=hal_time_now_us();bool ok=tab5_ppa_present(pixels,palette);
+    s_copy_us=(uint32_t)(hal_time_now_us()-start);s_flush_us=0;return ok;
+}
+void display_smooth_end(uint32_t owner){tab5_ppa_end(owner);}
+#endif

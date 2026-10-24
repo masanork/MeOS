@@ -21,10 +21,14 @@
 #include "esp_rom_gpio.h"
 #include "esp_cache.h"
 #include <string.h>
+#include "sdkconfig.h"
+#define AUDIO_ALIGN CONFIG_CACHE_L2_CACHE_LINE_SIZE
 #define CH 2
 #define BLOCKS 8
 #define FRAMES 512
-typedef struct { dma_descriptor_t d; uint8_t pad[64-sizeof(dma_descriptor_t)]; } __attribute__((aligned(64))) cache_desc_t;
+typedef struct { dma_descriptor_t d; uint8_t pad[AUDIO_ALIGN-sizeof(dma_descriptor_t)]; } __attribute__((aligned(AUDIO_ALIGN))) cache_desc_t;
+_Static_assert(sizeof(cache_desc_t)==AUDIO_ALIGN,"one descriptor per hardware cache line");
+_Static_assert((FRAMES*4)%AUDIO_ALIGN==0,"PCM blocks must span complete cache lines");
 static cache_desc_t s_desc[BLOCKS];
 static int16_t *s_pcm;
 static void *s_allocation;
@@ -113,14 +117,14 @@ static void worker(void *arg)
         }
         for (unsigned n = 0; n < BLOCKS; n++) {
             unsigned i = s_next;
-            esp_cache_msync(&s_desc[i], 64, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+            esp_cache_msync(&s_desc[i], AUDIO_ALIGN, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
             volatile dma_descriptor_t *d = &s_desc[i].d;
             if (d->dw0.owner) break;
             s_render(s_pcm + i * FRAMES * 2, FRAMES, s_arg);
             __asm__ volatile("fence iorw,iorw" ::: "memory");
             esp_cache_msync(s_pcm + i*FRAMES*2, FRAMES*4, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
             d->dw0.owner = 1;
-            esp_cache_msync(&s_desc[i], 64, ESP_CACHE_MSYNC_FLAG_DIR_C2M); s_blocks++; s_next = (i + 1) % BLOCKS;
+            esp_cache_msync(&s_desc[i], AUDIO_ALIGN, ESP_CACHE_MSYNC_FLAG_DIR_C2M); s_blocks++; s_next = (i + 1) % BLOCKS;
         }
         mutex_unlock(&s_playback_lock);
     }
@@ -164,9 +168,9 @@ bool audio_open(uint32_t owner, audio_render_t render, void *arg)
         s_task = true;
     }
     stage=4;
-    s_allocation = kmalloc_internal(BLOCKS * FRAMES * 4 + 63);
+    s_allocation = kmalloc_internal(BLOCKS * FRAMES * 4 + AUDIO_ALIGN-1);
     if (!s_allocation) goto fail;
-    s_pcm = (int16_t *)(((uintptr_t)s_allocation+63)&~(uintptr_t)63);
+    s_pcm = (int16_t *)(((uintptr_t)s_allocation+AUDIO_ALIGN-1)&~(uintptr_t)(AUDIO_ALIGN-1));
     s_owner = owner; s_render = render; s_arg = arg; s_blocks = s_errors = 0;
     start_dma(); s_busy = true;
     task_sleep(30);

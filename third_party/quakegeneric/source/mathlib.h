@@ -33,6 +33,15 @@ typedef	int	fixed16_t;
 
 struct mplane_s;
 
+/* Rasterizer inputs already have float precision and an int-range result.
+ * Truncation plus a positive-fraction correction is exactly ceil here, without
+ * promoting to software double or calling libm on a single-precision FPU. */
+static inline int Q_CeilFloatToInt(float value)
+{
+    int whole = (int)value;
+    return whole + (value > (float)whole);
+}
+
 extern vec3_t vec3_origin;
 extern	int nanmask;
 

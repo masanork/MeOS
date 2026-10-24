@@ -17,7 +17,7 @@ if("$ENV{M5OS_BOARD}" STREQUAL "tab5" AND "$ENV{M5OS_DOOM}" STREQUAL "1")
 endif()
 
 if("$ENV{M5OS_QUAKE}" STREQUAL "1")
-    list(APPEND SDKCONFIG_DEFAULTS "sdkconfig.defaults.doom")
+    list(APPEND SDKCONFIG_DEFAULTS "sdkconfig.defaults.doom" "sdkconfig.defaults.quake")
 endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)

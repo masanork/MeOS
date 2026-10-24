@@ -45,17 +45,23 @@ static inline void tab5_copy_column(uint16_t *dst,const uint16_t *src,unsigned p
 /* Cache-friendly 320x200 -> 960x720 path: read eight adjacent source
  * columns together, then expand from a small SRAM tile. This avoids repeatedly
  * fetching the same external-RAM cache lines through a strided source walk. */
-static inline void tab5_indexed_viewport(uint16_t *fb,int x,const uint8_t *indices,
-                                       const uint16_t palette[256],unsigned output_rows)
+static inline void tab5_indexed_viewport_spans(uint16_t *fb,int x,const uint8_t *indices,
+                                       const uint16_t palette[256],unsigned output_rows,
+                                       const uint8_t *first,const uint8_t *last)
 {
     uint16_t tile[8][200];
     uint32_t column[360] __attribute__((aligned(16)));
     for(unsigned bx=0;bx<320;bx+=8) {
+        if(first){bool any=false;for(unsigned c=0;c<8;c++)if(first[bx+c]<200)any=true;if(!any)continue;}
         for(unsigned sy=0;sy<200;sy++) {
             const uint8_t *in=indices+sy*320+bx;
             for(unsigned c=0;c<8;c++) tile[c][sy]=palette[in[c]];
         }
         for(unsigned c=0;c<8;c++) {
+            if(first&&first[bx+c]>=200)continue;
+            unsigned start=first?((unsigned)first[bx+c]*18+4)/5:0;
+            unsigned end=last?(((unsigned)last[bx+c]+1)*18+4)/5:output_rows;
+            if(end>output_rows)end=output_rows;
             uint32_t *out=column;
             for(unsigned sy=0;sy<200;sy+=5) {
                 uint32_t a=tile[c][sy],b=tile[c][sy+1],v=tile[c][sy+2],d=tile[c][sy+3],e=tile[c][sy+4];
@@ -67,10 +73,32 @@ static inline void tab5_indexed_viewport(uint16_t *fb,int x,const uint8_t *indic
             }
             for(unsigned repeat=0;repeat<3;repeat++) {
                 unsigned logical=(unsigned)x+(bx+c)*3+repeat;
-                tab5_copy_column(fb+(DISPLAY_WIDTH-1-logical)*DISPLAY_HEIGHT,(const uint16_t *)column,output_rows);
+                tab5_copy_column(fb+(DISPLAY_WIDTH-1-logical)*DISPLAY_HEIGHT+start,(const uint16_t *)column+start,end-start);
             }
         }
     }
+}
+static inline void tab5_indexed_viewport(uint16_t *fb,int x,const uint8_t *indices,
+                                       const uint16_t palette[256],unsigned output_rows)
+{ tab5_indexed_viewport_spans(fb,x,indices,palette,output_rows,NULL,NULL); }
+/* Exact damage tracking: palette changes repaint everything; unchanged indices
+ * retain the previous framebuffer pixels. Source row bounds map to the same
+ * floor(dest_y*200/720) sampling as the full blitter, including partial rows. */
+static inline bool tab5_indexed_viewport_delta(uint16_t *fb,int x,const uint8_t *pixels,
+    uint8_t *previous,const uint16_t palette[256],bool force,int *first_col,int *last_col)
+{
+    if(!fb||!pixels||!previous||!palette||x<0||x>DISPLAY_WIDTH-960)return false;
+    uint8_t first[320],last[320];memset(first,200,sizeof first);memset(last,0,sizeof last);
+    if(force){memset(first,0,sizeof first);memset(last,199,sizeof last);memcpy(previous,pixels,64000);}
+    else for(unsigned y=0;y<200;y++)for(unsigned col=0;col<320;col++){
+        unsigned at=y*320+col;uint8_t p=pixels[at];
+        if(previous[at]!=p){if(first[col]==200)first[col]=(uint8_t)y;last[col]=(uint8_t)y;previous[at]=p;}
+    }
+    unsigned left=320,right=0;
+    for(unsigned col=0;col<320;col++)if(first[col]<200){if(left==320)left=col;right=col;}
+    if(left==320)return false;
+    tab5_indexed_viewport_spans(fb,x,pixels,palette,720,first,last);
+    *first_col=x+(int)left*3;*last_col=x+(int)right*3+2;return true;
 }
 /* A source column is expanded once into SRAM, then copied to repeated physical
  * columns in bulk. In particular 320->960 does not repeat palette lookup three

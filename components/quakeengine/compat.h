@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <stdint.h>
+#include "profile.h"
 
 #ifndef QUAKE_COMPAT_DECLARATIONS_ONLY
 #undef stdin

@@ -40,7 +40,7 @@ def main():
         (build / 'data/id1/pak0.pak').symlink_to(pak)
         (build / 'esp_attr.h').write_text('#pragma once\n#define EXT_RAM_BSS_ATTR\n')
         (build / 'socket.h').write_text('#include <sys/socket.h>\n#include <netinet/in.h>\n#include <arpa/inet.h>\n')
-        flags = shlex.split(os.environ.get('CC', 'cc')) + ['-O1', '-g', '-fsanitize=address', '-w', '-fno-builtin',
+        flags = shlex.split(os.environ.get('CC', 'cc')) + ['-O1', '-g', '-fsanitize=address', '-w', '-fno-builtin', '-DMEOS_QUAKE_PROFILE=1',
             '-I' + str(build), '-I' + str(ROOT / 'kernel/include'), '-I' + str(ROOT / 'third_party/quakegeneric/source')]
         component = ROOT / 'components/quakeengine'
         sources = [ROOT / 'third_party/quakegeneric/source' / n for n in re.findall(r'\$\{QROOT\}/(\w+\.c)', (component / 'CMakeLists.txt').read_text())]
@@ -52,7 +52,7 @@ def main():
             objects.append(str(obj))
         binary = build / 'quake'
         subprocess.run(flags + ['-DM5OS_BOARD_TAB5=1', '-DM5OS_QUAKE=1', str(ROOT / 'tools/quake/headless.c'),
-            str(ROOT / 'apps/quake/libc.c'), str(ROOT / 'kernel/lib/number.c'), *objects, '-lm', '-o', str(binary)], check=True)
+            str(ROOT / 'apps/quake/libc.c'), str(ROOT / 'apps/quake/profile.c'), str(ROOT / 'kernel/lib/number.c'), *objects, '-lm', '-o', str(binary)], check=True)
         subprocess.run([str(binary), str(build / 'data'), str(output)], check=True, timeout=120)
         if not output.is_file():
             raise RuntimeError('engine did not capture a frame')

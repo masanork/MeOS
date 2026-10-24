@@ -152,4 +152,16 @@ endif()
 # littlefs is used through explicit static caches; never calls newlib allocation/logging.
 file(GLOB M5OS_LITTLEFS_SRCS ${M5OS_ROOT}/third_party/littlefs/*.c)
 set_source_files_properties(${M5OS_LITTLEFS_SRCS} PROPERTIES COMPILE_DEFINITIONS
-    "LFS_NO_MALLOC;LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR;LFS_NO_ASSERT" COMPILE_OPTIONS "-O2")
+    "LFS_THREADSAFE;LFS_NO_MALLOC;LFS_NO_DEBUG;LFS_NO_WARN;LFS_NO_ERROR;LFS_NO_ASSERT" COMPILE_OPTIONS "-O2")
+
+# Quake uses the same rotated/indexed LCD hot path as Doom. Keep non-game builds
+# unchanged; the default SDK debug choice must not de-optimize this game path.
+if("$ENV{M5OS_QUAKE}" STREQUAL "1")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE MEOS_QUAKE_PROFILE=1)
+    set_source_files_properties(${M5OS_ROOT}/drivers/lcd/display_tab5.c ${M5OS_ROOT}/drivers/lcd/ppa_tab5.c
+        PROPERTIES COMPILE_OPTIONS "-O3;-funroll-loops;-fno-builtin")
+    set_source_files_properties(${M5OS_ROOT}/apps/quake/quake.c ${M5OS_ROOT}/apps/quake/libc.c
+        ${M5OS_ROOT}/apps/quake/input.c ${M5OS_ROOT}/hal/common/i2c_bitbang.c
+        ${M5OS_ROOT}/hal/common/gpio_basic.c
+        PROPERTIES COMPILE_OPTIONS "-O2;-fno-builtin")
+endif()

@@ -66,6 +66,9 @@ bool rootfs_mount(blockdev_t *sd)
     int rc = vfs_mount("/", &vfs_m5fs, NULL);
     if (rc != ERR_OK) return false;
     s_persistent = persistent;
+#if defined(M5OS_BOARD_TAB5)
+    if(sdroot_active())kprintf("sdroot: assets mount %d\n",sdroot_assets_mount());
+#endif
     kprintf("rootfs: M5FS on %s mounted at /\n", persistent ? "SD card (persistent)" : "RAM disk (volatile)");
 
     if (!persistent) {

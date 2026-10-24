@@ -51,3 +51,20 @@ bool display_is_ready(void); /* Tab5 framebuffer allocated and scanout active */
 
 void display_last_present_times(uint32_t *copy_us,uint32_t *flush_us);
 void display_draw_indexed_bitmap_prefix(int x,int y,int source_w,int source_h,const uint8_t *indices,const uint16_t palette[256],int dest_w,int dest_h,int clip_rows);
+
+#if M5OS_BOARD_TAB5
+uint32_t display_scanout_count(void); /* hardware refresh interrupts, wraps naturally */
+#endif
+
+#if M5OS_BOARD_TAB5
+/* Exclusive-display client supplies a 64,000-byte previous-index buffer.
+ * force is required after palette changes or external writes to the viewport. */
+void display_draw_indexed_viewport_delta(int x,const uint8_t *pixels,uint8_t *previous,
+    const uint16_t palette[256],bool force);
+#endif
+
+#if M5OS_BOARD_TAB5 && M5OS_QUAKE
+bool display_smooth_begin(uint32_t owner);
+bool display_smooth_present(const uint8_t *pixels,const uint16_t palette[256]);
+void display_smooth_end(uint32_t owner);
+#endif

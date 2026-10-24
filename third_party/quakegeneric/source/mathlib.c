@@ -351,7 +351,15 @@ void CrossProduct (vec3_t v1, vec3_t v2, vec3_t cross)
 	cross[2] = v1[0]*v2[1] - v1[1]*v2[0];
 }
 
-double sqrt(double x);
+/* Vector inputs and results are FP32. Use the hardware FP32 square root
+ * rather than promoting each normalization through software double math. */
+static float VectorSqrt(float x) {
+#if defined(__GNUC__)
+    return __builtin_sqrtf(x);
+#else
+    return (float)sqrt((double)x);
+#endif
+}
 
 vec_t Length(vec3_t v)
 {
@@ -361,7 +369,7 @@ vec_t Length(vec3_t v)
 	length = 0;
 	for (i=0 ; i< 3 ; i++)
 		length += v[i]*v[i];
-	length = sqrt (length);		// FIXME
+	length = VectorSqrt(length);		// FIXME
 
 	return length;
 }
@@ -371,7 +379,7 @@ float VectorNormalize (vec3_t v)
 	float	length, ilength;
 
 	length = v[0]*v[0] + v[1]*v[1] + v[2]*v[2];
-	length = sqrt (length);		// FIXME
+	length = VectorSqrt(length);		// FIXME
 
 	if (length)
 	{

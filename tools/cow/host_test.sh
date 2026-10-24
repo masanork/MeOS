@@ -20,7 +20,7 @@ ${CC:-cc} -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -pthrea
 "$OUT/atomic_test"
 
 ${CC:-cc} -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined \
-    -DM5OS_BOARD_TAB5=1 -DLFS_NO_MALLOC -DLFS_NO_DEBUG -DLFS_NO_WARN -DLFS_NO_ERROR -DLFS_NO_ASSERT \
+    -DM5OS_BOARD_TAB5=1 -DLFS_THREADSAFE -DLFS_NO_MALLOC -DLFS_NO_DEBUG -DLFS_NO_WARN -DLFS_NO_ERROR -DLFS_NO_ASSERT \
     -Ikernel/include tools/cow/sdroot_test.c third_party/littlefs/lfs.c third_party/littlefs/lfs_util.c \
     fs/cow/cow.c fs/cow/store.c fs/cow/blockdev.c fs/m5fs/m5fs.c kernel/lib/crc32.c -o "$OUT/sdroot_test"
 "$OUT/sdroot_test"
