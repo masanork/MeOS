@@ -3,6 +3,7 @@
 #include <m5os/sdroot.h>
 #include <m5os/sdcard.h>
 #include <m5os/fat.h>
+#include <m5os/hal_gpio.h>
 #include <m5os/kmalloc.h>
 #include <m5os/kprintf.h>
 #include <m5os/errno.h>
@@ -45,7 +46,14 @@ static int disk_sync(const struct lfs_config *c) {
     sdcard_status_t st;sdcard_status(&st);return st.ready?0:LFS_ERR_IO;
 }
 static int prepare(void) {
-    sd=sdcard_probe();if(!sd)return ERR_NODEV;
+    sd=NULL;
+    for(unsigned attempt=0;attempt<3;attempt++) {
+        sd=sdcard_probe();if(sd)break;
+        sdcard_status_t st;sdcard_status(&st);
+        kprintf("sdroot: probe %u failed: %s (R1=0x%02x)\n",attempt+1,st.detail,st.last_r1);
+        if(attempt<2)hal_delay_us(100000);
+    }
+    if(!sd)return ERR_NODEV;
     cfg=(struct lfs_config){.read=disk_read,.prog=disk_prog,.erase=disk_erase,.sync=disk_sync,
         .read_size=512,.prog_size=512,.block_size=ERASE_BYTES,.block_count=sd->block_count/8,
         .block_cycles=500,.cache_size=512,.lookahead_size=sizeof lookahead,
