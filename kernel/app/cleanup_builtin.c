@@ -1,4 +1,8 @@
 #include <m5os/app_cleanup.h>
+#if M5OS_DOOM
+#include <m5os/doom.h>
+static int stop_doom(uint32_t id) { doom_app_cleanup(id); return ERR_OK; }
+#endif
 #include <m5os/board_config.h>
 #include <m5os/errno.h>
 #include <m5os/kernel.h>
@@ -24,6 +28,10 @@ void app_cleanup_register_builtins(void)
 #if M5OS_BOARD_TAB5
     add("player",stop_player);
     add("microphone",stop_microphone); add("audio",stop_audio);
+#endif
+
+#if M5OS_DOOM
+    add("doom",stop_doom);
 #endif
     add("windows",close_windows); add("files",close_files); add("wasm",close_wasm);
     app_cleanup_seal();
