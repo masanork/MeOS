@@ -200,6 +200,11 @@ simulator stops after a selection instead of launching firmware-only apps.
 `sh tools/sim/home_test.sh` captures the initial, Scheme-selected and
 Camera-selected frames and verifies keyboard navigation and clean Shell exit.
 
+`sh tools/sim/scheme_ui_test.sh` opens Scheme's 24px BIZ UD workspace, captures
+the BIZ UD F2 minibuffer, evaluates `(sqrt 81)`, and verifies that the REPL result
+changes the rendered frame. Scheme and Write share the same proportional inline
+preedit and two-column candidate-popup renderer.
+
 ## Repeated application handoff
 
 `sh tools/sim/handoff_test.sh` alternates Scheme and the writing editor three times

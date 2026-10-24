@@ -19,4 +19,9 @@ PY
 binary=$(M5OS_SIM_SANITIZE=1 sh tools/sim/build.sh)
 "$binary" --write --headless --workspace "$result/work" --screenshots "$result/shots" --source /home/note.txt --replay "$result/keys.txt"
 cmp "$result/expected.txt" "$result/work/home/note.txt"
+for shot in initial candidates saved; do test -s "$result/shots/$shot.bmp"; done
+cmp -s "$result/shots/initial.bmp" "$result/shots/candidates.bmp" && {
+    echo "Writing editor IME candidate frame did not change" >&2
+    exit 1
+}
 printf 'Writing editor UTF-8 save / IME replay PASS: %s\n' "$result"

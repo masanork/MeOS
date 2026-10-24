@@ -63,7 +63,11 @@ void display_release_claim(const void *owner)
     claimed = false;
     releases++;
 }
-void display_set_target(uint16_t *p) { assert(!p); }
+void display_set_target(uint16_t *p) { (void)p; }
+void display_present(int x, int y, int w, int h)
+{
+    assert(x >= 0 && y >= 0 && x + w <= 1280 && y + h <= 720);
+}
 bool fbcon_is_paused(void) { return paused; }
 void fbcon_pause(bool value) { paused = value; }
 int fbcon_cell_px(void) { return 16; }
@@ -104,12 +108,57 @@ void display_draw_line(int a, int b, int c, int d, uint16_t color)
     graph_lines++;
 }
 void ime_clear_anchor(void) {}
+void ime_set_app_view(bool enabled) { (void)enabled; }
+bool ime_read_view(ime_view *view)
+{
+    memset(view, 0, sizeof *view);
+    return true;
+}
 void ime_set_anchor(int x, int y)
 {
     assert(x >= 0 && x < 80 && y >= 0 && y < 45);
     anchors++;
 }
 const char *ime_status(void) { return "hiragana"; }
+bool bizud_begin(void) { return true; }
+void bizud_end(void) {}
+uint32_t bizud_decode(const char **text)
+{
+    const unsigned char *p = (const unsigned char *)*text;
+    uint32_t cp = *p++;
+    unsigned n = cp >= 0xf0 ? 3 : cp >= 0xe0 ? 2 : cp >= 0xc2 ? 1 : 0;
+    if (n) {
+        cp &= (1u << (6 - n)) - 1;
+        while (n--) cp = (cp << 6) | (*p++ & 63);
+    }
+    *text = (const char *)p;
+    return cp;
+}
+int bizud_width(uint32_t cp) { return cp < 128 ? 14 : 24; }
+int bizud_draw(int x, int baseline, uint32_t cp, uint16_t fg, uint16_t bg)
+{
+    (void)baseline; (void)fg; (void)bg;
+    return x + bizud_width(cp) <= 1280 ? bizud_width(cp) : 0;
+}
+int bizud_text(int x, int baseline, const char *text, int right, uint16_t fg, uint16_t bg)
+{
+    (void)baseline; (void)fg; (void)bg;
+    assert(scheme_utf8_text(text, strlen(text)));
+    while (*text) {
+        int width = bizud_width(bizud_decode(&text));
+        if (x + width > right) break;
+        x += width;
+    }
+    return x;
+}
+bizime_point bizime_draw(const ime_view *view, int x, int baseline,
+                         int left, int right, int top, int bottom, int pitch,
+                         uint16_t fg, uint16_t bg, uint16_t accent)
+{
+    (void)view; (void)left; (void)right; (void)top; (void)bottom;
+    (void)pitch; (void)fg; (void)bg; (void)accent;
+    return (bizime_point){x, baseline};
+}
 int vfs_stat(const char *p, vfs_info_t *info)
 {
     (void)p;
@@ -179,8 +228,8 @@ int main(void)
     eval_source(i, false);
     assert(i->graph && i->points == 129);
     assert(!strcmp(i->plot_title, "減衰振動"));
-    draw(i);
-    assert(graph_lines > 100 && anchors);
+    draw(i, NULL);
+    assert(graph_lines > 100);
     /* Scheme procedures can become M-x commands and modify the editor. */
     evaluate(i, "(define (挨拶) (insert-text! \"こんにちは\"))", false);
     script("挨\t\r");
@@ -222,9 +271,9 @@ int main(void)
     /* Escape-x survives decoding; arrows and cancellation remain separate. */
     script("\x1b"
            "x\x1b[D\x07");
-    assert(key(i) == META_X);
-    assert(key(i) == DQK_LEFT);
-    assert(key(i) == CTRL('g'));
+    assert(key(i, 0) == META_X);
+    assert(key(i, 0) == DQK_LEFT);
+    assert(key(i, 0) == CTRL('g'));
     /* Minibuffer handles committed Japanese UTF-8 and removes whole characters. */
     char mini[32] = "";
     script("日本語\x7f\r");
@@ -269,9 +318,9 @@ int main(void)
     assert(!load(i, "/home/large.scm", false));
     double x[2] = {0, 1}, y[2] = {-1e100, 1e100};
     plot(i, x, y, 2, "大きな数");
-    draw(i);
+    draw(i, NULL);
     i->buffer.cursor = i->buffer.length;
-    draw(i);
+    draw(i, NULL);
     free(i->workspace);
     free(i);
     /* Startup failures report failure without leaving the console/display held. */

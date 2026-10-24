@@ -1,6 +1,8 @@
 #include <m5os/board_config.h>
 #if M5OS_BOARD_TAB5
 #include "../../drivers/lcd/fbcon.h"
+#include "../../drivers/lcd/bizud.h"
+#include "../editor/bizime.h"
 #include "../tui/dqwin.h"
 #include "buffer.h"
 #include "ide.h"
@@ -19,6 +21,19 @@
 #define CTRL(c) ((c) - 'a' + 1)
 #define LOG_LINES 7
 #define META_X 0x200
+#define UI_BG RGB565(248,247,242)
+#define UI_FG RGB565(36,39,42)
+#define UI_ACCENT RGB565(25,85,115)
+#define UI_COMMENT RGB565(55,110,75)
+#define UI_STRING RGB565(145,70,55)
+#define UI_LEFT 36
+#define UI_RIGHT (DISPLAY_WIDTH-36)
+#define UI_HEADER_BASE 36
+#define UI_BODY_BASE 82
+#define UI_PITCH 34
+#define UI_BODY_ROWS 12
+#define UI_REPL_TOP 500
+#define UI_REPL_LINES 3
 static const char *const command_names[] = {
     "eval-buffer", "eval-last-sexp",    "eval-expression",      "save-buffer",        "find-file",
     "undo",        "reset-environment", "delete-other-windows", "split-window-right", "quit",
@@ -38,6 +53,9 @@ typedef struct {
     unsigned char pending[256];
     double xs[129], ys[129];
     char staging[SCHEME_SOURCE_CAP + 1];
+    size_t starts[SCHEME_SOURCE_CAP + 2];
+    int visual_rows;
+    uint16_t *frame;
 } ide;
 static const char demo[] = "; Scheme workspace / 日本語入力: Ctrl-Space\n"
                            "; C-x C-b: evaluate buffer    F2: REPL\n"
@@ -111,7 +129,7 @@ static bool cancelled(void *ctx)
     return false;
 }
 static int raw(ide *, unsigned);
-static int key(ide *);
+static int key(ide *, unsigned);
 static bool minibuffer(ide *, const char *, char *, size_t);
 static bool insert_text(void *ctx, const char *text)
 {
@@ -155,32 +173,116 @@ static void vertical(ide *i, int delta)
         p = scheme_buffer_next(b, p);
     b->cursor = p;
 }
+static uint32_t source_cp(const scheme_buffer *b, size_t p)
+{
+    const char *text = b->text + p;
+    return bizud_decode(&text);
+}
+
+static int source_advance(const scheme_buffer *b, size_t p)
+{
+    uint32_t cp = source_cp(b, p);
+    return cp == '\t' ? 48 : cp == '\r' ? 0 : bizud_width(cp);
+}
+
+static void source_layout(ide *i, int right)
+{
+    scheme_buffer *b = &i->buffer;
+    int x = UI_LEFT;
+    i->visual_rows = 1;
+    i->starts[0] = 0;
+    for (size_t p = 0; p < b->length;) {
+        uint32_t cp = source_cp(b, p);
+        int advance = source_advance(b, p);
+        if (cp != '\n' && x + advance > right) {
+            i->starts[i->visual_rows++] = p;
+            x = UI_LEFT;
+        }
+        p = scheme_buffer_next(b, p);
+        if (cp == '\n') {
+            i->starts[i->visual_rows++] = p;
+            x = UI_LEFT;
+        } else
+            x += advance;
+    }
+    i->starts[i->visual_rows] = b->length;
+}
+
+static int source_cursor_row(ide *i)
+{
+    int row = 0;
+    while (row + 1 < i->visual_rows && i->starts[row + 1] <= i->buffer.cursor) row++;
+    return row;
+}
+
+static int source_cursor_x(ide *i, int row)
+{
+    int x = UI_LEFT;
+    for (size_t p = i->starts[row]; p < i->buffer.cursor; p = scheme_buffer_next(&i->buffer, p))
+        x += source_advance(&i->buffer, p);
+    return x;
+}
+
+static void syntax_state(const scheme_buffer *b, size_t at, bool *string, bool *escape, bool *comment)
+{
+    *string = *escape = *comment = false;
+    for (size_t p = start(b, at); p < at; p++) {
+        char c = b->text[p];
+        if (*comment) continue;
+        if (*escape) { *escape = false; continue; }
+        if (*string && c == '\\') { *escape = true; continue; }
+        if (c == '"') *string = !*string;
+        else if (!*string && c == ';') *comment = true;
+    }
+}
+
+static void draw_source_row(ide *i, int row, int baseline, int right)
+{
+    scheme_buffer *b = &i->buffer;
+    int x = UI_LEFT;
+    bool string, escape, comment;
+    syntax_state(b, i->starts[row], &string, &escape, &comment);
+    for (size_t p = i->starts[row]; p < i->starts[row + 1]; p = scheme_buffer_next(b, p)) {
+        uint32_t cp = source_cp(b, p);
+        if (cp == '\n') break;
+        int advance = source_advance(b, p);
+        uint16_t color = comment ? UI_COMMENT : string ? UI_STRING : UI_FG;
+        if (!comment && !string && (cp == '(' || cp == ')' || cp == '\'')) color = UI_ACCENT;
+        if (cp == '\t') {
+            x += advance;
+            continue;
+        }
+        if (x + advance > right) break;
+        bizud_draw(x, baseline, cp, color, UI_BG);
+        x += advance;
+        if (!comment) {
+            if (escape) escape = false;
+            else if (string && cp == '\\') escape = true;
+            else if (cp == '"') string = !string;
+            else if (!string && cp == ';') comment = true;
+        }
+    }
+}
+
 static void draw_graph(ide *i, int left, int top, int width, int height)
 {
-    int cell = fbcon_cell_px(), x0 = (left + 1) * cell, y0 = (top + 2) * cell,
-        w = (width - 2) * cell, h = (height - 4) * cell;
-    dq_text(left + 1, top, i->graph ? i->plot_title : "*plot* / 関数グラフ");
+    bizud_text(left + 14, top + 28, i->graph ? i->plot_title : "*plot* / 関数グラフ",
+               left + width - 14, UI_ACCENT, UI_BG);
+    int x0 = left + 14, y0 = top + 46, w = width - 28, h = height - 82;
     if (!i->graph || i->points < 2) {
-        dq_text(left + 1, top + 3, "(plot wave 0 30)");
+        bizud_text(x0, y0 + 34, "(plot wave 0 30)", left + width - 14, UI_FG, UI_BG);
         return;
     }
     double lo = i->ys[0], hi = lo;
     for (unsigned p = 1; p < i->points; p++) {
-        if (i->ys[p] < lo)
-            lo = i->ys[p];
-        if (i->ys[p] > hi)
-            hi = i->ys[p];
+        if (i->ys[p] < lo) lo = i->ys[p];
+        if (i->ys[p] > hi) hi = i->ys[p];
     }
-    /* Normalise before subtracting to avoid overflowing large finite ranges. */
     double scale = fmax(fabs(lo), fabs(hi));
-    if (scale < 1)
-        scale = 1;
+    if (scale < 1) scale = 1;
     double low = lo / scale, range = hi / scale - low;
-    if (range < 1e-12) {
-        low -= .5;
-        range = 1;
-    }
-    display_draw_rect(x0, y0, w, h, COLOR_GRAY);
+    if (range < 1e-12) { low -= .5; range = 1; }
+    display_draw_rect(x0, y0, w, h, UI_ACCENT);
     if (low <= 0 && low + range >= 0) {
         int y = y0 + h - 1 - (int)((-low) / range * (h - 1));
         display_draw_line(x0, y, x0 + w - 1, y, COLOR_GRAY);
@@ -189,87 +291,70 @@ static void draw_graph(ide *i, int left, int top, int width, int height)
     for (unsigned p = 0; p < i->points; p++) {
         int x = x0 + (int)(p * (unsigned)(w - 1) / (i->points - 1));
         double ratio = (i->ys[p] / scale - low) / range;
-        if (ratio < 0)
-            ratio = 0;
-        if (ratio > 1)
-            ratio = 1;
+        if (ratio < 0) ratio = 0;
+        if (ratio > 1) ratio = 1;
         int y = y0 + h - 1 - (int)(ratio * (h - 1));
-        if (p)
-            display_draw_line(px, py, x, y, COLOR_CYAN);
-        px = x;
-        py = y;
+        if (p) display_draw_line(px, py, x, y, UI_ACCENT);
+        px = x; py = y;
     }
     char a[32], b[32], line[100];
     number_format(i->xs[0], a, sizeof a);
     number_format(i->xs[i->points - 1], b, sizeof b);
     ksnprintf(line, sizeof line, "x: %s .. %s", a, b);
-    dq_text(left + 1, top + height - 1, line);
+    bizud_text(x0, top + height - 8, line, left + width - 14, UI_FG, UI_BG);
 }
-static void draw(ide *i)
+
+static void draw(ide *i, const ime_view *view)
 {
     scheme_buffer *b = &i->buffer;
-    int cols = dq_cols(), rows = dq_rows();
-    int width = i->split ? cols * 3 / 5 : cols;
-    int textrows = rows - LOG_LINES - 5;
-    size_t ls = start(b, b->cursor);
-    if (ls < i->top)
-        i->top = ls;
-    int below = 0;
-    for (size_t p = i->top; p < ls; p++)
-        if (b->text[p] == '\n')
-            below++;
-    while (below >= textrows) {
-        i->top = end(b, i->top) + 1;
-        below--;
-    }
-    size_t col = column(b, b->cursor);
-    if (col < i->horizontal)
-        i->horizontal = col;
-    if (col >= i->horizontal + (size_t)(width - 3))
-        i->horizontal = col - (size_t)(width - 4);
-    dq_clear();
+    int editor_right = i->split ? 735 : UI_RIGHT;
+    source_layout(i, editor_right);
+    int cursor_row = source_cursor_row(i);
+    if ((int)i->top > cursor_row) i->top = (size_t)cursor_row;
+    if (cursor_row >= (int)i->top + UI_BODY_ROWS)
+        i->top = (size_t)(cursor_row - UI_BODY_ROWS + 1);
+
+    display_set_target(i->frame);
+    display_fill_rect(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT, UI_BG);
+    display_fill_rect(0, 0, DISPLAY_WIDTH, 52, UI_ACCENT);
     char line[256];
     ksnprintf(line, sizeof line, "MeOS Scheme  %s%s", b->modified ? "* " : "", i->path);
-    dq_text_rev(0, 0, line);
-    size_t p = i->top;
-    for (int row = 0; row < textrows; row++) {
-        size_t le = end(b, p), q = p;
-        for (size_t skip = 0; skip < i->horizontal && q < le; skip++)
-            q = scheme_buffer_next(b, q);
-        size_t n = 0;
-        int cells = 0;
-        while (q < le && cells < width - 3) {
-            size_t next = scheme_buffer_next(b, q), len = next - q;
-            if (n + len >= sizeof line)
-                break;
-            if (b->text[q] == '\t')
-                line[n++] = ' ';
-            else {
-                memcpy(line + n, b->text + q, len);
-                n += len;
-            }
-            q = next;
-            cells++;
-        }
-        line[n] = 0;
-        dq_text(1, row + 2, line);
-        if (p == ls)
-            dq_cursor(0, row + 2, true);
-        p = le < b->length ? le + 1 : b->length;
+    bizud_text(UI_LEFT, UI_HEADER_BASE, line, UI_RIGHT, COLOR_WHITE, UI_ACCENT);
+
+    for (int n = 0; n < UI_BODY_ROWS; n++) {
+        int row = (int)i->top + n;
+        if (row >= i->visual_rows) break;
+        draw_source_row(i, row, UI_BODY_BASE + n * UI_PITCH, editor_right);
     }
-    if (i->split)
-        draw_graph(i, width, 2, cols - width, textrows);
-    dq_text_rev(0, rows - LOG_LINES - 3, "*repl*  F2: expression | F1 / Esc x: commands");
-    for (int row = 0; row < LOG_LINES; row++)
-        dq_text(0, rows - LOG_LINES - 2 + row, i->log[row]);
-    dq_text(0, rows - 2, i->status);
+    int visible_row = cursor_row - (int)i->top;
+    if (visible_row >= 0 && visible_row < UI_BODY_ROWS) {
+        int cx = source_cursor_x(i, cursor_row);
+        int cy = UI_BODY_BASE + visible_row * UI_PITCH;
+        if (view && view->count)
+            bizime_draw(view, cx, cy, UI_LEFT, editor_right, 53, UI_REPL_TOP - 8,
+                        UI_PITCH, UI_FG, UI_BG, UI_ACCENT);
+        else
+            display_fill_rect(cx, cy - 27, 2, 32, UI_ACCENT);
+    }
+    if (i->split) {
+        display_fill_rect(751, 58, 1, UI_REPL_TOP - 66, UI_ACCENT);
+        draw_graph(i, 752, 58, UI_RIGHT - 752, UI_REPL_TOP - 66);
+    }
+
+    display_fill_rect(UI_LEFT, UI_REPL_TOP, UI_RIGHT - UI_LEFT, 1, UI_ACCENT);
+    bizud_text(UI_LEFT, UI_REPL_TOP + 31, "*repl*  F2: expression / F1: M-x",
+               UI_RIGHT, UI_ACCENT, UI_BG);
+    int first = (int)i->log_line - UI_REPL_LINES + 1;
+    if (first < 0) first = 0;
+    for (int n = 0; n < UI_REPL_LINES && first + n <= (int)i->log_line; n++)
+        bizud_text(UI_LEFT, UI_REPL_TOP + 65 + n * 32, i->log[first + n],
+                   UI_RIGHT, UI_FG, UI_BG);
+    bizud_text(UI_LEFT, 668, i->status, UI_RIGHT, UI_ACCENT, UI_BG);
+    display_fill_rect(0, 681, DISPLAY_WIDTH, 39, UI_ACCENT);
     ksnprintf(line, sizeof line, "%s | C-x C-s save  C-x C-b eval  C-x C-c quit", ime_status());
-    dq_text_rev(0, rows - 1, line);
-    int cx = 1 + (int)(col - i->horizontal), cy = 2 + below;
-    /* Visible insertion marker; preedit/candidate overlays use this same cell. */
-    display_fill_rect(cx * fbcon_cell_px(), (cy + 1) * fbcon_cell_px() - 2, fbcon_cell_px(), 2,
-                      COLOR_CYAN);
-    ime_set_anchor(cx, cy);
+    bizud_text(UI_LEFT, 710, line, UI_RIGHT, COLOR_WHITE, UI_ACCENT);
+    display_present(0, 0, DISPLAY_WIDTH, DISPLAY_HEIGHT);
+    display_set_target(NULL);
 }
 static bool load(ide *i, const char *path, bool allow_missing)
 {
@@ -439,9 +524,11 @@ static int raw(ide *i, unsigned wait)
         task_sleep(10);
     }
 }
-static int key(ide *i)
+static int key(ide *i, unsigned wait)
 {
-    int c = raw(i, 0);
+    int c = raw(i, wait);
+    if (c < 0)
+        return DQK_NONE;
     if (c == '\n')
         return DQK_ENTER;
     if (c == 8)
@@ -534,42 +621,75 @@ static void complete_command(ide *i, char *text, size_t capacity, char *hint, si
         strcpy(text, c.common);
     ksnprintf(hint, hint_capacity, "%s", c.count ? c.names : "No matching command");
 }
+
+static int text_pixels(const char *text)
+{
+    int width = 0;
+    while (*text) width += bizud_width(bizud_decode(&text));
+    return width;
+}
+
+static const char *visible_tail(const char *text, int width)
+{
+    while (*text && text_pixels(text) > width) {
+        text++;
+        while (((unsigned char)*text & 0xc0) == 0x80) text++;
+    }
+    return text;
+}
+
+static void draw_minibuffer(ide *i, const char *prompt, const char *text,
+                            const char *hint, bool commands, const ime_view *view)
+{
+    draw(i, NULL);
+    display_set_target(i->frame);
+    int top = commands ? 548 : 580;
+    display_fill_rect(0, top, DISPLAY_WIDTH, DISPLAY_HEIGHT - top, UI_BG);
+    display_fill_rect(0, top, DISPLAY_WIDTH, 1, UI_ACCENT);
+    if (commands)
+        bizud_text(UI_LEFT, top + 31, hint, UI_RIGHT, UI_COMMENT, UI_BG);
+    char prefix[128];
+    ksnprintf(prefix, sizeof prefix, "%s: ", prompt);
+    int prefix_width = text_pixels(prefix);
+    int baseline = commands ? 624 : 626;
+    bizud_text(UI_LEFT, baseline, prefix, UI_RIGHT, UI_ACCENT, UI_BG);
+    const char *visible = visible_tail(text, UI_RIGHT - UI_LEFT - prefix_width);
+    int x = bizud_text(UI_LEFT + prefix_width, baseline, visible, UI_RIGHT, UI_FG, UI_BG);
+    if (view && view->count)
+        bizime_draw(view, x, baseline, UI_LEFT, UI_RIGHT, 54, 679,
+                    UI_PITCH, UI_FG, UI_BG, UI_ACCENT);
+    else
+        display_fill_rect(x, baseline - 27, 2, 32, UI_ACCENT);
+    char mode[96];
+    ksnprintf(mode, sizeof mode, "%s | Enter: accept  C-g: cancel", ime_status());
+    display_fill_rect(0, 681, DISPLAY_WIDTH, 39, UI_ACCENT);
+    bizud_text(UI_LEFT, 710, mode, UI_RIGHT, COLOR_WHITE, UI_ACCENT);
+    display_present(0, top, DISPLAY_WIDTH, DISPLAY_HEIGHT - top);
+    display_set_target(NULL);
+}
+
 static bool minibuffer(ide *i, const char *prompt, char *text, size_t cap)
 {
     size_t len = strlen(text);
     bool commands = !strcmp(prompt, "M-x");
     char hint[256] = "Tab: complete command / C-g: cancel";
+    uint32_t revision = ~0u;
+    bool redraw = true;
     for (;;) {
-        int row = dq_rows() - 2;
-        if (commands) {
-            display_fill_rect(0, (row - 1) * fbcon_cell_px(), DISPLAY_WIDTH, fbcon_cell_px(),
-                              COLOR_BLACK);
-            dq_text(0, row - 1, hint);
+        ime_view view;
+        ime_read_view(&view);
+        if (redraw || revision != view.revision) {
+            draw_minibuffer(i, prompt, text, hint, commands, &view);
+            revision = view.revision;
+            redraw = false;
         }
-        display_fill_rect(0, row * fbcon_cell_px(), DISPLAY_WIDTH, fbcon_cell_px(), COLOR_BLACK);
-        char line[320];
-        ksnprintf(line, sizeof line, "%s: %s", prompt, text);
-        /* Keep the end of the field visible, on codepoint boundaries. */
-        const char *visible = line;
-        size_t chars = 0;
-        for (const char *p = line; *p; p++)
-            if (((unsigned char)*p & 0xc0) != 0x80)
-                chars++;
-        while (chars > (size_t)dq_cols() - 1) {
-            visible++;
-            while (((unsigned char)*visible & 0xc0) == 0x80)
-                visible++;
-            chars--;
-        }
-        dq_text(0, row, visible);
-        ime_set_anchor((int)chars, row);
-        int k = key(i);
+        int k = key(i, 10);
+        if (k == DQK_NONE) continue;
+        redraw = true;
         if (k == DQK_ENTER) {
-            ime_clear_anchor();
             return true;
         }
         if (k == DQK_ESC || k == CTRL('g')) {
-            ime_clear_anchor();
             return false;
         }
         if (k == '\t' && commands) {
@@ -643,10 +763,28 @@ bool scheme_ide(const char *path)
     if (i->running) {
         fbcon_pause(true);
         task_sleep(100);
-        display_set_target(NULL);
+        i->frame = kmalloc_psram(DISPLAY_BUFFER_BYTES);
+        if (!i->frame || !bizud_begin()) {
+            kprintf("scheme: BIZ UD display memory unavailable\n");
+            kfree(i->frame);
+            i->frame = NULL;
+            i->running = false;
+            started = false;
+        }
+        ime_set_app_view(true);
+        uint32_t revision = ~0u;
+        bool redraw = true;
         while (i->running) {
-            draw(i);
-            int k = key(i);
+            ime_view view;
+            ime_read_view(&view);
+            if (redraw || revision != view.revision) {
+                draw(i, &view);
+                revision = view.revision;
+                redraw = false;
+            }
+            int k = key(i, 10);
+            if (k == DQK_NONE) continue;
+            redraw = true;
             scheme_buffer *b = &i->buffer;
             if (i->prefix) {
                 i->prefix = false;
@@ -755,9 +893,14 @@ bool scheme_ide(const char *path)
                 break;
             }
         }
+        ime_set_app_view(false);
         ime_clear_anchor();
         display_set_target(NULL);
         fbcon_pause(false);
+        if (i->frame) {
+            bizud_end();
+            kfree(i->frame);
+        }
     }
     display_release_claim(i);
     kfree(i->workspace);

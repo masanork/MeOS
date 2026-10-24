@@ -69,6 +69,8 @@ drivers/lcd/bizud.h
 drivers/lcd/bizud24_data.inc
 user/write/write.c
 user/write/write.h
+user/editor/bizime.c
+user/editor/bizime.h
 tools/fonts/licenses/BIZ-UD-OFL.txt
 tools/fonts/build_bizud.py
 tools/sim/write_test.sh
@@ -78,6 +80,7 @@ tools/fonts/fetch24.py
 drivers/lcd/display_claim.c
 tools/sim/handoff_test.sh
 tools/sim/home_test.sh
+tools/sim/scheme_ui_test.sh
 
 # Tab5 Home launcher
 user/home/home.c

@@ -3,6 +3,7 @@
 #include "write.h"
 #include "../../drivers/lcd/bizud.h"
 #include "../../drivers/lcd/fbcon.h"
+#include "../editor/bizime.h"
 #include "../scheme/buffer.h"
 #include "../tui/dqwin.h"
 #include <m5os/display.h>
@@ -64,26 +65,14 @@ static void paint(writer *w,const char *path,const ime_view *view) {
             x+=width(w,p);
         }
     }
-    display_fill_rect(cursor_x(w,cr),92+(cr-w->top)*PITCH-26,2,31,ACCENT);
+    int cx=cursor_x(w,cr),cy=92+(cr-w->top)*PITCH;
+    if(view->count)bizime_draw(view,cx,cy,LEFT,RIGHT,55,DISPLAY_HEIGHT-165,PITCH,FG,BG,ACCENT);
+    else display_fill_rect(cx,cy-26,2,31,ACCENT);
     int y=DISPLAY_HEIGHT-155;
     display_fill_rect(LEFT,y-12,RIGHT-LEFT,1,ACCENT);
-    int x=LEFT;
-    if(view->active) {
-        for(int n=0;n<view->count;n++) {
-            int a=bizud_width(view->text[n]);if(x+a>RIGHT)break;
-            bizud_draw(x,y+25,view->text[n],FG,BG);
-            if(view->styles[n])display_fill_rect(x,y+29,a,2,ACCENT);
-            x+=a;
-        }
-        x=LEFT;
-        for(int n=0;n<view->candidate_count;n++) {
-            char candidate[220];ksnprintf(candidate,sizeof candidate,"%d:%s  ",view->numbers[n],view->candidates[n]);
-            uint16_t fg=n==view->selected?BG:FG,bg=n==view->selected?ACCENT:BG;
-            int len=0;const char *p=candidate;while(*p)len+=bizud_width(bizud_decode(&p));
-            if(x+len>RIGHT)break;
-            display_fill_rect(x,y+40,len,36,bg);bizud_text(x,y+68,candidate,RIGHT,fg,bg);x+=len;
-        }
-    } else bizud_text(LEFT,y+25,"BIZ UD 24px / 日本語入力: Ctrl-Space",RIGHT,ACCENT,BG);
+    char ime_line[96];
+    ksnprintf(ime_line,sizeof ime_line,"BIZ UD 24px / 日本語入力: %s / Ctrl-Space",ime_status());
+    bizud_text(LEFT,y+25,ime_line,RIGHT,view->active?ACCENT:FG,BG);
     bizud_text(LEFT,DISPLAY_HEIGHT-37,"^S 保存   ^Q 終了   ^Z 戻す   矢印 移動",RIGHT,FG,BG);
     if(w->status[0])bizud_text(LEFT,DISPLAY_HEIGHT-4,w->status,RIGHT,ACCENT,BG);
     display_present(0,0,DISPLAY_WIDTH,DISPLAY_HEIGHT);

@@ -822,7 +822,7 @@ int main(int argc, char **argv)
         int n = fd >= 0 ? vfs_read(fd, saved, sizeof saved - 1) : -1;
         if (fd >= 0)
             vfs_close(fd);
-        if (n < 0 || !strstr(saved, "; 日本語\n") || !committed_japanese || !ime_draws ||
+        if (n < 0 || !strstr(saved, "; 日本語\n") || !committed_japanese ||
             lines_drawn < 100 || smoke_step != sizeof smoke_actions / sizeof smoke_actions[0] ||
             !display_free() || paused) {
             fprintf(stderr,
