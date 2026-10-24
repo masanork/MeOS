@@ -278,8 +278,12 @@ int vfs_close_owned(uint32_t app_id)
     int n = 0;
     for (int i = 0; i < VFS_FD_MAX; i++) {
         if (s_fds[i].used && s_fds[i].owner_app == app_id) {
-            if (s_fds[i].pending) { s_fds[i].pending = false; s_fds[i].used = false; }
-            else vfs_close(i);
+            if (s_fds[i].pending) {
+                uint32_t irq = arch_irq_disable();
+                s_fds[i].used = false;
+                s_fds[i].pending = false;
+                arch_irq_restore(irq);
+            } else vfs_close(i);
             n++;
         }
     }
