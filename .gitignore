@@ -26,3 +26,5 @@ apps/wasm/*.wasm
 
 # Font research downloads; generated previews stay in ignored build directories.
 tools/fonts/cache/
+/sdkconfig.quake*
+/tools/quake/cache/

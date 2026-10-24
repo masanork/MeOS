@@ -39,6 +39,7 @@
 #include "../write/write.h"
 
 #include <m5os/doom.h>
+#include <m5os/quake.h>
 #include "../../apps/calculator/expr.h"
 #include "sd.h"
 #include <m5os/audio.h>
@@ -1129,6 +1130,9 @@ static int cmd_history(int argc, char **argv)
 static const command_t s_commands[] = {
     { "basic", cmd_basic, "basic [FILE.bas] numeric BASIC" },
 
+#if M5OS_QUAKE
+    { "quake",quake_command,"quake [/sd]  experimental silent native Quake" },
+#endif
 #if M5OS_DOOM
     { "doom", doom_command, "doom [WAD-path] [--demo SECONDS] [--silent]" },
 #endif

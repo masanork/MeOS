@@ -1,4 +1,7 @@
 #include <m5os/app_cleanup.h>
+#if M5OS_QUAKE
+#include <m5os/quake.h>
+#endif
 #include <m5os/errno.h>
 #if M5OS_DOOM
 #include <m5os/doom.h>
@@ -33,6 +36,10 @@ void app_cleanup_register_builtins(void)
 
 #if M5OS_DOOM
     add("doom",stop_doom);
+#endif
+
+#if M5OS_QUAKE
+    add("quake",quake_app_cleanup);
 #endif
     add("windows",close_windows); add("files",close_files); add("wasm",close_wasm);
     app_cleanup_seal();
