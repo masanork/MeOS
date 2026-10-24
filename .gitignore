@@ -23,3 +23,6 @@ apps/wasm/*.wasm
 /.ci/
 /SOURCE_REVISION
 /SOURCE_DATE_EPOCH
+
+/sdkconfig.quake*
+/tools/quake/cache/
