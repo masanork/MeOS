@@ -81,9 +81,6 @@ bool rootfs_mount(blockdev_t *sd)
             if (fd >= 0) { vfs_write(fd, img[i].data, img[i].size); vfs_close(fd); }
         }
     }
-#if defined(M5OS_BOARD_TAB5)
-    if (!sdroot_active())
-#endif
     wasm_store_boot();                           /* installed WebAssembly apps come back from flash (Tab5 only) */
 #if defined(M5OS_BOARD_TAB5)
     if (sdroot_active()) kputs("SDROOT BOOT PASS: persistent root; RAM disk not allocated; kernel remains in Flash\n");

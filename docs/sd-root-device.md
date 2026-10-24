@@ -5,8 +5,8 @@
 Flash retains the bootloader and kernel. Card-wide littlefs v2.11.3 contains a
 read-only `base.img` plus `delta-a.log` / `delta-b.log`. M5FS presents an 8 MiB
 logical root; the base stores only initialized metadata, with zero-filled virtual
-sectors past EOF. Base writes are restricted to explicit initialization. Each log
-has a 256 KiB logical capacity and zero-filled reads beyond its current EOF;
+sectors past EOF. Base writes are restricted to explicit initialization. In the isolated trial each log
+had a 256 KiB logical capacity and zero-filled reads beyond its current EOF;
 truncate+sync implements reset. File synchronization precedes publication.
 
 littlefs is vendored unmodified at commit
@@ -37,9 +37,10 @@ The base-image formatter can format a detached block device while another volume
 is mounted; it refuses the currently mounted block-device object. Callers must not
 pass an alias of a mounted device. This allows preparation from the RAM-root shell.
 
-Wasm flash-store import is skipped for an active SD root in this experiment, to
-avoid replaying app installation on every persistent-root boot. Full installed-app
-integration and existing editor atomic-save wiring are separate follow-up work.
+The isolated trial skipped Wasm import on SD roots. The combined `masanork`
+integration restores it and reuses identical cached apps, and raises each sparse
+log capacity to 12 MiB without increasing the 64 KiB RAM index. Existing editor
+whole-buffer atomic-save wiring remains separate follow-up work.
 This trial firmware is built from the isolated branch, not the dirty primary tree;
 it does not incorporate all concurrent Quake/Scheme/BASIC work.
 

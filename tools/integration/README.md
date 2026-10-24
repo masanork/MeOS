@@ -55,8 +55,8 @@ feature-branch updates need another merge.
 The original standalone `tools/sd/vfat_vfs_test.c` and its older fixture family
 are superseded by the merged SD/player UTF-8, path-boundary and real-VFS
 read/write/remount suites. The older original checkout is preserved for comparison.
-`experiment/quake` remains separate: it is an experimental port, not an imported
-`pr/*` feature. No default branch setting, upstream ref or original working file
+`experiment/quake` is included as an opt-in engine in the subsequent SD-root
+integration; it remains experimental and does not ship PAK files. No default branch setting, upstream ref or original working file
 is changed by this integration.
 
 ## Combined image size and Linux CI fixes
@@ -122,3 +122,37 @@ The filesystem redesign belongs in its own feature branch and PR series, based o
 (1) VFS contracts and compatibility tests, (2) storage/boot backend, then (3) language
 source paths and user-facing migration. The concrete split should follow the
 other session's design; no new filesystem layout or migration is implemented here.
+
+
+## SD-root and optional Quake integration
+
+Starting from `masanork` revision `fb1accf`, the combined branch merges
+`experiment/sd-root` at `d0ace23` and `experiment/quake` at `7d72f30`. The original
+source checkout remains untouched. Keep the newer I2C fast/timeout tests, selectable
+host compiler, UTF-8 VFAT paths, all language/editor commands and both optional
+engine build definitions when resolving the older SD-root branch's conflicts.
+
+Additional integration behavior:
+
+- A valid littlefs SD store boots the persistent M5FS root without an 8 MiB RAM
+  disk. Ordinary VFAT cards still use the RAM-root plus explicit FAT mount path.
+- Active SD roots reject raw probe/FAT mount/benchmark commands. Explicit SD-root
+  formatting also rejects a mounted FAT filesystem. Never auto-format at boot.
+- Restore the Flash-backed Wasm store on persistent roots. Identical cached app
+  files are reused instead of truncated/re-written at boot. A read/close failure
+  is not treated as an identical cache.
+- Each sparse COW bank has a 12 MiB logical capacity, enough for a full 8 MiB
+  changed-sector snapshot plus transaction headroom. This is storage capacity;
+  the in-RAM sector index remains 64 KiB. Existing shorter log files remain readable.
+- The foundational host matrix now runs COW, actual littlefs adapter, SD/FAT
+  exclusion and persistent Wasm cache tests. The Quake workflow separately checks
+  its optional engine build and stack reports. Doom and Quake select alternative
+  firmware images; they are not linked together, and no proprietary WAD/PAK ships.
+
+The existing SD-root receipt describes the smaller trial firmware. It proves
+format/boot/reset/100 saves/collection and 7.94 MiB recovery for that trial, not
+all features on this combined image. Combined host/build and device evidence is
+recorded separately below. Physical power-cut qualification remains open. Existing
+editor save calls remain individual filesystem transactions; only explicit grouped
+saves provide whole-buffer atomic replacement. The outer littlefs namespace is
+not yet a general `/sd` asset mount; FAT cards remain the existing game/media path.

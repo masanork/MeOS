@@ -58,7 +58,7 @@ void hardware_print_power(void)
 
 void hardware_print_storage(void)
 {
-    kputs(rootfs_is_persistent() ? "Root /: M5FS on SD (persistent)\n" : "Root /: M5FS on RAM disk (volatile; files lost at reset)\n");
+    kputs(rootfs_is_persistent() ? "Root /: M5FS on SD littlefs/COW (persistent)\n" : "Root /: M5FS on RAM disk (volatile; files lost at reset)\n");
     fs_stat_t s;
     if (fs_statfs(&s) == ERR_OK)
         kprintf("Root capacity: %u KB, free: %u KB\n", s.total_blocks * s.block_size / 1024u, s.free_blocks * s.block_size / 1024u);

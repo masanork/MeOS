@@ -1,5 +1,9 @@
 # MeOS
 
+The `masanork` integration combines the language/editor, simulator, media and optional
+native-engine work with a persistent Tab5 SD root. See [integration provenance](tools/integration/README.md)
+and [SD layout and qualification](docs/sd-root-device.md).
+
 An educational and experimental lightweight operating system built from scratch for M5Stack devices (**M5Stack CoreS3**, **M5Cardputer**, and **M5Stack Tab5**).
 MeOS implements its own **preemptive/cooperative scheduler, task management, timer, IPC message queues, memory allocator, VFS, custom filesystem (M5FS), dynamic binary loader (M5EX), GUI/TUI window system, camera driver, SDIO Wi-Fi stack, and SSH-2 client**—without ever starting FreeRTOS.
 
@@ -309,7 +313,7 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
   DC is shown as unknown. Charge permission and raw `CHG_STAT` are not treated as proof of actual charging
   or external power. The monitor must already be in continuous shunt+bus conversion mode; a missing,
   mismatched, unreadable or differently configured monitor produces an explicit unavailable result.
-* `storage` identifies the current root backing and its persistence. Tab5 still uses an 8 MiB RAM disk;
+* `storage` identifies the current root backing and its persistence. Tab5 uses an 8 MiB RAM disk unless a valid littlefs/COW SD root is available;
   `sd mount` mounts Tab5 microSD as read/write FAT12/16/32 at `/sd`, with UTF-8 VFAT long names.
   exFAT, card writes and formatting are disabled. The separate flash-backed WASM app store survives reboot.
 * `play "/sd/path/track.mp3"` opens the Tab5 streaming MP3 player; the filer also opens MP3 files.
@@ -447,7 +451,8 @@ BYE
 is initialized. It never erases unknown or damaged data. `data status` does
 not probe or write flash. On later boots, explicitly run `data mount`, then
 `basic /data/bas/demo.bas`. No automatic mount or migration is added. Existing
-`/home` remains RAM-backed and `/sd` remains read-only. LOAD/SAVE and both BASIC
+`/home` persists when booted from the littlefs/COW SD root; otherwise it is RAM-backed.
+On VFAT cards, `/sd` supports explicit read/write or read-only mounts. LOAD/SAVE and both BASIC
 EDIT and shell `edit` use `/data` through the same VFS interfaces.
 
 The ROM adapter checks the live partition table, exact label/type/offset/size,
@@ -497,3 +502,19 @@ configurations. Those results do not qualify this integrated revision.
 Real flash initialization, reboot persistence and hardware power-loss recovery
 remain unqualified. Neither board firmware nor its partition table was written
 as part of this implementation.
+
+
+### Tab5 persistent SD root
+
+`sdroot` reports whether the current root is the SD-backed M5FS view. A prepared
+littlefs card contains an immutable sparse base plus two alternating COW logs;
+boot uses the latest complete generation. The kernel/bootloader remain in Flash.
+There is no automatic format. `sdroot format EXPECTED_SECTORS` explicitly replaces
+the card filesystem, refuses an active SD root or mounted FAT filesystem, and
+requires the exact geometry reported by the device. Reboot afterward to use it.
+`sdroot save TEXT` is an atomic qualification probe at `/home/sd-boot.txt`.
+
+An active SD-root card cannot simultaneously be probed/mounted as VFAT. The outer
+littlefs namespace is not yet exposed for general asset import; normal VFAT cards
+retain the existing explicit `/sd` path. See the SD guide for trial device evidence,
+recovery backup, memory results and remaining physical power-cut qualification.

@@ -2,6 +2,7 @@
 #if defined(M5OS_BOARD_TAB5)
 #include <m5os/sdroot.h>
 #include <m5os/sdcard.h>
+#include <m5os/fat.h>
 #include <m5os/kmalloc.h>
 #include <m5os/kprintf.h>
 #include <m5os/errno.h>
@@ -11,7 +12,7 @@
 #include "../cow/blockdev.h"
 #include <string.h>
 #define ROOT_SECTORS 16384u /* 8 MiB logical M5FS, sparse zero-filled RO base */
-#define BANK_BYTES (256u*1024u)
+#define BANK_BYTES (12u*1024u*1024u) /* full 8 MiB snapshot + transaction headroom */
 #define ERASE_BYTES 4096u
 static blockdev_t *sd;
 static lfs_t lfs;
@@ -127,7 +128,7 @@ int sdroot_mount(void) {
 fail:close_files();return ERR_IO;
 }
 int sdroot_format(uint32_t expected_sectors) {
-    if(active||mounted)return ERR_BUSY;
+    if(active||mounted||fat_is_mounted())return ERR_BUSY;
     int rc=prepare();if(rc)return rc;
     if(expected_sectors!=sd->block_count)return ERR_INVAL;
     kprintf("SDROOT FORMAT identified sectors=%u; replacing filesystem with littlefs\n",sd->block_count);

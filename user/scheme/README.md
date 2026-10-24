@@ -122,7 +122,9 @@ Saving explicitly overwrites the selected VFS file, loops over short writes and
 checks close errors. There is no VFS rename transaction, so an I/O error can leave
 a partial file; the in-memory source and modified state are retained. Loading
 stages and validates a complete regular UTF-8 file before replacing the buffer.
-On the present Tab5 configuration `/home` is RAM-backed and `/sd` is read-only:
+On Tab5, `/home` persists with a prepared littlefs/COW SD root; otherwise it is
+RAM-backed. Separate VFAT cards support explicit read/write or read-only `/sd` mounts.
+The following RAM-root caveats apply when SD-root boot is unavailable:
 saving to `/home` does not establish reboot persistence.
 
 Run `sh tools/scheme/host_test.sh` for ASan/UBSan interpreter and scripted IDE
