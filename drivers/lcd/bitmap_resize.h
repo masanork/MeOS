@@ -40,7 +40,7 @@ static inline void tab5_copy_column(uint16_t *dst,const uint16_t *src,unsigned p
         d+=8;s+=8;n-=8;
     }
     while(n--) *d++=*s++;
-    if(pixels&1u) dst[pixels-1]=src[pixels-1];
+    if(pixels&1u) memcpy(dst+pixels-1,(const unsigned char *)src+(pixels-1)*sizeof(uint16_t),sizeof(uint16_t));
 }
 /* Cache-friendly 320x200 -> 960x720 path: read eight adjacent source
  * columns together, then expand from a small SRAM tile. This avoids repeatedly
