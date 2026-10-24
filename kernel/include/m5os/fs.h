@@ -60,6 +60,8 @@ typedef struct {
     int (*begin)(void *);
     int (*commit)(void *);
     int (*recover)(void *);
+    /* Optional no-IO headroom hint (data + metadata + commit records). */
+    int (*reserve)(void *, uint32_t records);
 } fs_tx_backend_t;
 int fs_mount_atomic(blockdev_t *, uint32_t base_lba, const fs_tx_backend_t *);
 int fs_mount_readonly(blockdev_t *, uint32_t base_lba);
@@ -87,3 +89,8 @@ typedef struct {
     int (*unlink)(const char *);
 } fs_tx_ops_t;
 int fs_transaction(int (*callback)(const fs_tx_ops_t *, void *), void *);
+
+/* Whole-buffer replacement under the volume lock. Atomic with a transactional
+ * backend; raw RAM volumes preserve legacy close/flush behavior. No fallback
+ * after failure and no full-file copy. Recovery invalidates existing descriptors. */
+int fs_replace_file(const char *path, const void *data, size_t len, size_t *written);

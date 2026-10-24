@@ -8,7 +8,7 @@ trap 'rm -rf "$scheme_test_dir"' EXIT
     kernel/lib/number.c -o "$scheme_test_dir/test" -lm
 "$scheme_test_dir/test"
 "${CC:-cc}" -std=c11 -Wall -Wextra -Werror -g -Ikernel/include -DM5OS_BOARD_TAB5=1 \
-    -fsanitize=address,undefined tools/scheme/ide_test.c user/scheme/scheme.c \
+    -fsanitize=address,undefined tools/scheme/ide_test.c fs/vfs/write_file.c user/scheme/scheme.c \
     user/scheme/buffer.c kernel/lib/number.c \
     -o "$scheme_test_dir/ide-test" -lm
 "$scheme_test_dir/ide-test"

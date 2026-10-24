@@ -57,6 +57,8 @@ typedef struct {
     int (*readdir)(void *fsdata, const char *rel, int (*cb)(const vfs_info_t *, void *), void *ctx);
     int (*mkdir)(void *fsdata, const char *rel);
     int (*unlink)(void *fsdata, const char *rel);
+    /* Optional whole-buffer save. Errors are final: never retry through open/write. */
+    int (*replace)(void *fsdata, const char *rel, const void *data, size_t len, size_t *written);
 } vfs_fs_t;
 
 void vfs_init(void);                                      /* mounts devfs at /dev */
@@ -74,6 +76,14 @@ int  vfs_ioctl(int fd, uint32_t cmd, void *arg);
 int  vfs_stat(const char *path, vfs_info_t *out);
 int  vfs_readdir(const char *path, int (*cb)(const vfs_info_t *, void *), void *ctx);   /* returns entry count */
 int  vfs_mkdir(const char *path);
+/* Transactional mounts commit truncate/write/close together. Other mounts keep
+ * legacy streaming semantics. Success includes close/commit; errors retain the
+ * caller's buffer. On an uncertain commit, disk may contain old OR complete new
+ * contents. *written is optional; transactional failures report zero, legacy
+ * streaming failures may report partial bytes. No extra image buffer is allocated. */
+int vfs_replace_file(const char *path, const void *data, size_t len, size_t *written);
+/* Streaming fallback shared with host-only VFS adapters; not atomic. */
+int vfs_write_file(const char *path, const void *data, size_t len, size_t *written);
 int  vfs_unlink(const char *path);                        /* file or empty directory */
 void vfs_print_mounts(void);
 int  vfs_close_owned(uint32_t app_id);     /* close the handles an app left open; returns how many */
