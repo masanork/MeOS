@@ -12,6 +12,7 @@
 #define DICT_MAX         (6u * 1024u * 1024u)
 #define CHUNK            2048u
 #define CHUNKS_PER_NAP   4
+#define LOADER_STACK     16384u
 
 static void loader_task(void *arg)
 {
@@ -45,11 +46,16 @@ static void loader_task(void *arg)
         if ((off / CHUNK) % CHUNKS_PER_NAP == 0) task_sleep(1);
     }
     vfs_close(fd);
-    if (ime_dict_add(buf, info.size)) kprintf("ime: SD dictionary loaded (%u KB)\n", (unsigned)(info.size / 1024u));
-    else { kprintf("ime: SD dictionary is damaged\n"); kfree(buf); }
+    if (ime_dict_add(buf, info.size)) {
+        task_stack_info_t stack;
+        kprintf("ime: SD dictionary loaded (%u KB)\n", (unsigned)(info.size / 1024u));
+        if (task_stack_inspect(task_current()->id, &stack) == 0)
+            kprintf("ime: loader stack %u/%u bytes, guard %s\n", (unsigned)stack.used,
+                    (unsigned)stack.size, stack.guard_ok ? "OK" : "FAILED");
+    } else { kprintf("ime: SD dictionary is damaged\n"); kfree(buf); }
 }
 
 void ime_dict_load_async(void)
 {
-    task_create_stack("imedict", loader_task, 0, TASK_PRIO_DEFAULT, 4096);
+    task_create_stack("imedict", loader_task, 0, TASK_PRIO_DEFAULT, LOADER_STACK);
 }

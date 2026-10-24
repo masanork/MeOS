@@ -27,4 +27,6 @@ fi
 python3 tools/ime_mkdict.py -o $CACHE/dict.bin "$@"
 [ $BUILD_ONLY = 1 ] && exit 0
 [ -n "$PORT" ] || { echo "give the serial port with -p (e.g. -p /dev/cu.usbmodem1101)"; exit 1; }
+export M5OS_BOARD=tab5
+. tools/env.sh                         # selects the Python environment that provides pyserial
 python3 tools/push_file.py --port "$PORT" $CACHE/dict.bin /assets/ime-dict.bin
