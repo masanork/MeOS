@@ -204,3 +204,20 @@ Only the selected Quake OTA slot was replaced; recovery/other-slot images and SD
 data were retained. The final candidate was restarted into CPU E1M1 for the user.
 A late-start internal-memory fragmentation failure remains separate from this
 transfer change; its return code is now exposed without reducing stack capacity.
+
+## Exact DMA2D / visual qualification — 2026-10-25
+
+The opt-in `quake dma` prototype passed offscreen three-row copy/guard checks,
+static and moving native full-pixel comparisons (zero mismatches), and user
+confirmation of the comparison patterns and Quake's actual display/speed.
+CPU and DMA static reference FNV32 was `986b6f69`; an independent host reference
+generator produces the same value. The older noisy benchmark was not counted as
+visual qualification after the user reported apparent corruption.
+
+With effect audio, full-view demo1 returned 969 frames / 38.8 seconds / 25.0 FPS
+for both CPU repeats, and 969 frames / 30.3 seconds / 32.0 FPS for four DMA repeats
+(two for filming). Normal CPU/DMA app exits reported zero audio DMA errors and
+sampled stack guards remained intact. No constant-30-FPS claim is made. The
+measured image predates the final PR rebase onto newer network/storage commits;
+its identity, counters and explicit remaining physical gates are recorded in
+`dma-device-2026-10-25.json`. CPU remains the default path.

@@ -507,6 +507,31 @@ void display_draw_indexed_viewport_delta(int x,const uint8_t *pixels,uint8_t *pr
 
 #if M5OS_QUAKE
 #include "ppa_tab5.h"
+#include "dma_copy_tab5.h"
+bool display_dma_begin(uint32_t owner){return s_draw==s_fb&&tab5_dma_copy_begin(owner,s_fb);}
+bool display_dma_present(const uint8_t *pixels,uint8_t *previous,const uint16_t palette[256],bool force){
+    uint64_t start=hal_time_now_us();bool ok=tab5_dma_copy_present(pixels,previous,palette,force);
+    s_copy_us=(uint32_t)(hal_time_now_us()-start);s_flush_us=0;return ok;
+}
+void display_dma_end(uint32_t owner){tab5_dma_copy_end(owner);}
+uint32_t display_viewport_checksum(void){
+    if(!s_fb)return 0;
+    uint16_t *p=s_fb+160*720;esp_cache_msync(p,960*720*2,ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    uint32_t hash=2166136261u;for(unsigned i=0;i<960*720;i++)hash=(hash^p[i])*16777619u;
+    return hash;
+}
+uint32_t display_verify_viewport(const uint8_t *pixels,const uint16_t palette[256],int *bad_x,int *bad_y){
+    *bad_x=*bad_y=-1;if(!s_fb)return UINT32_MAX;
+    esp_cache_msync(s_fb+160*720,960*720*2,ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    uint32_t mismatches=0;
+    for(unsigned x=0;x<960;x++)for(unsigned y=0;y<720;y++){
+        uint16_t want=palette[pixels[(y*200/720)*320+x/3]];
+        if(s_fb[(DISPLAY_WIDTH-1-(160+x))*720+y]!=want){
+            if(!mismatches){*bad_x=(int)x;*bad_y=(int)y;}mismatches++;
+        }
+    }
+    return mismatches;
+}
 bool display_smooth_begin(uint32_t owner){return s_draw==s_fb&&tab5_ppa_begin(owner,s_fb);}
 bool display_smooth_present(const uint8_t *pixels,const uint16_t palette[256]){
     uint64_t start=hal_time_now_us();bool ok=tab5_ppa_present(pixels,palette);

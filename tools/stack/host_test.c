@@ -49,8 +49,10 @@ int main(void) {
     assert(allocations==before);
     allow=false; assert(task_create("denied",entry,NULL,1)==ERR_PERM); allow=true;
     fail_alloc=true; assert(task_create("oom",entry,NULL,1)<0); fail_alloc=false;
+    g_tasks[1].runtime_us=12345; /* reused TCB must not inherit accounting */
     int pid=task_create_stack("probe",entry,NULL,1,1027); assert(pid>1);
     task_t *t=&g_tasks[1]; assert(t->id==(unsigned)pid && t->stack_size==1024);
+    assert(!t->runtime_us);
     assert(task_stack_inspect(pid,&info)==ERR_OK && info.guard_ok);
     assert(info.used>0 && info.used<=128 && info.size==1024 && info.free+info.used==1024);
     task_stack_check_switch(t,true);
