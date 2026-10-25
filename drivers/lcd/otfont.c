@@ -1,0 +1,179 @@
+#include <m5os/board_config.h>
+#if M5OS_BOARD_TAB5
+#include "otfont.h"
+#include "bizud.h"
+#include <m5os/display.h>
+#include <m5os/errno.h>
+#include <m5os/hal_time.h>
+#include <m5os/kmalloc.h>
+#include <m5os/kprintf.h>
+#include <m5os/vfs.h>
+#include <ft2build.h>
+#include FT_FREETYPE_H
+#include FT_MODULE_H
+#include FT_SYSTEM_H
+#include <string.h>
+
+#define OTFONT_MAX_FILE (8u*1024u*1024u)
+#define OTFONT_MAX_GLYPH 64u
+#define OTFONT_CELL_BYTES ((OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH)/2u)
+#define OTFONT_CACHE_SLOTS 384u
+
+typedef struct {
+    uint32_t glyph,stamp;
+    uint16_t pixel_size,advance;
+    int16_t left,top;
+    uint8_t width,height,valid;
+} cache_entry;
+
+typedef struct {
+    struct FT_MemoryRec_ memory;
+    FT_Library library;
+    FT_Face face;
+    uint8_t *font_data,*cells;
+    uint16_t *scratch;
+    cache_entry *entries;
+    uint32_t font_bytes,load_ms,stamp,hits,misses;
+    uint64_t raster_us;
+    unsigned pixel_size,users;
+} outline_font;
+
+static outline_font s_font;
+
+static void *ft_alloc(FT_Memory memory,long size) {
+    (void)memory;return size>0?kmalloc_psram((size_t)size):0;
+}
+static void ft_free(FT_Memory memory,void *block) {
+    (void)memory;kfree(block);
+}
+static void *ft_realloc(FT_Memory memory,long current,long requested,void *block) {
+    (void)memory;
+    if(requested<=0){kfree(block);return 0;}
+    void *next=kmalloc_psram((size_t)requested);if(!next)return 0;
+    if(block&&current>0)memcpy(next,block,(size_t)(current<requested?current:requested));
+    kfree(block);return next;
+}
+
+static bool load_file(const char *path) {
+    vfs_info_t st;if(vfs_stat(path,&st)<0||st.type!=FS_TYPE_FILE||!st.size||st.size>OTFONT_MAX_FILE)return false;
+    int fd=vfs_open(path,VFS_O_READ);if(fd<0)return false;
+    s_font.font_data=kmalloc_psram(st.size);if(!s_font.font_data){vfs_close(fd);return false;}
+    uint32_t done=0;
+    while(done<st.size) {
+        uint32_t chunk=st.size-done;if(chunk>4096)chunk=4096;
+        int n=vfs_read(fd,s_font.font_data+done,chunk);if(n!=(int)chunk)break;done+=chunk;
+    }
+    vfs_close(fd);s_font.font_bytes=done;
+    if(done==st.size)return true;
+    kfree(s_font.font_data);s_font.font_data=0;s_font.font_bytes=0;return false;
+}
+
+static void release_all(void) {
+    if(s_font.face)FT_Done_Face(s_font.face);
+    if(s_font.library)FT_Done_Library(s_font.library);
+    kfree(s_font.font_data);kfree(s_font.cells);kfree(s_font.entries);kfree(s_font.scratch);
+    memset(&s_font,0,sizeof s_font);
+}
+
+bool otfont_begin(const char *path,unsigned pixel_size) {
+    if(!path)path=OTFONT_DEFAULT_PATH;
+    if(pixel_size<12||pixel_size>48)return false;
+    if(s_font.users) {
+        if(s_font.pixel_size!=pixel_size||FT_Set_Pixel_Sizes(s_font.face,0,pixel_size))return false;
+        s_font.users++;return true;
+    }
+    uint64_t started=hal_time_now_us();
+    if(!load_file(path))goto fail;
+    s_font.memory.user=0;s_font.memory.alloc=ft_alloc;s_font.memory.free=ft_free;s_font.memory.realloc=ft_realloc;
+    if(FT_New_Library(&s_font.memory,&s_font.library))goto fail;
+    FT_Add_Default_Modules(s_font.library);
+    if(FT_New_Memory_Face(s_font.library,s_font.font_data,(FT_Long)s_font.font_bytes,0,&s_font.face))goto fail;
+    if(FT_Select_Charmap(s_font.face,FT_ENCODING_UNICODE)||FT_Set_Pixel_Sizes(s_font.face,0,pixel_size))goto fail;
+    s_font.entries=kmalloc_psram(sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
+    s_font.cells=kmalloc_psram(OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS);
+    s_font.scratch=kmalloc_psram(OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH*sizeof(uint16_t));
+    if(!s_font.entries||!s_font.cells||!s_font.scratch)goto fail;
+    memset(s_font.entries,0,sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
+    s_font.pixel_size=pixel_size;s_font.users=1;
+    s_font.load_ms=(uint32_t)((hal_time_now_us()-started)/1000u);
+    kprintf("otfont: loaded %u-byte OpenType face at %u px in %u ms; cache %u KiB\n",
+            s_font.font_bytes,pixel_size,s_font.load_ms,
+            (unsigned)((OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS)/1024u));
+    return true;
+fail:
+    release_all();return false;
+}
+
+void otfont_end(void) {
+    if(s_font.users&&!--s_font.users)release_all();
+}
+
+static uint8_t *cell(unsigned slot) {return s_font.cells+slot*OTFONT_CELL_BYTES;}
+
+static cache_entry *glyph(uint32_t cp,unsigned *slot_out) {
+    FT_UInt index=FT_Get_Char_Index(s_font.face,cp);if(!index)return 0;
+    unsigned victim=0;uint32_t oldest=UINT32_MAX;
+    for(unsigned i=0;i<OTFONT_CACHE_SLOTS;i++) {
+        cache_entry *e=&s_font.entries[i];
+        if(e->valid&&e->glyph==index&&e->pixel_size==s_font.pixel_size) {
+            e->stamp=++s_font.stamp;s_font.hits++;*slot_out=i;return e;
+        }
+        if(!e->valid){victim=i;oldest=0;break;}
+        if(e->stamp<oldest){oldest=e->stamp;victim=i;}
+    }
+    uint64_t started=hal_time_now_us();
+    if(FT_Load_Glyph(s_font.face,index,FT_LOAD_DEFAULT|FT_LOAD_NO_BITMAP) ||
+       FT_Render_Glyph(s_font.face->glyph,FT_RENDER_MODE_NORMAL))return 0;
+    FT_GlyphSlot g=s_font.face->glyph;FT_Bitmap *b=&g->bitmap;
+    if(b->pixel_mode!=FT_PIXEL_MODE_GRAY||b->width>OTFONT_MAX_GLYPH||b->rows>OTFONT_MAX_GLYPH)return 0;
+    cache_entry *e=&s_font.entries[victim];uint8_t *packed=cell(victim);
+    unsigned pixels=(unsigned)b->width*b->rows;memset(packed,0,(pixels+1)/2);
+    for(unsigned y=0;y<b->rows;y++) {
+        const uint8_t *row=b->buffer+(b->pitch>=0?y:(b->rows-1-y))*(unsigned)(b->pitch>=0?b->pitch:-b->pitch);
+        for(unsigned x=0;x<b->width;x++) {
+            unsigned p=y*b->width+x,a=(row[x]+8)/17;
+            if(p&1)packed[p/2]|=(uint8_t)a;else packed[p/2]=(uint8_t)(a<<4);
+        }
+    }
+    e->glyph=index;e->pixel_size=(uint16_t)s_font.pixel_size;
+    e->advance=(uint16_t)((g->advance.x+32)>>6);e->left=(int16_t)g->bitmap_left;e->top=(int16_t)g->bitmap_top;
+    e->width=(uint8_t)b->width;e->height=(uint8_t)b->rows;e->stamp=++s_font.stamp;e->valid=1;
+    s_font.misses++;s_font.raster_us+=hal_time_now_us()-started;*slot_out=victim;return e;
+}
+
+int otfont_width(uint32_t cp) {
+    if(!s_font.users)return 0;
+    unsigned slot=0;cache_entry *e=glyph(cp,&slot);
+    return e?e->advance:(int)s_font.pixel_size;
+}
+
+static uint16_t blend(uint16_t f,uint16_t b,unsigned a) {
+    unsigned r=(((f>>11)*a+(b>>11)*(15-a)+7)/15);
+    unsigned g=((((f>>5)&63)*a+((b>>5)&63)*(15-a)+7)/15);
+    unsigned bl=(((f&31)*a+(b&31)*(15-a)+7)/15);
+    return (uint16_t)((r<<11)|(g<<5)|bl);
+}
+
+int otfont_draw(int x,int baseline,uint32_t cp,uint16_t fg,uint16_t bg) {
+    if(!s_font.users)return 0;
+    unsigned slot=0;cache_entry *e=glyph(cp,&slot);
+    if(!e){display_draw_rect(x+3,baseline-(int)s_font.pixel_size+3,(int)s_font.pixel_size-5,(int)s_font.pixel_size-3,fg);return (int)s_font.pixel_size;}
+    unsigned pixels=(unsigned)e->width*e->height;uint8_t *packed=cell(slot);
+    for(unsigned p=0;p<pixels;p++){unsigned byte=packed[p/2],a=(p&1)?byte&15:byte>>4;s_font.scratch[p]=blend(fg,bg,a);}
+    if(pixels)display_draw_bitmap(x+e->left,baseline-e->top,e->width,e->height,s_font.scratch);
+    return e->advance;
+}
+
+int otfont_text(int x,int baseline,const char *text,int right,uint16_t fg,uint16_t bg) {
+    while(*text){uint32_t cp=bizud_decode(&text);int advance=otfont_width(cp);if(x+advance>right)break;x+=otfont_draw(x,baseline,cp,fg,bg);}
+    return x;
+}
+
+void otfont_get_stats(otfont_stats *out) {
+    if(!out)return;
+    out->font_bytes=s_font.font_bytes;out->load_ms=s_font.load_ms;
+    out->glyph_hits=s_font.hits;out->glyph_misses=s_font.misses;out->raster_us=s_font.raster_us;
+    out->cache_bytes=s_font.entries?sizeof(cache_entry)*OTFONT_CACHE_SLOTS+OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS+OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH*sizeof(uint16_t):0;
+}
+#endif
+

@@ -1,0 +1,24 @@
+#pragma once
+#include <m5os/types.h>
+
+#define OTFONT_DEFAULT_PATH "/assets/fonts/BIZUDGothic-Regular.ttf"
+
+typedef struct {
+    uint32_t font_bytes;
+    uint32_t load_ms;
+    uint32_t glyph_hits;
+    uint32_t glyph_misses;
+    uint64_t raster_us;
+    size_t cache_bytes;
+} otfont_stats;
+
+/* Experimental runtime OpenType renderer.  The face and bounded 4-bit glyph
+ * cache live in PSRAM; callers still own display serialization. */
+bool otfont_begin(const char *path, unsigned pixel_size);
+void otfont_end(void);
+int otfont_width(uint32_t cp);
+int otfont_draw(int x, int baseline, uint32_t cp, uint16_t fg, uint16_t bg);
+int otfont_text(int x, int baseline, const char *text, int right,
+                uint16_t fg, uint16_t bg);
+void otfont_get_stats(otfont_stats *out);
+

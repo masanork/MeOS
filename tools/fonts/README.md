@@ -123,6 +123,33 @@ The generated coverage is about 2.28 MB plus the glyph indexes; no other typefac
 merged or used for fallback. Unknown characters display a box. Full JIS combining
 sequence and IVS shaping is not implemented by this first simple renderer.
 
+## Experimental runtime OpenType path
+
+`fontbench [12..48]` compares the fixed 24px atlas with FreeType rendering from
+`/assets/fonts/BIZUDGothic-Regular.ttf`. The experiment keeps the production
+atlas unchanged. It loads the pinned BIZ UD face into PSRAM, uses FreeType's
+hinted grayscale renderer, quantizes each result to the same 4-bit coverage as
+the atlas, and retains up to 384 glyphs in a bounded PSRAM cache. Serial output
+reports face-load, cold draw, warm draw, raster and cache figures. Press Q to
+return. Provision the currently pinned source without committing the cache:
+
+```sh
+python3 tools/push_file.py --port /dev/cu.usbmodemXXXX \
+  tools/fonts/cache/BIZUDGothic-Regular.ttf \
+  /assets/fonts/BIZUDGothic-Regular.ttf
+```
+
+This first measurement deliberately uses an in-memory face so that rendering
+quality and cache behavior can be qualified independently. A VFS-backed
+FreeType stream is the next step if the renderer passes; it avoids reading the
+whole TTF before the first page. The experimental path accepts only this
+operator-provisioned asset and is not yet an arbitrary-font loader.
+
+FreeType is resolved as the pinned Espressif component in `dependencies.lock`
+and used under the FreeType License. Portions of this software are copyright
+2026 The FreeType Project (https://freetype.org). All rights reserved. Its
+complete unmodified license is included in the resolved component archive.
+
 The encoder searches up to 32 recent matches for each three-byte prefix.
 `python3 tools/fonts/check_bizud.py` independently decodes all 11,741 ordinary
 glyphs and 350 vertical alternates and checks separate digests of their metrics

@@ -23,6 +23,7 @@ apps/wasm/*.wasm
 /.ci/
 /SOURCE_REVISION
 /SOURCE_DATE_EPOCH
+/managed_components/
 
 # Font research downloads; generated previews stay in ignored build directories.
 tools/fonts/cache/

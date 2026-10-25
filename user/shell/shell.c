@@ -20,6 +20,7 @@
 #include "../wasmapps/wasmapps.h"
 #include "../wasmapps/qrinstall.h"
 #include "../home/home.h"
+#include "../fontbench/fontbench.h"
 #endif
 #include "../../drivers/lcd/fbcon.h"
 #if M5OS_BOARD_TAB5
@@ -779,6 +780,17 @@ static int cmd_scheme(int argc, char **argv)
     scheme_ide(argc == 2 ? path : NULL);
     return 0;
 }
+
+static int cmd_fontbench(int argc,char **argv)
+{
+    unsigned size=24;
+    if(argc==2) {
+        size=0;for(const char *p=argv[1];*p;p++){if(*p<'0'||*p>'9')return fail("fontbench","size must be 12..48",ERR_INVAL);size=size*10u+(unsigned)(*p-'0');}
+    }
+    if(argc>2||size<12||size>48)return fail("fontbench","usage: fontbench [12..48]",ERR_INVAL);
+    if(!fontbench_run(size))return fail("fontbench","OpenType face unavailable",ERR_INVAL);
+    return 0;
+}
 #endif
 
 static int cmd_files(int argc, char **argv)
@@ -1264,6 +1276,7 @@ static const command_t s_commands[] = {
 
     { "write", cmd_write, "write [FILE.txt] prose editor / Japanese input" },
     { "scheme", cmd_scheme, "scheme [FILE.scm] workspace / editor / plot" },
+    { "fontbench", cmd_fontbench, "fontbench [12..48] compare BIZ UD rasterizers" },
     { "calc", cmd_calc, "calc EXPR | deg | rad  numeric expressions" },
     { "devices", cmd_devices, "board devices: detected, untested, or unsupported (read-only)" },
     { "power",   cmd_power,   "battery voltage/current, estimated level and charger state (read-only)" },
