@@ -50,6 +50,7 @@
 #include <m5os/quake.h>
 #include "../../apps/calculator/expr.h"
 #include "sd.h"
+#include "checksum.h"
 #include <m5os/audio.h>
 #include <m5os/player.h>
 #include <m5os/microphone.h>
@@ -388,6 +389,14 @@ static int cmd_cat(int argc, char **argv)
         if (n < 0) return fail("cat", path, n);
     }
     return 0;
+}
+
+static int cmd_crc32(int argc,char **argv)
+{
+    char path[VFS_PATH_MAX];
+    if(argc!=2||!resolve(argv[1],path)){sh_puts("usage: crc32 FILE\n");return 1;}
+    int rc=shell_crc32_file(path);
+    return rc<0?fail("crc32",path,rc):0;
 }
 
 static int cmd_echo(int argc, char **argv)
@@ -1302,6 +1311,7 @@ static const command_t s_commands[] = {
     { "kill",    cmd_kill,    "kill PID        terminate one task (an app: its owner task)" },
     { "ls",      cmd_ls,      "ls [PATH]       list a directory (/dev lists devices)" },
     { "cat",     cmd_cat,     "cat FILE...     print files" },
+    { "crc32",   cmd_crc32,   "crc32 FILE      read-only file checksum, size and time" },
     { "echo",    cmd_echo,    "echo TEXT [> FILE | >> FILE]" },
     { "mem",     cmd_mem,     "mem [trim]     heap usage / release idle caches" },
     { "uptime",  cmd_uptime,  "time since boot" },
