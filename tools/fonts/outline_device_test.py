@@ -55,7 +55,10 @@ def main():
             raise RuntimeError(f"pinned TTF missing or wrong size: {listing!r}")
         before = free_psram(command("mem"))
         link.write(f"fontbench {args.size}\r".encode())
-        result = read_until(b"FONTBENCH ", 60) + read_until(b"\n", 10)
+        result = read_until(b"FONTBENCH ", 60)
+        receipt = result[result.rfind("FONTBENCH "):]
+        if "\n" not in receipt:
+            result += read_until(b"\n", 10)
         pattern = (r"FONTBENCH (\d+) px: load=(\d+) ms first=(\d+) us warm=(\d+) us "
                    r"misses=(\d+) hits=(\d+) raster=(\d+) us font=(\d+) cache=(\d+)")
         match = re.search(pattern, result)
