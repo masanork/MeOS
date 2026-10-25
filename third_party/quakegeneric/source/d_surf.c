@@ -22,6 +22,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "quakedef.h"
 #include "d_local.h"
 #include "r_local.h"
+#ifndef QUAKE_CACHE
+#define QUAKE_CACHE(e,n) ((void)0)
+#endif
 
 float           surfscale;
 qboolean        r_cache_thrash;         // set if surface cache is thrashing
@@ -142,6 +145,8 @@ surfcache_t     *D_SCAlloc (int width, int size)
 	size = (size + 3) & ~3;
 	if (size > sc_size)
 		Sys_Error ("D_SCAlloc: %i > cache size",size);
+    QUAKE_CACHE(QC_ALLOC,1);
+    QUAKE_CACHE(QC_BYTES,size);
 
 // if there is not size bytes after the rover, reset to the start
 	wrapped_this_time = false;
@@ -153,12 +158,16 @@ surfcache_t     *D_SCAlloc (int width, int size)
 			wrapped_this_time = true;
 		}
 		sc_rover = sc_base;
+		QUAKE_CACHE(QC_WRAP,1);
 	}
 		
 // colect and free surfcache_t blocks until the rover block is large enough
 	new = sc_rover;
 	if (sc_rover->owner)
+	{
+		QUAKE_CACHE(QC_EVICT,1);
 		*sc_rover->owner = NULL;
+	}
 	
 	while (new->size < size)
 	{
@@ -167,7 +176,10 @@ surfcache_t     *D_SCAlloc (int width, int size)
 		if (!sc_rover)
 			Sys_Error ("D_SCAlloc: hit the end of memory");
 		if (sc_rover->owner)
+		{
+			QUAKE_CACHE(QC_EVICT,1);
 			*sc_rover->owner = NULL;
+		}
 			
 		new->size += sc_rover->size;
 		new->next = sc_rover->next;
@@ -197,7 +209,10 @@ surfcache_t     *D_SCAlloc (int width, int size)
 	if (d_roverwrapped)
 	{
 		if (wrapped_this_time || (sc_rover >= d_initial_rover))
+		{
+			if (!r_cache_thrash) QUAKE_CACHE(QC_THRASH,1);
 			r_cache_thrash = true;
+		}
 	}
 	else if (wrapped_this_time)
 	{       
@@ -285,7 +300,17 @@ surfcache_t *D_CacheSurface (msurface_t *surface, int miplevel)
 			&& cache->lightadj[1] == r_drawsurf.lightadj[1]
 			&& cache->lightadj[2] == r_drawsurf.lightadj[2]
 			&& cache->lightadj[3] == r_drawsurf.lightadj[3] )
+	{
+		QUAKE_CACHE(QC_HIT,1);
 		return cache;
+	}
+    QUAKE_CACHE(QC_REBUILD,1);
+    if (cache) {
+        if (cache->dlight || surface->dlightframe == r_framecount) QUAKE_CACHE(QC_DYNAMIC,1);
+        if (cache->texture != r_drawsurf.texture) QUAKE_CACHE(QC_TEXTURE,1);
+        if (cache->lightadj[0] != r_drawsurf.lightadj[0] || cache->lightadj[1] != r_drawsurf.lightadj[1] ||
+            cache->lightadj[2] != r_drawsurf.lightadj[2] || cache->lightadj[3] != r_drawsurf.lightadj[3]) QUAKE_CACHE(QC_LIGHTSTYLE,1);
+    }
 
 //
 // determine shape of surface
@@ -295,6 +320,7 @@ surfcache_t *D_CacheSurface (msurface_t *surface, int miplevel)
 	r_drawsurf.surfwidth = surface->extents[0] >> miplevel;
 	r_drawsurf.rowbytes = r_drawsurf.surfwidth;
 	r_drawsurf.surfheight = surface->extents[1] >> miplevel;
+    QUAKE_CACHE(QC_PIXELS,r_drawsurf.surfwidth * r_drawsurf.surfheight);
 	
 //
 // allocate memory if needed

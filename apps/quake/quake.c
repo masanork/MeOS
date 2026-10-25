@@ -66,6 +66,12 @@ static void profile_report(void){
     kprintf("quake io: %u bytes, open %u/%u read %u/%u seek %u/%u calls/us\n",
         (unsigned)p.read_bytes,p.io_calls[QIO_OPEN],(unsigned)p.io_us[QIO_OPEN],
         p.io_calls[QIO_READ],(unsigned)p.io_us[QIO_READ],p.io_calls[QIO_SEEK],(unsigned)p.io_us[QIO_SEEK]);
+    kprintf("quake cache: hit %u rebuild %u alloc %u evict %u wrap %u thrash %u; pixels %u bytes %u\n",
+        (unsigned)p.cache[QC_HIT],(unsigned)p.cache[QC_REBUILD],(unsigned)p.cache[QC_ALLOC],
+        (unsigned)p.cache[QC_EVICT],(unsigned)p.cache[QC_WRAP],(unsigned)p.cache[QC_THRASH],
+        (unsigned)p.cache[QC_PIXELS],(unsigned)p.cache[QC_BYTES]);
+    kprintf("quake cache reasons: dynamic %u texture %u lightstyle %u (overlap; existing entries only)\n",
+        (unsigned)p.cache[QC_DYNAMIC],(unsigned)p.cache[QC_TEXTURE],(unsigned)p.cache[QC_LIGHTSTYLE]);
     task_stack_info_t stack;if(!task_stack_inspect(task_current()->id,&stack))
         kprintf("quake stack: %u/%u bytes, guard %s\n",(unsigned)stack.used,(unsigned)stack.size,stack.guard_ok?"OK":"BAD");
     profile_reset();

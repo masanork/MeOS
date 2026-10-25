@@ -273,3 +273,51 @@ exact integer results for finite, int-range inputs. Boundary/denormal cases, one
 million reference cases and the same 130-frame ASan image pass. Native speed and
 load-time comparisons await a coordinated device session after the parallel
 SDMMC work; no firmware was flashed for this follow-up.
+
+## Near-clamp and surface-cache follow-up (2026-10-25)
+
+Native disassembly already lowers the candidate `1.0 / float` expressions to
+`fdiv.s`; those expressions were left intact. Three projection near-clamp tests
+now compare with `(float)NEAR_CLIP`. The assignment already stored that rounded
+float, so the result is identical even at the adjacent float below the double
+threshold (the original assignment there is a no-op). One million arbitrary
+float bit patterns plus 128 adjacent boundary inputs match, including NaNs,
+infinities and signed zero where encountered. Software double-conversion and
+less-than helper call sites in r_draw fall from four each to one each; backface
+and surface-ordering precision is unchanged. A temporary original-predicate
+headless build matches the optimized 1,187-frame gameplay rolling hash.
+
+`quake cache` reports interval hits, rebuilds, allocation requests, live-entry
+evictions, arena wraps, thrash-flag transitions, rebuilt pixels and padded
+allocation-request bytes. `quake cache reasons` counts existing entries rebuilt
+for current/previous dynamic lighting, texture animation or lightstyle changes.
+Reasons may overlap; entries absent after eviction are counted as allocations,
+not attributed to their former reason. Cache capacity and replacement remain
+unchanged. The counters are diagnostic instrumentation with some CPU overhead.
+
+Host sweep (same demo, 1,200 host steps, sound disabled; includes warmup):
+
+| Cache KiB | Hits | Rebuilds | Evictions | Rebuilt pixels |
+| --- | ---: | ---: | ---: | ---: |
+| 600 | 55,826 | 22,470 | 3,868 | 70,269,092 |
+| 1024 | 56,614 | 21,682 | 2,678 | 68,236,248 |
+| 2048 | 57,108 | 21,188 | 1,733 | 67,145,984 |
+
+All three capacities produced the same gameplay rolling FNV-1a hash and frame-20
+SHA256. The startup console is excluded from the rolling hash because its cache
+size text intentionally differs. The 2 MiB variant reduces rebuilds by about
+5.7% and rebuilt pixels by 4.4%; dynamic-light invalidation is common. This is not
+a measured FPS gain. The native default remains 600 KiB pending device timing.
+Raw results and native image identity: `cache-host-2026-10-25.json`.
+
+To reproduce with separately supplied assets:
+
+```
+python3 tools/quake/headless.py /path/to/pak0.pak --steps 1200 --surface-cache-kib 600
+python3 tools/quake/headless.py /path/to/pak0.pak --steps 1200 --surface-cache-kib 1024
+python3 tools/quake/headless.py /path/to/pak0.pak --steps 1200 --surface-cache-kib 2048
+python3 tools/quake/headless.py /path/to/pak0.pak --steps 1200 --reference-near-clamp
+```
+
+The original-predicate option modifies only a temporary source copy, not the
+checkout. These are host correctness/counter tests, not physical speed evidence.

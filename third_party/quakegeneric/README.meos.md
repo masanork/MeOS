@@ -25,3 +25,11 @@ render remains byte-identical. MeOS-only host phase hooks aggregate command,
 server, client, rendering and effect-mixer elapsed times; builds without the
 forced compatibility header retain no-op hooks. No game arithmetic is changed
 by profiling. Hardware speed impact of this follow-up remains unmeasured.
+
+Three r_draw projection near-clamps compare at their float storage precision,
+removing double comparison helpers without changing the resulting float values.
+Backface/ordering tests retain their existing precision. Surface-cache hooks
+count reuse, regeneration, allocation/eviction and invalidation reasons in the
+MeOS profiler; other builds compile these hooks away. Cache capacity and
+replacement behavior are unchanged. See tools/quake/cache-host-2026-10-25.json
+for the host-only size sweep and original-clamp image comparison.

@@ -30,6 +30,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('pak0', type=Path)
     parser.add_argument('--image', type=Path, default=Path('/tmp/meos-quake-headless.ppm'))
+    parser.add_argument('--steps', type=int, default=120, choices=range(20,3001), metavar='20..3000')
+    parser.add_argument('--surface-cache-kib', type=int, default=600, choices=[600,1024,2048])
+    parser.add_argument('--reference-near-clamp', action='store_true', help='test original double near-clip comparisons in a temporary source copy')
     args = parser.parse_args()
     pak = args.pak0.resolve(strict=True)
     validate(pak)
@@ -48,12 +51,18 @@ def main():
         objects = []
         for source in sources:
             obj = build / (source.stem + '.o')
+            if args.reference_near_clamp and source.name == 'r_draw.c':
+                text = source.read_text()
+                if text.count('< (float)NEAR_CLIP') != 3:
+                    raise RuntimeError('near-clamp reference requires exactly three optimized sites')
+                source = build / 'r_draw_reference.c'
+                source.write_text(text.replace('< (float)NEAR_CLIP', '< NEAR_CLIP'))
             subprocess.run(flags + ['-include', str(component / 'compat.h'), '-c', str(source), '-o', str(obj)], check=True)
             objects.append(str(obj))
         binary = build / 'quake'
         subprocess.run(flags + ['-DM5OS_BOARD_TAB5=1', '-DM5OS_QUAKE=1', str(ROOT / 'tools/quake/headless.c'),
             str(ROOT / 'apps/quake/libc.c'), str(ROOT / 'apps/quake/profile.c'), str(ROOT / 'kernel/lib/number.c'), *objects, '-lm', '-o', str(binary)], check=True)
-        subprocess.run([str(binary), str(build / 'data'), str(output)], check=True, timeout=120)
+        subprocess.run([str(binary), str(build / 'data'), str(output),str(args.steps),str(args.surface_cache_kib)], check=True, timeout=120)
         if not output.is_file():
             raise RuntimeError('engine did not capture a frame')
         print('Captured:', output)

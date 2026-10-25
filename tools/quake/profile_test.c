@@ -9,11 +9,13 @@ int main(void){
     now=30;quake_profile_mark(QP_CLIENT);now=60;quake_profile_mark(QP_RENDER);
     now=100;quake_profile_mark(QP_AUDIO);now=150;quake_profile_mark(QP_COUNT);
     quake_profile_io(QIO_READ,100,1234);quake_profile_io(QIO_OPEN,140,0);
+    quake_profile_cache(QC_HIT,3);quake_profile_cache(QC_PIXELS,2048);quake_profile_cache(QC_PIXELS,1024);
     quake_profile_stats s=quake_profile_take();assert(s.completed_frames==1);
     for(unsigned i=0;i<QP_COUNT;i++)assert(s.phase_us[i]==10*(i+1));
     assert(s.read_bytes==1234&&s.io_calls[QIO_READ]==1&&s.io_us[QIO_READ]==50);
     assert(s.io_calls[QIO_OPEN]==1&&s.io_us[QIO_OPEN]==10);
-    s=quake_profile_take();assert(!s.completed_frames&&!s.read_bytes);
+    assert(s.cache[QC_HIT]==3&&s.cache[QC_PIXELS]==3072);
+    s=quake_profile_take();assert(!s.completed_frames&&!s.read_bytes&&!s.cache[QC_HIT]&&!s.cache[QC_PIXELS]);
     /* Aborted host frame: next begin must not charge the idle gap. */
     quake_profile_mark(QP_COMMANDS);now=160;quake_profile_mark(QP_SERVER);
     now=1000;quake_profile_mark(QP_COMMANDS);now=1005;quake_profile_mark(QP_COUNT);
