@@ -6,6 +6,12 @@ set -eu
 cd "$(dirname "$0")/../.."
 export M5OS_BOARD=tab5 M5OS_QUAKE=1
 unset M5OS_DOOM M5OS_DOOM_RELEASE
+case "${M5OS_QUAKE_RESOLUTION:-320x200}" in
+  320x200) QUAKE_BUILD=build-quake; QUAKE_CONFIG=sdkconfig.quake ;;
+  512x300) QUAKE_BUILD=build-quake-512x300; QUAKE_CONFIG=sdkconfig.quake-512x300
+    if [ ! -f "$QUAKE_CONFIG" ] && [ -f sdkconfig.quake ]; then cp sdkconfig.quake "$QUAKE_CONFIG"; fi ;;
+  *) echo "unsupported M5OS_QUAKE_RESOLUTION" >&2; exit 2 ;;
+esac
 . tools/env.sh
 [ $# -gt 0 ] || set -- build
-exec idf.py -B build-quake -DSDKCONFIG=sdkconfig.quake -DIDF_TARGET=esp32p4 "$@"
+exec idf.py -B "$QUAKE_BUILD" -DSDKCONFIG="$QUAKE_CONFIG" -DIDF_TARGET=esp32p4 "$@"

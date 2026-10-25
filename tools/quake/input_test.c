@@ -35,7 +35,7 @@ int main(void){
  reset();tab5_touch_point_t look[2]={{700,350,4},{730,330,4}};sample(0,10000,look,1);int x,y;quake_input_mouse(&x,&y);assert(!x&&!y);
  sample(0,10010,look+1,1);quake_input_mouse(&x,&y);assert(x==60&&y==-40);quake_input_mouse(&x,&y);assert(!x&&!y);
  tab5_touch_point_t two[2]={{500,300,2},{740,335,4}};sample(0,10020,two,2);quake_input_mouse(&x,&y);assert(x==20&&y==10);
- for(unsigned i=0;i<QUAKE_BUTTON_COUNT;i++){const quake_button *b=&quake_buttons[i];assert((b->x+b->w<=160||b->x>=1120)&&b->x>=0&&b->x+b->w<=1280&&b->y>=0&&b->y+b->h<=720);assert(quake_button_at(b->x,b->y)==(int)i);}
+ for(unsigned i=0;i<QUAKE_BUTTON_COUNT;i++){const quake_button *b=&quake_buttons[i];assert((b->x+b->w<=QV_X||b->x>=QV_X+QV_OUT_WIDTH)&&b->x>=0&&b->x+b->w<=1280&&b->y>=0&&b->y+b->h<=720);assert(quake_button_at(b->x,b->y)==(int)i);}
  assert(quake_button_at(700,350)<0);assert(quake_button_key(QB_FIRE,1)==K_ENTER);assert(quake_button_key(QB_LEFT,0)=='a');
  reset();epoch=keyboard_raw_generation();for(unsigned i=0;i<80;i++)keyboard_raw_matrix(epoch,(uint8_t)((i%2?0:128)|0x22));sample(0,11000,NULL,0);assert(!live['w']);keyboard_raw_clear();sample(0,11010,NULL,0);assert(!live['w']);
  puts("Quake input: independent releases, held keys, brief taps, USB rollover, ownership epochs, ANSI/menu typing, source merging, touch layout and swipe tracking PASS");

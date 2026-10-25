@@ -44,10 +44,10 @@ void QG_DrawFrame(void *pixels){
   * only, after signon and console animation have finished. */
  if(cls.signon==SIGNONS&&!scr_con_current){
   hashed_frames++;
-  for(unsigned i=0;i<64000;i++)render_hash=(render_hash^((unsigned char *)pixels)[i])*UINT64_C(1099511628211);
+  for(unsigned i=0;i<QV_PIXELS;i++)render_hash=(render_hash^((unsigned char *)pixels)[i])*UINT64_C(1099511628211);
   for(unsigned i=0;i<768;i++)render_hash=(render_hash^pal[i])*UINT64_C(1099511628211);
  }
- if(frames==20){FILE *f=fopen(image_path,"wb");if(!f)quake_exit(1);fprintf(f,"P6\n320 200\n255\n");for(unsigned i=0;i<64000;i++)fwrite(pal+((unsigned char *)pixels)[i]*3,1,3,f);fclose(f);}
+ if(frames==20){FILE *f=fopen(image_path,"wb");if(!f)quake_exit(1);fprintf(f,"P6\n%d %d\n255\n",QV_WIDTH,QV_HEIGHT);for(unsigned i=0;i<QV_PIXELS;i++)fwrite(pal+((unsigned char *)pixels)[i]*3,1,3,f);fclose(f);}
 }
 int QG_GetKey(int *down,int *key){(void)down;(void)key;return 0;}
 void QG_GetMouseMove(int *x,int *y){*x=*y=0;}

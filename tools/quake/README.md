@@ -419,3 +419,106 @@ The measured replay showed about 1 ms/frame in other tasks, with keyboard pollin
 the largest listed contributor. Host scheduler tests cover ongoing/same-task
 intervals, snapshots, reclaim and the 32-bit time boundary; stack tests verify
 counter reset on TCB reuse. Foundation CI runs these tests.
+
+## 512x300 baseline configuration
+
+The default remains 320x200 -> 960x720. A separate build selects 512x300 ->
+1024x600, centered at (128,60), with narrower control rails outside the viewport:
+
+```
+M5OS_QUAKE_RESOLUTION=512x300 sh tools/quake/build.sh
+```
+
+Outputs are `build-quake-512x300` and ignored `sdkconfig.quake-512x300`; the
+existing low-resolution build/config are retained. The engine and adapter share
+`m5os/quake_video.h`; compile definitions are checked in both native build trees.
+The baseline keeps the same scalar renderer, 12 MiB engine arena, 48 KiB stack,
+600 KiB surface cache, audio settings and exact DMA design. The cache is now
+explicitly fixed at the old low-resolution value to avoid the engine silently
+increasing it with pixel count. Source buffers grow with the selected resolution.
+
+This is resolution adaptation, not a new renderer optimization. High-resolution
+CPU transfer uses the same word damage scan and column-copy scheme; exact DMA
+uses twofold expansion and two destination rows. Bounds use 16 bits because
+source rows 256..299 cannot fit the old 8-bit bounds. Low-resolution expansion
+and blitting remain their original branches. PPA `smooth` is rejected for this
+configuration because its separate stage/filter path is still 320x200-only.
+
+After a coordinated app-only flash, use `quake dma e1m1` (or `quake e1m1` for
+CPU). `quake dmaview` verifies source pixels against the full displayed viewport;
+its high-resolution static reference can be generated with:
+
+```
+python3 tools/quake/visual_reference.py /tmp/reference-512.png --resolution 512x300
+python3 tools/quake/headless.py /path/to/pak0.pak --resolution 512x300 --steps 1200
+```
+
+Baseline device procedure: record the image hash, selected resolution/startup
+message, clock/cache settings, load time and memory; run full-view
+`timedemo demo1;toggleconsole` twice with effect audio for each CPU/DMA mode;
+check display, input, audio, stack guards and normal quit/relaunch. Record 969-frame
+means and interval lows separately. Do not change renderer math, cache size,
+compiler options, transfer batching or scheduling while gathering this baseline.
+
+Host checks pass at both resolutions, including unaligned buffers, palette
+changes, rows above 255, untouched rails/margins and input routing. The high
+engine completed 1,200 ASan host steps; the low 130-frame image remains exactly
+`88b7f83db7da86e371452ed78ddefd1788701f5c356f6380cb30dd5296a6c06a`.
+Both native builds, Doom host checks and the clean-source simulator pass.
+`hires-host-2026-10-25.json` records these preparation results.
+
+Physical Tab5 measurements on 2026-10-26 use source `f4e9ddb`, CPU 360 MHz,
+128 KiB L2 cache, the existing 600 KiB surface cache and effect audio. Full-view
+969-frame demo1 returned **10.7 / 10.7 FPS on CPU** and **5.7 / 5.7 FPS on DMA**.
+The static start view (~23 FPS DMA) is not representative of the demo. The
+high-resolution DMA path spends roughly 130 ms/frame in transfer during moving
+intervals; it is slower than CPU here. The 150 KiB indexed image exceeds the
+128 KiB cache, making column traversal/cache behavior a next investigation,
+not a proven sole cause. No renderer/cache/compiler optimization was applied
+while measuring. The earlier 320x200 DMA result was 32.0 FPS; its different
+pixel count and viewport prevent a same-workload performance comparison.
+
+Static CPU/DMA comparisons match the independent reference (`a4258a41`), and
+moving DMA comparisons report zero mismatches. Stack guards remain intact;
+normal exits report zero audio underruns/errors. Physical display, sound and
+controls still require user acceptance for this resolution. Detailed image
+identity and measurements are in `hires-device-2026-10-26.json`.
+
+## High-resolution column staging — 2026-10-26
+
+A 512x300 indexed frame occupies 150 KiB, exceeding the 128 KiB L2 cache.
+Reading each full column separately wastes adjacent PSRAM pixels when cache
+lines are evicted. The high-resolution CPU and DMA paths now read 64 adjacent
+columns row by row into a 19,200-byte internal-stack tile, then expand columns
+from that tile. DMA only receives the existing persistent kernel RGB buffers;
+it never reads this stack tile. The 320x200 CPU/DMA branches are unchanged.
+
+Full-view demo1, 969 frames per run, effect audio, two repeats each:
+
+| 512x300 transfer | CPU FPS | DMA FPS | Tile bytes |
+| --- | --- | --- | --- |
+| Baseline | 10.7 / 10.7 | 5.7 / 5.7 | 0 |
+| 16 columns | 14.1 / 14.1 | 16.0 / 16.0 | 4,800 |
+| 64 columns (selected) | 15.9 / 15.9 | 17.5 / 17.5 | 19,200 |
+
+The selected DMA candidate improves its own baseline by about 3.1x, and the
+CPU candidate by about 49%. This does not reach 30 FPS. Representative moving
+DMA intervals fall from roughly 130 ms transfer to 17–18 ms; renderer/other
+work remains significant. No renderer math, clocks, cache capacity or compiler
+options changed.
+
+ASan/UBSan checks compare the full framebuffer to an independent RGB expansion,
+including palette changes, sparse damage, unaligned input, rows above 255,
+partial staging tiles and untouched margins. Native static/moving CPU/DMA
+comparisons report zero mismatches; static FNV32 remains `a4258a41`. The user
+confirmed normal display on the 16-column candidate and normal display/controls
+on the final 64-column DMA game after relaunch. Sampled stack usage peaks
+at 30,896 / 49,152 bytes with intact guards. Normal measured CPU/DMA exits
+report zero audio underruns/errors. Repeated normal game exits/relaunches pass.
+
+An existing late-start internal-memory fragmentation failure also occurred
+after diagnostics. Starting the game early after reset succeeded; this change
+does not fix allocator fragmentation or reduce the requested stack.
+`hires-tile16-device-2026-10-26.json` and
+`hires-tile64-device-2026-10-26.json` retain exact image identities and results.
+CPU remains the default; use `quake dma e1m1` for the selected fast path.

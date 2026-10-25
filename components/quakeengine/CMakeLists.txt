@@ -83,3 +83,7 @@ add_custom_command(TARGET ${COMPONENT_LIB} POST_BUILD
     COMMAND ${PYTHON} ${CMAKE_CURRENT_LIST_DIR}/../../tools/quake/check_stack.py
         ${CMAKE_CURRENT_BINARY_DIR}
     VERBATIM)
+
+if("$ENV{M5OS_QUAKE_RESOLUTION}" STREQUAL "512x300")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE M5OS_QUAKE_HIGHRES=1)
+endif()

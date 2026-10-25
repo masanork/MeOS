@@ -12,6 +12,11 @@ jobs:
           persist-credentials: false
       - run: sh tools/quake/host_test.sh
   firmware:
+    strategy:
+      matrix:
+        resolution: ['320x200', '512x300']
+    env:
+      M5OS_QUAKE_RESOLUTION: ${{ matrix.resolution }}
     runs-on: ubuntu-24.04
     container: espressif/idf:v5.4.4
     timeout-minutes: 30
@@ -23,5 +28,9 @@ jobs:
         run: |
           . /opt/esp/idf/export.sh
           sh tools/quake/build.sh build
-          python3 tools/quake/check_stack.py build-quake
+          case "$M5OS_QUAKE_RESOLUTION" in
+            512x300) BUILD=build-quake-512x300 ;;
+            *) BUILD=build-quake ;;
+          esac
+          python3 tools/quake/check_stack.py "$BUILD"
       # No PAK files, hardware flash, release upload or game-data redistribution.

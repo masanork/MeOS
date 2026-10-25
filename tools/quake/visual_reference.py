@@ -23,18 +23,28 @@ def chunk(kind, data):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('output', type=Path)
+    parser.add_argument('--resolution', choices=['320x200','512x300'], default='320x200')
     args = parser.parse_args()
+    high = args.resolution == '512x300'
+    source_width, source_height = (512, 300) if high else (320, 200)
+    width, height = (1024, 600) if high else (960, 720)
+    y_offset = 60 if high else 0
+    def sampled(x, y):
+        sx = (x * source_width // width) * 320 // source_width
+        sy = (y * source_height // height) * 200 // source_height
+        return pixel(sx, sy)
     rows = bytearray()
-    for y in range(720):
+    for y in range(height):
         rows.append(0)
-        for x in range(960):
-            value = pixel(x // 3, y * 200 // 720)
+        for x in range(width):
+            value = sampled(x, y)
             rows.extend(((value >> 11) * 255 // 31, ((value >> 5) & 63) * 255 // 63, (value & 31) * 255 // 31))
-    args.output.write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', 960, 720, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
+    args.output.write_bytes(b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(rows)) + chunk(b'IEND', b''))
     checksum = 2166136261
-    for physical_x in range(960):
+    for physical_x in range(width):
         for y in range(720):
-            checksum = ((checksum ^ pixel((959 - physical_x) // 3, y * 200 // 720)) * 16777619) & 0xffffffff
+            value = sampled(width - 1 - physical_x, y - y_offset) if y_offset <= y < y_offset + height else 0
+            checksum = ((checksum ^ value) * 16777619) & 0xffffffff
     print(f'Expected viewport FNV32: {checksum:08x}')
 
 if __name__ == '__main__':
