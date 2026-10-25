@@ -25,6 +25,8 @@ typedef struct {
     uint64_t wait_us, prepare_us, dma_us, finish_us, hold_us;
     uint32_t max_wait_us, max_prepare_us, max_dma_us, max_finish_us, max_hold_us;
     uint32_t max_polls;
+    uint32_t wait_blocked_us, wait_ready_us, wait_other_us;
+    uint32_t wait_owner_pid, wait_contended, wait_profiled;
 } sdcard_io_class_t;
 typedef struct { sdcard_io_class_t read[SDCARD_IO_CLASSES], write[SDCARD_IO_CLASSES]; } sdcard_io_stats_t;
 /* False on transports without these diagnostics; no probe or media IO. */

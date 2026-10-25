@@ -45,16 +45,25 @@ def checksum(data):
     return total ^ 65535
 
 
-def sd_io_stats(receipt):
+def sd_io_stats(receipt, require_wait=False):
     rows = {"read": {}, "write": {}}
     required = {"calls", "blocks", "errors", "wait_ms", "prepare_ms", "dma_ms",
                 "finish_ms", "hold_ms", "max_wait_us", "max_prepare_us",
                 "max_dma_us", "max_finish_us", "max_hold_us", "max_polls"}
+    if require_wait:
+        required |= {"wait_blocked_us", "wait_ready_us", "wait_other_us", "wait_owner_pid", "wait_contended", "wait_profiled"}
     for direction, limit, fields in re.findall(r"SDMMC (READ|WRITE) max_blocks=(\d+) ([^\n]+)", receipt):
         key = direction.lower()
         values = {name: int(value) for name, value in re.findall(r"([a-z_]+)=(\d+)", fields)}
         if limit in rows[key] or not required.issubset(values):
             raise RuntimeError("duplicate/incomplete SDMMC diagnostic row")
+        if require_wait:
+            if values["max_wait_us"] < 0xffffffff and sum(values[k] for k in ("wait_blocked_us", "wait_ready_us", "wait_other_us")) != values["max_wait_us"]:
+                raise RuntimeError("SDMMC wait parts do not match paired maximum")
+            if values["wait_contended"] > 1 or values["wait_profiled"] > 1 or (values["wait_contended"] and not values["wait_profiled"]):
+                raise RuntimeError("invalid SDMMC wait profiling flags")
+            if not values["wait_contended"] and (values["wait_blocked_us"] or values["wait_ready_us"] or values["wait_owner_pid"]):
+                raise RuntimeError("uncontended SDMMC wait has blocked/ready time")
         rows[key][limit] = values
     if any(set(table) != {"1", "8", "32", "128"} for table in rows.values()):
         raise RuntimeError("SDMMC diagnostic classes missing")
@@ -320,17 +329,17 @@ def main():
 
             for _ in range(args.reads):
                 if args.sd_diagnostics:
-                    sd_io_stats(session.command("sd stats reset"))
+                    sd_io_stats(session.command("sd stats reset"), args.bus_diagnostics)
                 sample = verify_pak()
                 if args.sd_diagnostics:
-                    sample["sd_io"] = sd_io_stats(session.command("sd stats"))
+                    sample["sd_io"] = sd_io_stats(session.command("sd stats"), args.bus_diagnostics)
                 report["baseline"].append(sample)
             session.command("mem trim")
             free_before, _, _ = memory(session.command("mem"))
             report["trimmed_psram_before_kib"] = free_before
             for rate in args.pps:
                 if args.sd_diagnostics:
-                    sd_io_stats(session.command("sd stats reset"))
+                    sd_io_stats(session.command("sd stats reset"), args.bus_diagnostics)
                 if args.diagnostics:
                     receipt = session.command("wifi stats reset")
                     if "WIFI RX" not in receipt:
@@ -382,7 +391,7 @@ def main():
                     if args.bus_diagnostics:
                         summary["wifi_bus"] = wifi_bus_stats(receipt)
                 if args.sd_diagnostics:
-                    summary["sd_io"] = sd_io_stats(session.command("sd stats"))
+                    summary["sd_io"] = sd_io_stats(session.command("sd stats"), args.bus_diagnostics)
                 summary["pak"] = pak
                 summary["font_receipt"] = font.strip()
                 report["loads"].append(summary)

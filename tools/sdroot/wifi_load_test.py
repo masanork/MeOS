@@ -97,6 +97,12 @@ class IntegrityTests(unittest.TestCase):
         for invalid in ("\n".join(lines[:-1]), text + "\n" + lines[0], text.replace("max_polls=50", "")):
             with self.assertRaises(RuntimeError):
                 sd_io_stats(invalid)
+        waiting = "wait_blocked_us=40 wait_ready_us=50 wait_other_us=10 wait_owner_pid=3 wait_contended=1 wait_profiled=1"
+        full = "\n".join(line + " " + waiting for line in lines)
+        self.assertEqual(sd_io_stats(full, True)["read"]["128"]["wait_ready_us"], 50)
+        for invalid in (text, full.replace("wait_ready_us=50", "wait_ready_us=51"), full.replace("wait_contended=1", "wait_contended=0")):
+            with self.assertRaises(RuntimeError):
+                sd_io_stats(invalid, True)
 
     def test_wifi_bus_receipts_require_all_rows_and_paired_peaks(self):
         common = "calls=5 errors=0 hold_ms=4 scheduled_ms=3 max_hold_us=1000 peak_scheduled_us=800"

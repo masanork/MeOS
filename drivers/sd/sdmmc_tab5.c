@@ -49,14 +49,25 @@ static void max_time(uint32_t *max, uint64_t value)
     if (n > *max) *max = n;
 }
 static void record_io(bool write, uint32_t blocks, bool ok, uint64_t wait,
-                      uint64_t hold, const transfer_time_t *t)
+                      uint64_t hold, const transfer_time_t *t, const mutex_wait_info_t *waiting)
 {
     unsigned slot = blocks <= 1 ? 0 : blocks <= 8 ? 1 : blocks <= 32 ? 2 : 3;
     sdcard_io_class_t *c = write ? &s_io.write[slot] : &s_io.read[slot];
     c->calls++; c->blocks += blocks; if (!ok) c->errors++;
     c->wait_us += wait; c->prepare_us += t->prepare; c->dma_us += t->dma;
     c->finish_us += t->finish; c->hold_us += hold;
-    max_time(&c->max_wait_us, wait); max_time(&c->max_prepare_us, t->prepare);
+    if (wait > c->max_wait_us) {
+        uint64_t blocked = waiting->profiled && waiting->contended ? waiting->granted_us - waiting->entered_us : 0;
+        uint64_t ready = waiting->profiled && waiting->contended ? waiting->resumed_us - waiting->granted_us : 0;
+        uint64_t parts = blocked + ready;
+        max_time(&c->max_wait_us, wait);
+        c->wait_blocked_us = c->wait_ready_us = c->wait_other_us = 0;
+        max_time(&c->wait_blocked_us, blocked); max_time(&c->wait_ready_us, ready);
+        max_time(&c->wait_other_us, wait >= parts ? wait - parts : 0);
+        c->wait_owner_pid = waiting->owner_pid;
+        c->wait_contended = waiting->contended; c->wait_profiled = waiting->profiled;
+    }
+    max_time(&c->max_prepare_us, t->prepare);
     max_time(&c->max_dma_us, t->dma); max_time(&c->max_finish_us, t->finish);
     max_time(&c->max_hold_us, hold);
     if (t->polls > c->max_polls) c->max_polls = t->polls;
@@ -325,11 +336,12 @@ static int transfer(bool write, uint32_t lba, uint32_t count, void *data)
     while (count) {
         uint32_t chunk = count > DMA_BLOCKS ? DMA_BLOCKS : count;
         uint64_t queued = hal_time_now_us();
-        sdmmc_bus_lock();
+        mutex_wait_info_t waiting;
+        sdmmc_bus_lock_timed(&waiting);
         uint64_t acquired = hal_time_now_us();
         transfer_time_t timing = {0};
         bool ok = transfer_locked(write, lba, chunk, bytes, &timing);
-        record_io(write, chunk, ok, acquired - queued, hal_time_now_us() - acquired, &timing);
+        record_io(write, chunk, ok, acquired - queued, hal_time_now_us() - acquired, &timing, &waiting);
         if (!ok) {
             s.ready = false;
             s.detail = write ? "SDMMC write error; unmount then probe again"
