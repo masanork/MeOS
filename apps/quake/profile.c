@@ -24,4 +24,7 @@ void quake_profile_io(unsigned kind,uint64_t began,unsigned bytes){
 quake_profile_stats quake_profile_take(void){
     quake_profile_stats result=stats;memset(&stats,0,sizeof stats);return result;
 }
+void quake_profile_cache(unsigned event,unsigned amount){
+    if(event<QC_COUNT)stats.cache[event]+=amount;
+}
 #endif

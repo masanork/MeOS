@@ -17,6 +17,8 @@
 uint32_t quake_owner=17;char quake_basedir[96]="/sd";
 static jmp_buf done;
 static unsigned frames;
+static uint64_t render_hash=UINT64_C(14695981039346656037);
+static unsigned hashed_frames;
 static const char *data_root,*image_path;
 static unsigned char pal[768];
 void *kmalloc_psram_owned(size_t n,uint32_t owner){(void)owner;return malloc(n);}
@@ -38,20 +40,37 @@ void QG_Quit(void){quake_exit(0);}
 void QG_SetPalette(unsigned char p[768]){memcpy(pal,p,768);}
 void QG_DrawFrame(void *pixels){
  frames++;
+ /* Startup consoles contain the selected cache-size text. Compare gameplay
+  * only, after signon and console animation have finished. */
+ if(cls.signon==SIGNONS&&!scr_con_current){
+  hashed_frames++;
+  for(unsigned i=0;i<64000;i++)render_hash=(render_hash^((unsigned char *)pixels)[i])*UINT64_C(1099511628211);
+  for(unsigned i=0;i<768;i++)render_hash=(render_hash^pal[i])*UINT64_C(1099511628211);
+ }
  if(frames==20){FILE *f=fopen(image_path,"wb");if(!f)quake_exit(1);fprintf(f,"P6\n320 200\n255\n");for(unsigned i=0;i<64000;i++)fwrite(pal+((unsigned char *)pixels)[i]*3,1,3,f);fclose(f);}
 }
 int QG_GetKey(int *down,int *key){(void)down;(void)key;return 0;}
 void QG_GetMouseMove(int *x,int *y){*x=*y=0;}
 void QG_GetJoyAxes(float *a){memset(a,0,6*sizeof *a);}
 int main(int argc,char **argv){
- if(argc!=3)return 2;data_root=argv[1];image_path=argv[2];
+ if(argc!=5)return 2;data_root=argv[1];image_path=argv[2];
+ unsigned steps=(unsigned)strtoul(argv[3],NULL,10);
+ if(!steps||steps>3000)return 2;
  setvbuf(stdout,NULL,_IONBF,0);
  int result=setjmp(done);if(result)return result==1?0:1;
  quakeparms_t p={0};p.memsize=12*1024*1024;p.membase=quake_malloc(p.memsize);p.basedir=quake_basedir;
- char *args[]={"quake","-basedir",quake_basedir,"-nosound","-nocdaudio",NULL};COM_InitArgv(5,args);p.argc=com_argc;p.argv=com_argv;
- quake_profile_reset();Host_Init(&p);for(unsigned i=0;i<120;i++)Host_Frame(.05);
+ char *args[]={"quake","-basedir",quake_basedir,"-nosound","-nocdaudio","-surfcachesize",argv[4],NULL};COM_InitArgv(7,args);p.argc=com_argc;p.argv=com_argv;
+ quake_profile_reset();Host_Init(&p);for(unsigned i=0;i<steps;i++)Host_Frame(.05);
  quake_profile_stats profile=quake_profile_take();
- if(!profile.completed_frames||!profile.phase_us[QP_RENDER]||!profile.read_bytes)return 1;
+ if(!profile.completed_frames||!profile.phase_us[QP_RENDER]||!profile.read_bytes||
+    !profile.cache[QC_HIT]||!profile.cache[QC_REBUILD]||profile.cache[QC_ALLOC]>profile.cache[QC_REBUILD])return 1;
  printf("HEADLESS profile: %u completed frames, %u bytes read\n",profile.completed_frames,(unsigned)profile.read_bytes);
+ printf("HEADLESS cache: hit=%llu rebuild=%llu alloc=%llu evict=%llu wrap=%llu thrash=%llu pixels=%llu bytes=%llu dynamic=%llu texture=%llu lightstyle=%llu\n",
+ (unsigned long long)profile.cache[QC_HIT],(unsigned long long)profile.cache[QC_REBUILD],
+ (unsigned long long)profile.cache[QC_ALLOC],(unsigned long long)profile.cache[QC_EVICT],
+ (unsigned long long)profile.cache[QC_WRAP],(unsigned long long)profile.cache[QC_THRASH],
+ (unsigned long long)profile.cache[QC_PIXELS],(unsigned long long)profile.cache[QC_BYTES],
+ (unsigned long long)profile.cache[QC_DYNAMIC],(unsigned long long)profile.cache[QC_TEXTURE],(unsigned long long)profile.cache[QC_LIGHTSTYLE]);
+ printf("HEADLESS render hash: %016llx (%u gameplay frames)\n",(unsigned long long)render_hash,hashed_frames);
  printf("HEADLESS frames=%u\n",frames);return frames>=20?0:1;
 }

@@ -101,7 +101,8 @@ void R_EmitEdge (mvertex_t *pv0, mvertex_t *pv1)
 		VectorSubtract (world, modelorg, local);
 		TransformVector (local, transformed);
 	
-		if (transformed[2] < NEAR_CLIP)
+		/* The clamp result is float; comparing at that precision is exact. */
+		if (transformed[2] < (float)NEAR_CLIP)
 			transformed[2] = NEAR_CLIP;
 	
 		lzi0 = 1.0 / transformed[2];
@@ -130,7 +131,7 @@ void R_EmitEdge (mvertex_t *pv0, mvertex_t *pv1)
 	VectorSubtract (world, modelorg, local);
 	TransformVector (local, transformed);
 
-	if (transformed[2] < NEAR_CLIP)
+	if (transformed[2] < (float)NEAR_CLIP)
 		transformed[2] = NEAR_CLIP;
 
 	r_lzi1 = 1.0 / transformed[2];
@@ -827,7 +828,7 @@ void R_RenderPoly (msurface_t *fa, int clipflags)
 		VectorSubtract (verts[vertpage][i].position, modelorg, local);
 		TransformVector (local, transformed);
 
-		if (transformed[2] < NEAR_CLIP)
+		if (transformed[2] < (float)NEAR_CLIP)
 			transformed[2] = NEAR_CLIP;
 
 		lzi = 1.0 / transformed[2];
