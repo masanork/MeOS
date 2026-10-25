@@ -18,7 +18,9 @@
 #define OTFONT_MAX_GLYPH 64u
 #define OTFONT_CELL_BYTES ((OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH)/2u)
 #define OTFONT_CACHE_SLOTS 384u
-#define OTFONT_STREAM_CACHE (64u*1024u)
+#define OTFONT_STREAM_PAGE (16u*1024u)
+#define OTFONT_STREAM_SLOTS 16u
+#define OTFONT_STREAM_CACHE (OTFONT_STREAM_PAGE*OTFONT_STREAM_SLOTS)
 
 typedef struct {
     uint32_t glyph,stamp;
@@ -36,7 +38,8 @@ typedef struct {
     uint16_t *scratch;
     cache_entry *entries;
     int font_fd;
-    uint32_t font_bytes,stream_base,stream_length,load_ms,stamp,hits,misses;
+    uint32_t font_bytes,stream_base[OTFONT_STREAM_SLOTS],stream_length[OTFONT_STREAM_SLOTS];
+    uint32_t stream_stamp[OTFONT_STREAM_SLOTS],stream_clock,load_ms,stamp,hits,misses;
     uint32_t io_bytes,io_reads;
     uint64_t raster_us;
     unsigned pixel_size,users;
@@ -58,18 +61,24 @@ static void *ft_realloc(FT_Memory memory,long current,long requested,void *block
     kfree(block);return next;
 }
 
-static bool fill_stream_cache(uint32_t offset) {
-    uint32_t base=offset&~(OTFONT_STREAM_CACHE-1u);
-    uint32_t length=s_font.font_bytes-base;if(length>OTFONT_STREAM_CACHE)length=OTFONT_STREAM_CACHE;
+static bool fill_stream_cache(uint32_t offset,unsigned *slot_out) {
+    unsigned slot=0;uint32_t oldest=UINT32_MAX;
+    for(unsigned i=0;i<OTFONT_STREAM_SLOTS;i++) {
+        if(!s_font.stream_length[i]){slot=i;oldest=0;break;}
+        if(s_font.stream_stamp[i]<oldest){oldest=s_font.stream_stamp[i];slot=i;}
+    }
+    uint32_t base=offset&~(OTFONT_STREAM_PAGE-1u);
+    uint32_t length=s_font.font_bytes-base;if(length>OTFONT_STREAM_PAGE)length=OTFONT_STREAM_PAGE;
     if(vfs_seek(s_font.font_fd,(int32_t)base,FS_SEEK_SET)!=(int)base)return false;
     uint32_t done=0;
     while(done<length) {
-        int n=vfs_read(s_font.font_fd,s_font.stream_cache+done,length-done);
+        int n=vfs_read(s_font.font_fd,s_font.stream_cache+slot*OTFONT_STREAM_PAGE+done,length-done);
         if(n<=0)return false;
         done+=(uint32_t)n;
     }
-    s_font.stream_base=base;s_font.stream_length=length;
-    s_font.io_bytes+=length;s_font.io_reads++;return true;
+    s_font.stream_base[slot]=base;s_font.stream_length[slot]=length;
+    s_font.stream_stamp[slot]=++s_font.stream_clock;
+    s_font.io_bytes+=length;s_font.io_reads++;*slot_out=slot;return true;
 }
 
 static unsigned long stream_read(FT_Stream stream,unsigned long offset,
@@ -80,13 +89,17 @@ static unsigned long stream_read(FT_Stream stream,unsigned long offset,
     unsigned long done=0;
     while(done<count) {
         uint32_t at=(uint32_t)(offset+done);
-        if(!s_font.stream_length||at<s_font.stream_base||at>=s_font.stream_base+s_font.stream_length) {
-            if(!fill_stream_cache(at))break;
+        unsigned slot=OTFONT_STREAM_SLOTS;
+        for(unsigned i=0;i<OTFONT_STREAM_SLOTS;i++) {
+            if(s_font.stream_length[i]&&at>=s_font.stream_base[i]&&
+               at<s_font.stream_base[i]+s_font.stream_length[i]){slot=i;break;}
         }
-        uint32_t in_page=at-s_font.stream_base;
-        uint32_t available=s_font.stream_length-in_page;
+        if(slot==OTFONT_STREAM_SLOTS&&!fill_stream_cache(at,&slot))break;
+        s_font.stream_stamp[slot]=++s_font.stream_clock;
+        uint32_t in_page=at-s_font.stream_base[slot];
+        uint32_t available=s_font.stream_length[slot]-in_page;
         unsigned long chunk=count-done;if(chunk>available)chunk=available;
-        memcpy(buffer+done,s_font.stream_cache+in_page,chunk);done+=chunk;
+        memcpy(buffer+done,s_font.stream_cache+slot*OTFONT_STREAM_PAGE+in_page,chunk);done+=chunk;
     }
     return done;
 }
