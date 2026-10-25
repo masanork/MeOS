@@ -104,6 +104,10 @@ def main():
                 # prints memory; only the actual release receipt is counted.
                 if re.search(r"SD asset cache: trimmed \((\d+) KB released\)", receipt):
                     overlap += 1
+                # The shell has higher priority than imedict. Back-to-back
+                # commands can keep it runnable and starve the reader that
+                # this test is meant to overlap with.
+                time.sleep(0.05)
             if args.boot_contention and (not overlap or not session.dictionary_loaded):
                 raise RuntimeError("no verified trim/IME-reader overlap and successful dictionary load")
 

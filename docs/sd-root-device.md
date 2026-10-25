@@ -200,5 +200,15 @@ Adding `--boot-contention` explicitly resets the board and additionally requires
 at least one cache release while the background IME reader is alive, followed
 by a successful dictionary-load receipt. It rejects a non-MeOS boot before
 sending shell commands. Dictionary-load overlap is not a network-throughput or
-power-loss test. This harness still requires physical qualification on its
-target firmware.
+power-loss test. The harness leaves 50 ms between boot-time command pairs so
+the higher-priority shell cannot starve the lower-priority IME reader.
+
+On physical Tab5 firmware `65eaf0c`, this test completed 628 cache releases
+while the 5,228 KiB dictionary loaded successfully (loader stack guard OK),
+then passed all 20 font/Write cycles. Each cycle returned to 21,949 KiB free
+PSRAM with the 1,170 KiB cache resident; the final trim returned to 23,119 KiB,
+within 16 KiB of the initial trimmed baseline. Font loads took 598–608 ms and
+warm draws 5.5–10.8 ms across 20/24/28/32 px. The 900-CJK long-Write workload
+also passed at 4.245 s. See `tools/sdroot/cache-lifecycle-device-20261025.json`.
+Partial-transfer errors are still injected on the host rather than forced on
+the physical card; removal, power cuts and network saturation remain untested.
