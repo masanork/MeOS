@@ -238,6 +238,11 @@ packet loss by workload and final PSRAM. The default loss limit is 5%. The new
 log/report paths must not exist. No asset is uploaded or changed. The tool
 requires datagram ICMP socket support and LAN reachability to the board.
 These bounded rates test coexistence, not maximum network throughput.
+When background services such as Tailscale still hold temporary startup buffers,
+add `--settle-seconds 60` to keep serial open while they settle before the quiet
+reads and memory baseline. Reopening USB serial can itself reset the board, so
+waiting before opening the port does not establish a settled device. This option
+does not change the packet-loss or memory-drift limits.
 
 The physical comparison exposed RX starvation: the Wi-Fi daemon previously
 ran below the foreground shell/renderer and polled every 100 ms. It now runs at
@@ -267,3 +272,63 @@ They contain app and private serial-log digests. No media writes, power cuts,
 hot removal or full Tailscale throughput were tested. The faster connected
 polling and fair RX scheduling trade a little foreground execution time for
 network responsiveness; this is not a maximum-SD-bandwidth benchmark.
+
+## Background IME dictionary startup
+
+The shell is usable before the large SD dictionary finishes loading; the built-in
+mini dictionary remains available meanwhile. The background loader now reads
+8 KiB directly into its final PSRAM allocation and sleeps after 64 KiB of progress,
+instead of reading 2 KiB and sleeping after every 8 KiB. Higher-priority input and
+Wi-Fi tasks retain normal preemption. The loader's 16 KiB stack and final dictionary
+allocation do not grow. Registration occurs only after a complete read and a
+successful close. A failed read/close or invalid dictionary releases the allocation.
+An I/O receipt reports bytes, elapsed time including sleeps, and sleep count.
+
+This reset-based harness measures shell readiness, dictionary readiness and serial
+echo latency. Each cycle discards unsaved RAM and suppresses Home. It reads existing
+assets and sends no save, upload or format command. Host readiness measurements
+include EN reset, serial delivery and up to the probe interval before queued output
+is read; `shell-ready` and I/O timings are measured on the board. Raw transcripts
+may contain network identity and are kept privately.
+
+```sh
+python3 tools/ime/loader_device.py /dev/cu.usbmodemXXXX --cycles 3 \
+  --log /tmp/meos-ime-loader.log --report /tmp/meos-ime-loader.json
+```
+
+On the same Tab5/card with a 5,354,161-byte dictionary, three resets of `373285b`
+and three of `14ecd18` produced:
+
+| Metric | Before | After |
+| --- | ---: | ---: |
+| Dictionary ready after EN reset, host median | 19.261 s | 13.275 s |
+| Shell ready, device range | 3.422–3.590 s | 3.540–3.646 s |
+| Echo RTT median, per-run range | 5.3–5.7 ms | 5.7–6.8 ms |
+| Echo RTT maximum across probes | 13.0 ms | 12.8 ms |
+| Loader stack watermark | 3,344 / 16,384 bytes | 3,360 / 16,384 bytes |
+
+Dictionary readiness improved by 31%; shell startup did not improve. Post-change
+loader I/O took 8.871–9.090 s including 81 voluntary sleeps. Host ASan/UBSan tests
+compare all loaded bytes, check bounded scheduling and cover missing/oversized
+files, allocation failure, short/zero/error reads, close failures and invalid blobs.
+The clean-source simulator verifies editor/IME behavior using its built-in dictionary;
+it does not execute the SD loader. A boot-time network-overlap attempt did not
+establish overlap: the dictionary loaded before Wi-Fi reported connected IPv4.
+Physical results qualify this card and workload, not hot removal, power loss or
+maximum network throughput.
+
+Additional postboot coexistence checks remain **FAIL**, independently of the
+passing dictionary-startup comparison. Two shortened runs sampled temporary
+Tailscale startup allocations and rejected free-PSRAM increases of 501/499 KiB;
+the second also exceeded the 5% network-loss limit during the SD phase (5.279%).
+Opening serial again had reset the board, so neither was a settled-device retry.
+Keeping serial open for a 60 s settle brought final trimmed PSRAM within 16 KiB
+of baseline (23,135 to 23,119 KiB free), passing the unchanged 32 KiB tolerance.
+That run still failed: the 25 pps font phase lost 10/75 echoes (13.333%). Its
+100 pps idle/SD/font phases had zero loss and Write lost 5/180 (2.778%).
+All seven PAK CRC reads across the three attempts matched, and no echo payload
+or checksum corruption was observed. The loader had exited before these
+postboot workloads; the source of network variability remains unassigned.
+The complete sanitized results, source/app identities and private-log digests
+are in `tools/ime/loader-device-20261025.json`. These failures have not been
+converted into passes or attributed to the IME change.

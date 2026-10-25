@@ -2,7 +2,8 @@
 """Read-only SD/graphics coexistence test with bounded ICMP traffic to Tab5.
 
 Requires a reachable Wi-Fi-connected MeOS Tab5 with the existing Quake PAK and
-BIZ UD assets. Serial open may reset the board; no firmware or media is written.
+BIZ UD assets. Serial open may reset the board. The tool issues no firmware-write
+or media-mutation command; normal background services may persist their state.
 Only the IPv4 address reported by the attached board receives test packets.
 """
 import argparse
@@ -140,16 +141,20 @@ def main():
     parser.add_argument("--pps", type=int, nargs="+", default=[25, 100])
     parser.add_argument("--reads", type=int, default=2)
     parser.add_argument("--reset", action="store_true", help="reset the board, discarding unsaved RAM")
+    parser.add_argument("--settle-seconds", type=int, default=0,
+                        help="hold the serial connection open before measurements for background services")
     parser.add_argument("--max-loss-percent", type=float, default=5)
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
     if (not 1 <= args.reads <= 10 or not 0 <= args.max_loss_percent <= 100 or
+            not 0 <= args.settle_seconds <= 120 or
             any(not 1 <= rate <= 200 for rate in args.pps)):
-        parser.error("reads must be 1..10, pps 1..200, loss limit 0..100")
+        parser.error("reads must be 1..10, pps 1..200, loss limit 0..100, settle-seconds 0..120")
     if args.report.exists() or args.log.resolve() == args.report.resolve():
         parser.error("report must be a new path distinct from the serial log")
-    report = {"result": "INCOMPLETE", "baseline": [], "loads": []}
+    report = {"result": "INCOMPLETE", "baseline": [], "loads": [],
+              "settle_seconds": args.settle_seconds}
     link = serial.Serial(port=None, baudrate=115200, timeout=.05,
                          write_timeout=10, exclusive=True)
     link.dtr = link.rts = False
@@ -178,6 +183,12 @@ def main():
                     raise TimeoutError("waiting for dictionary reader")
                 time.sleep(.1)
             time.sleep(2)
+            # Merely reopening USB serial can reset Tab5. Keep this connection
+            # open while optional services finish their temporary allocations;
+            # sleeping before opening the port would not provide a warm baseline.
+            if args.settle_seconds:
+                print(f"Settling background services for {args.settle_seconds} s with serial held open", flush=True)
+                time.sleep(args.settle_seconds)
             if "active=1" not in session.command("sdroot"):
                 raise RuntimeError("SD root is not active")
             wifi = session.command("wifi status")
