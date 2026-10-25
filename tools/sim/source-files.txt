@@ -73,6 +73,7 @@ drivers/lcd/bizud24_data.inc
 user/write/write.c
 user/write/write.h
 user/editor/bizime.c
+drivers/lcd/otfont.h
 tools/sim/otfont_stub.c
 user/editor/bizime.h
 tools/fonts/licenses/BIZ-UD-OFL.txt
