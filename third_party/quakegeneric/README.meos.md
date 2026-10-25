@@ -33,3 +33,8 @@ count reuse, regeneration, allocation/eviction and invalidation reasons in the
 MeOS profiler; other builds compile these hooks away. Cache capacity and
 replacement behavior are unchanged. See tools/quake/cache-host-2026-10-25.json
 for the host-only size sweep and original-clamp image comparison.
+
+An opt-in 512x300 build uses the same renderer through shared compile-time video
+configuration; the default stays 320x200. No additional renderer math changes or
+parallelism are introduced for that baseline. Host smoke runs support both
+resolutions; physical 512x300 performance remains pending.

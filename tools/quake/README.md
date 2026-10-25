@@ -419,3 +419,54 @@ The measured replay showed about 1 ms/frame in other tasks, with keyboard pollin
 the largest listed contributor. Host scheduler tests cover ongoing/same-task
 intervals, snapshots, reclaim and the 32-bit time boundary; stack tests verify
 counter reset on TCB reuse. Foundation CI runs these tests.
+
+## 512x300 baseline configuration (device measurement pending)
+
+The default remains 320x200 -> 960x720. A separate build selects 512x300 ->
+1024x600, centered at (128,60), with narrower control rails outside the viewport:
+
+```
+M5OS_QUAKE_RESOLUTION=512x300 sh tools/quake/build.sh
+```
+
+Outputs are `build-quake-512x300` and ignored `sdkconfig.quake-512x300`; the
+existing low-resolution build/config are retained. The engine and adapter share
+`m5os/quake_video.h`; compile definitions are checked in both native build trees.
+The baseline keeps the same scalar renderer, 12 MiB engine arena, 48 KiB stack,
+600 KiB surface cache, audio settings and exact DMA design. The cache is now
+explicitly fixed at the old low-resolution value to avoid the engine silently
+increasing it with pixel count. Source buffers grow with the selected resolution.
+
+This is resolution adaptation, not a new renderer optimization. High-resolution
+CPU transfer uses the same word damage scan and column-copy scheme; exact DMA
+uses twofold expansion and two destination rows. Bounds use 16 bits because
+source rows 256..299 cannot fit the old 8-bit bounds. Low-resolution expansion
+and blitting remain their original branches. PPA `smooth` is rejected for this
+configuration because its separate stage/filter path is still 320x200-only.
+
+After a coordinated app-only flash, use `quake dma e1m1` (or `quake e1m1` for
+CPU). `quake dmaview` verifies source pixels against the full displayed viewport;
+its high-resolution static reference can be generated with:
+
+```
+python3 tools/quake/visual_reference.py /tmp/reference-512.png --resolution 512x300
+python3 tools/quake/headless.py /path/to/pak0.pak --resolution 512x300 --steps 1200
+```
+
+Baseline device procedure: record the image hash, selected resolution/startup
+message, clock/cache settings, load time and memory; run full-view
+`timedemo demo1;toggleconsole` twice with effect audio for each CPU/DMA mode;
+check display, input, audio, stack guards and normal quit/relaunch. Record 969-frame
+means and interval lows separately. Do not change renderer math, cache size,
+compiler options, transfer batching or scheduling while gathering this baseline.
+
+Host checks pass at both resolutions, including unaligned buffers, palette
+changes, rows above 255, untouched rails/margins and input routing. The high
+engine completed 1,200 ASan host steps; the low 130-frame image remains exactly
+`88b7f83db7da86e371452ed78ddefd1788701f5c356f6380cb30dd5296a6c06a`.
+Both native builds, Doom host checks and the clean-source simulator pass.
+`hires-host-2026-10-25.json` records these preparation results. No new firmware
+has been flashed: the device is reserved by a parallel SD/Wi-Fi qualification
+session, and the user requested waiting until it finishes. Native high-resolution
+FPS and physical display/audio acceptance remain pending; host speed is not a
+Tab5 baseline or a like-for-like comparison to Espressif's reported frame rate.

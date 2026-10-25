@@ -1,5 +1,6 @@
 #include "apps.h"
 #include <m5os/quake.h>
+#include <m5os/quake_video.h>
 #include <m5os/doom.h>
 
 void hello_main(void *arg);
@@ -29,7 +30,7 @@ void web_main(void *arg);
 /* name, entry, permissions, stack, priority, description */
 static const app_def_t s_defs[] = {
 #if M5OS_QUAKE
-    { "quake",quake_main,APP_PERM_CONSOLE|APP_PERM_DISPLAY|APP_PERM_FS_READ|APP_PERM_SPAWN,49152u,APP_PRIO_DEFAULT,"experimental Quake 320x200; effects, no network/save" },
+    { "quake",quake_main,APP_PERM_CONSOLE|APP_PERM_DISPLAY|APP_PERM_FS_READ|APP_PERM_SPAWN,49152u,APP_PRIO_DEFAULT,"experimental Quake " QV_MODE_NAME "; effects, no network/save" },
 #endif
 #if M5OS_DOOM
     { "doom", doom_main, APP_PERM_CONSOLE | APP_PERM_DISPLAY | APP_PERM_FS_READ | APP_PERM_SPAWN,

@@ -5,6 +5,7 @@
 #include "dma_copy_tab5.h"
 #include "dma_column.h"
 #include "bitmap_resize.h"
+#include "quake_hires.h"
 #include <m5os/arch.h>
 #include <m5os/kmalloc.h>
 #include <m5os/hal_time.h>
@@ -47,9 +48,9 @@ static bool transfer(uint16_t *src,uint16_t *dst,unsigned bytes){
  if(!wait_done())return false;
  dma2d_ll_tx_reset_channel(hw,0);dma2d_ll_rx_reset_channel(hw,0);
  memset(tx,0,sizeof tx);memset(rx,0,sizeof rx);
- for(unsigned i=0;i<3;i++){
-  tx[i].d=(dma2d_descriptor_t){.vb_size=bytes,.hb_length=bytes,.owner=1,.suc_eof=i==2,.buffer=src,.next=i<2?&tx[i+1].d:NULL};
-  rx[i].d=(dma2d_descriptor_t){.vb_size=bytes,.owner=1,.suc_eof=i==2,.buffer=dst+i*720,.next=i<2?&rx[i+1].d:NULL};
+ for(unsigned i=0;i<QV_REPEAT;i++){
+  tx[i].d=(dma2d_descriptor_t){.vb_size=bytes,.hb_length=bytes,.owner=1,.suc_eof=i==QV_REPEAT-1,.buffer=src,.next=i<QV_REPEAT-1?&tx[i+1].d:NULL};
+  rx[i].d=(dma2d_descriptor_t){.vb_size=bytes,.owner=1,.suc_eof=i==QV_REPEAT-1,.buffer=dst+i*720,.next=i<QV_REPEAT-1?&rx[i+1].d:NULL};
  }
  sync_buffer(tx,sizeof tx,ESP_CACHE_MSYNC_FLAG_DIR_C2M);sync_buffer(rx,sizeof rx,ESP_CACHE_MSYNC_FLAG_DIR_C2M);
  dma2d_ll_tx_enable_interrupt(hw,0,UINT32_MAX,false);dma2d_ll_rx_enable_interrupt(hw,0,UINT32_MAX,false);
@@ -80,28 +81,38 @@ bool tab5_dma_copy_begin(uint32_t who,uint16_t *framebuffer){
  bool ok=transfer(source[0],test+64,1440)&&wait_done();
  if(ok){
   sync_buffer(test,4608,ESP_CACHE_MSYNC_FLAG_DIR_M2C);
-  for(unsigned i=0;i<2304;i++)if(test[i]!=(i>=64&&i<2224?source[0][(i-64)%720]:0x5a5a))ok=false;
+  for(unsigned i=0;i<2304;i++)if(test[i]!=(i>=64&&i<64+QV_REPEAT*720?source[0][(i-64)%720]:0x5a5a))ok=false;
  }
  if(!ok){disabled=true;kputs("dma-copy: offscreen self-test failed; CPU retained\n");tab5_dma_copy_end(who);return false;}
  kputs("dma-copy: offscreen linear/triplet/guards PASS\n");return true;
 }
 bool tab5_dma_copy_present(const uint8_t *pixels,uint8_t *previous,const uint16_t palette[256],bool force){
  if(!owner||disabled||!wait_done())return false;
- uint8_t first[320],last[320];unsigned left,right;
+ unsigned left,right;
+#if M5OS_QUAKE_HIGHRES
+ uint16_t first[QV_WIDTH],last[QV_WIDTH];
+ if(!tab5_hires_damage(pixels,previous,force,first,last,&left,&right))return true;
+#else
+ uint8_t first[320],last[320];
  if(!tab5_indexed_damage(pixels,previous,force,first,last,&left,&right))return true;
+#endif
  /* Viewport boundaries are cache-line aligned. Flush/invalidate once before
   * DMA; CPU never writes inside this region until the completed frame returns. */
- sync_buffer(fb+160*720,960*720*2,ESP_CACHE_MSYNC_FLAG_DIR_C2M|ESP_CACHE_MSYNC_FLAG_INVALIDATE);
+ sync_buffer(fb+(1280-QV_X-QV_OUT_WIDTH)*720,QV_OUT_WIDTH*720*2,ESP_CACHE_MSYNC_FLAG_DIR_C2M|ESP_CACHE_MSYNC_FLAG_INVALIDATE);
  unsigned buffer=0;
  for(unsigned col=left;col<=right;col++){
-  if(first[col]>=200)continue;
+  if(first[col]>=QV_HEIGHT)continue;
   uint16_t *src=source[buffer];buffer^=1;tab5_dma_column(src,pixels,palette,col);
   sync_buffer(src,sizeof source[0],ESP_CACHE_MSYNC_FLAG_DIR_C2M);
   if(!wait_done())return false;
+#if M5OS_QUAKE_HIGHRES
+  unsigned start=first[col]*2,end=(last[col]+1)*2;
+#else
   unsigned start=(((unsigned)first[col]*18+4)/5)&~1u;
   unsigned end=((((unsigned)last[col]+1)*18+4)/5+1)&~1u;
   if(end>720)end=720;
-  if(!transfer(src+start,fb+(1117-col*3)*720+start,(end-start)*2))return false;
+#endif
+  if(!transfer(src+start,fb+(1280-QV_X-QV_REPEAT-col*QV_REPEAT)*720+QV_Y+start,(end-start)*2))return false;
  }
  return wait_done();
 }
