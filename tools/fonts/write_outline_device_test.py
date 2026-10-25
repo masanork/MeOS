@@ -30,7 +30,15 @@ def main():
     def command(text, timeout=45):
         link.reset_input_buffer()
         link.write(text.encode() + b"\r")
-        return read_until(b"> ", timeout)
+        data = bytearray()
+        marker = text.encode()
+        end = time.monotonic() + timeout
+        while time.monotonic() < end:
+            data.extend(link.read(max(1, link.in_waiting)))
+            where = data.find(marker)
+            if where >= 0 and data.find(b"> ", where + len(marker)) >= 0:
+                return data.decode(errors="replace").replace("\r", "")
+        raise TimeoutError(f"waiting for command {text!r}; tail={data[-800:]!r}")
 
     def free_psram(text):
         match = re.search(r"psram\s+total \d+ KB\s+used \d+ KB\s+free (\d+) KB", text)
