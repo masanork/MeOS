@@ -61,6 +61,26 @@ def sd_io_stats(receipt):
     return rows
 
 
+def wifi_bus_stats(receipt):
+    common = {"calls", "errors", "hold_ms", "scheduled_ms", "max_hold_us", "peak_scheduled_us"}
+    transfer = common | {"pre_idle_timeouts", "post_idle_timeouts", "wait_ms", "prepare_ms",
+                         "dma_ms", "finish_ms", "max_wait_us", "peak_prepare_us", "peak_dma_us",
+                         "peak_finish_us", "peak_bytes"}
+    rows = {}
+    for label, fields in re.findall(r"WIFI (SDIO READ|SDIO WRITE|CMD52) ([^\n]+)", receipt):
+        pairs = re.findall(r"([a-z_]+)=(\d+)", fields)
+        values = {name: int(value) for name, value in pairs}
+        required = common if label == "CMD52" else transfer
+        if label in rows or len(pairs) != len(values) or not required.issubset(values):
+            raise RuntimeError("duplicate/incomplete Wi-Fi bus diagnostic row")
+        if values["peak_scheduled_us"] > values["max_hold_us"]:
+            raise RuntimeError("Wi-Fi scheduled time exceeds paired lock occupancy")
+        rows[label] = values
+    if set(rows) != {"SDIO READ", "SDIO WRITE", "CMD52"}:
+        raise RuntimeError("Wi-Fi bus diagnostic rows missing")
+    return rows
+
+
 class PingLoad:
     def __init__(self, target, pps, payload_bytes=1400, burst_packets=1):
         self.target = str(ipaddress.IPv4Address(target))
@@ -190,6 +210,8 @@ def main():
                         help="record wifi stats counters on firmware that supports them")
     parser.add_argument("--sd-diagnostics", action="store_true",
                         help="record native SDMMC stage timings outside traffic phases")
+    parser.add_argument("--bus-diagnostics", action="store_true",
+                        help="require complete Wi-Fi SDIO/CMD52 timing rows with --diagnostics")
     parser.add_argument("--reset", action="store_true", help="reset the board, discarding unsaved RAM")
     parser.add_argument("--settle-seconds", type=int, default=0,
                         help="hold the serial connection open before measurements for background services")
@@ -197,6 +219,8 @@ def main():
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
+    if args.bus_diagnostics and not args.diagnostics:
+        parser.error("--bus-diagnostics requires --diagnostics")
     if (not 1 <= args.reads <= 10 or not 0 <= args.max_loss_percent <= 100 or
             not 0 <= args.settle_seconds <= 120 or
             not 1 <= args.burst_packets <= 16 or
@@ -297,6 +321,8 @@ def main():
                     receipt = session.command("wifi stats reset")
                     if "WIFI RX" not in receipt:
                         raise RuntimeError("Wi-Fi diagnostic firmware missing")
+                    if args.bus_diagnostics:
+                        wifi_bus_stats(receipt)
                 load = PingLoad(target, rate, burst_packets=args.burst_packets)
                 load.phase = "idle"
                 load.start()
@@ -339,6 +365,8 @@ def main():
                     if "icmp_requests" not in diag or "rx_partials" not in diag:
                         raise RuntimeError("Wi-Fi diagnostic receipt incomplete")
                     summary["device_diagnostics"] = diag
+                    if args.bus_diagnostics:
+                        summary["wifi_bus"] = wifi_bus_stats(receipt)
                 if args.sd_diagnostics:
                     summary["sd_io"] = sd_io_stats(session.command("sd stats"))
                 summary["pak"] = pak
@@ -357,6 +385,8 @@ def main():
                     if any(row["errors"] for row in direction.values()):
                         failures.append("native SDMMC transfer error")
             for summary in report["loads"]:
+                if any(row["errors"] for row in summary.get("wifi_bus", {}).values()):
+                    failures.append("Wi-Fi bus command error")
                 if summary["invalid_replies"]:
                     failures.append("invalid ICMP reply payload/checksum")
                 diag = summary.get("device_diagnostics", {})

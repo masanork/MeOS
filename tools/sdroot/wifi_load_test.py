@@ -3,7 +3,7 @@
 import struct
 import unittest
 
-from wifi_coexistence_device import PingLoad, checksum, MeasurementInvalid, validate_clock, sd_io_stats
+from wifi_coexistence_device import PingLoad, checksum, MeasurementInvalid, validate_clock, sd_io_stats, wifi_bus_stats
 
 
 def reply(load, index):
@@ -97,6 +97,21 @@ class IntegrityTests(unittest.TestCase):
         for invalid in ("\n".join(lines[:-1]), text + "\n" + lines[0], text.replace("max_polls=50", "")):
             with self.assertRaises(RuntimeError):
                 sd_io_stats(invalid)
+
+    def test_wifi_bus_receipts_require_all_rows_and_paired_peaks(self):
+        common = "calls=5 errors=0 hold_ms=4 scheduled_ms=3 max_hold_us=1000 peak_scheduled_us=800"
+        extra = "pre_idle_timeouts=0 post_idle_timeouts=0 wait_ms=1 prepare_ms=1 dma_ms=2 finish_ms=1 " \
+                "max_wait_us=200 peak_prepare_us=100 peak_dma_us=300 peak_finish_us=600 peak_bytes=1465"
+        lines = [f"WIFI SDIO {op} {common} {extra}" for op in ("READ", "WRITE")]
+        lines.append(f"WIFI CMD52 {common}")
+        receipt = "\n".join(lines)
+        self.assertEqual(wifi_bus_stats(receipt)["SDIO READ"]["peak_bytes"], 1465)
+        for invalid in ("\n".join(lines[:-1]), receipt + "\n" + lines[0],
+                        receipt.replace("peak_bytes=1465", ""),
+                        receipt.replace("peak_scheduled_us=800", "peak_scheduled_us=1001"),
+                        receipt.replace("calls=5", "calls=5 calls=6")):
+            with self.assertRaises(RuntimeError):
+                wifi_bus_stats(invalid)
 
 
 if __name__ == "__main__":
