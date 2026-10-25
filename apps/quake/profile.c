@@ -27,4 +27,7 @@ quake_profile_stats quake_profile_take(void){
 void quake_profile_cache(unsigned event,unsigned amount){
     if(event<QC_COUNT)stats.cache[event]+=amount;
 }
+void quake_profile_detail(unsigned kind,uint64_t began){
+    if(kind<QD_COUNT){stats.detail_us[kind]+=quake_profile_clock()-began;stats.detail_calls[kind]++;}
+}
 #endif

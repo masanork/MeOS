@@ -85,6 +85,18 @@ static void profile_report(void){
         (unsigned)(p.phase_us[QP_COMMANDS]/pn),(unsigned)(p.phase_us[QP_SERVER]/pn),
         (unsigned)(p.phase_us[QP_CLIENT]/pn),(unsigned)(p.phase_us[QP_RENDER]/pn),
         (unsigned)(p.phase_us[QP_AUDIO]/pn),p.completed_frames);
+#ifdef MEOS_QUAKE_DETAIL_PROFILE
+    kprintf("quake detail outer: setup %u edges %u entities %u viewmodel %u particles %u warp %u us/frame\n",
+        (unsigned)(p.detail_us[QD_SETUP]/pn),(unsigned)(p.detail_us[QD_EDGES]/pn),
+        (unsigned)(p.detail_us[QD_ENTITIES]/pn),(unsigned)(p.detail_us[QD_VIEWMODEL]/pn),
+        (unsigned)(p.detail_us[QD_PARTICLES]/pn),(unsigned)(p.detail_us[QD_WARP]/pn));
+    unsigned detail_calls=0;for(unsigned i=0;i<QD_COUNT;i++)detail_calls+=p.detail_calls[i];
+    kprintf("quake detail nested: cache %u build %u light %u spans %u z %u sky %u water %u us/frame; %u timer pairs\n",
+        (unsigned)(p.detail_us[QD_CACHE]/pn),(unsigned)(p.detail_us[QD_BUILD]/pn),
+        (unsigned)(p.detail_us[QD_LIGHT]/pn),(unsigned)(p.detail_us[QD_SPANS]/pn),
+        (unsigned)(p.detail_us[QD_ZSPANS]/pn),(unsigned)(p.detail_us[QD_SKY]/pn),
+        (unsigned)(p.detail_us[QD_WATER]/pn),detail_calls);
+#endif
     kprintf("quake io: %u bytes, open %u/%u read %u/%u seek %u/%u calls/us\n",
         (unsigned)p.read_bytes,p.io_calls[QIO_OPEN],(unsigned)p.io_us[QIO_OPEN],
         p.io_calls[QIO_READ],(unsigned)p.io_us[QIO_READ],p.io_calls[QIO_SEEK],(unsigned)p.io_us[QIO_SEEK]);
@@ -315,6 +327,11 @@ void quake_main(void *arg) {
         args[ac]=NULL;
         COM_InitArgv(ac,args);parms.argc=com_argc;parms.argv=com_argv;
         uint64_t load_at=hal_time_now_us();bool playable_reported=false;
+#ifdef MEOS_QUAKE_DETAIL_PROFILE
+        uint64_t clock_at=hal_time_now_us();for(unsigned i=0;i<1024;i++)(void)quake_profile_clock();
+        kprintf("quake detail: enabled (inclusive wall time), clock read %u ns avg incl loop/IRQs\n",
+            (unsigned)((hal_time_now_us()-clock_at)*1000/1024));
+#endif
         Host_Init(&parms);
         Cbuf_AddText("bind w +forward\nbind s +back\nbind a +moveleft\nbind d +moveright\nbind f +attack\nbind e \"impulse 10\"\nbind / \"impulse 10\"\nbind UPARROW +forward\nbind DOWNARROW +back\nbind LEFTARROW +left\nbind RIGHTARROW +right\n+mlook\n");
         frames=0;profile_frames=0;began=profile_at=hal_time_now_us();

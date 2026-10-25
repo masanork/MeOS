@@ -34,6 +34,7 @@ def main():
     parser.add_argument('--steps', type=int, default=120, choices=range(20,3001), metavar='20..3000')
     parser.add_argument('--surface-cache-kib', type=int, default=600, choices=[600,1024,2048])
     parser.add_argument('--reference-near-clamp', action='store_true', help='test original double near-clip comparisons in a temporary source copy')
+    parser.add_argument('--profile-render', action='store_true', help='enable inclusive renderer scope timers')
     args = parser.parse_args()
     pak = args.pak0.resolve(strict=True)
     validate(pak)
@@ -48,6 +49,8 @@ def main():
             '-I' + str(build), '-I' + str(ROOT / 'kernel/include'), '-I' + str(ROOT / 'third_party/quakegeneric/source')]
         if args.resolution == '512x300':
             flags += ['-DM5OS_QUAKE_HIGHRES=1']
+        if args.profile_render:
+            flags += ['-DMEOS_QUAKE_DETAIL_PROFILE=1']
         component = ROOT / 'components/quakeengine'
         sources = [ROOT / 'third_party/quakegeneric/source' / n for n in re.findall(r'\$\{QROOT\}/(\w+\.c)', (component / 'CMakeLists.txt').read_text())]
         sources += [component / 'sys_meos.c', component / 'sound_null.c']

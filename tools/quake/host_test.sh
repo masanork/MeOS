@@ -31,6 +31,8 @@ cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined tools/quak
 
 cc -std=c11 -Wall -Wextra -Werror -O2 -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -DM5OS_QUAKE=1 -Ikernel/include tools/quake/profile_test.c apps/quake/profile.c -o "$OUT/profile-test"
 "$OUT/profile-test"
+cc -std=c11 -Wall -Wextra -Werror -O2 -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -DM5OS_QUAKE=1 -DMEOS_QUAKE_DETAIL_PROFILE=1 -Ikernel/include tools/quake/profile_test.c apps/quake/profile.c -o "$OUT/detail-profile-test"
+"$OUT/detail-profile-test"
 
 cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -DM5OS_QUAKE_HIGHRES=1 -Ikernel/include tools/quake/hires_test.c -o "$OUT/hires-test"
 "$OUT/hires-test"

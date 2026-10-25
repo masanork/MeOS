@@ -12,11 +12,16 @@ jobs:
           persist-credentials: false
       - run: sh tools/quake/host_test.sh
   firmware:
+    name: firmware (${{ matrix.resolution }}${{ matrix.detail == '1' && ', profile' || '' }})
     strategy:
       matrix:
-        resolution: ['320x200', '512x300']
+        include:
+          - {resolution: '320x200', detail: '0'}
+          - {resolution: '512x300', detail: '0'}
+          - {resolution: '512x300', detail: '1'}
     env:
       M5OS_QUAKE_RESOLUTION: ${{ matrix.resolution }}
+      M5OS_QUAKE_DETAIL_PROFILE: ${{ matrix.detail }}
     runs-on: ubuntu-24.04
     container: espressif/idf:v5.4.4
     timeout-minutes: 30
@@ -32,5 +37,6 @@ jobs:
             512x300) BUILD=build-quake-512x300 ;;
             *) BUILD=build-quake ;;
           esac
+          if [ "$M5OS_QUAKE_DETAIL_PROFILE" = 1 ]; then BUILD="$BUILD-profile"; fi
           python3 tools/quake/check_stack.py "$BUILD"
       # No PAK files, hardware flash, release upload or game-data redistribution.

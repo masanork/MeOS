@@ -38,3 +38,8 @@ An opt-in 512x300 build uses the same renderer through shared compile-time video
 configuration; the default stays 320x200. No additional renderer math changes or
 parallelism are introduced for that baseline. Host smoke runs support both
 resolutions; physical 512x300 performance remains pending.
+
+Optional `MEOS_QUAKE_DETAIL_PROFILE` scopes around renderer calls report
+inclusive wall-time breakdowns for world, entities, cache/lightmap generation
+and span drawing. Normal builds compile these macros out; they do not change
+renderer math, cache replacement or game state. See `tools/quake/README.md`.

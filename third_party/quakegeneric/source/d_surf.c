@@ -353,7 +353,9 @@ surfcache_t *D_CacheSurface (msurface_t *surface, int miplevel)
 	r_drawsurf.surf = surface;
 
 	c_surf++;
+	QUAKE_DETAIL_BEGIN(qd_build);
 	R_DrawSurface ();
+	QUAKE_DETAIL_END(QD_BUILD,qd_build);
 
 	return surface->cachespots[miplevel];
 }
