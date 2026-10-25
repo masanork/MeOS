@@ -51,6 +51,7 @@ typedef struct task {
     void         *stack_base;
     size_t        stack_size;  /* usable bytes, excludes the low-end guard */
     bool          stack_guard_failed; /* latched until this TCB is reused */
+    uint64_t      runtime_us;   /* scheduled wall time; includes ISR/kernel work */
 } task_t;
 
 /* Create a task; returns its pid (>0) or -1. */
@@ -88,6 +89,13 @@ typedef struct {
 } task_info_t;
 
 int         task_snapshot(task_info_t *out, int max);   /* live tasks, copied under a short critical section */
+uint64_t    task_current_runtime_us(void); /* scheduled wall time including IRQs */
+typedef struct {
+    uint32_t id;
+    char name[TASK_NAME_MAX];
+    uint64_t runtime_us;
+} task_runtime_info_t;
+int task_runtime_snapshot(task_runtime_info_t *out,int max); /* existing snapshot ABI unchanged */
 const char *task_state_name(task_state_t s);
 /* Forcibly terminate a task.  Any mutex it owned is released (and handed to a
  * waiter) so the system cannot deadlock on a killed owner; the data that mutex

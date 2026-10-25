@@ -349,3 +349,73 @@ A late launch failed when the largest free internal block was 47 KiB, below the
 unchanged 48 KiB stack request. Benchmark launches used the shell-ready startup
 window on reset; the failure return code is now printed instead of silently
 returning to the prompt. This adds diagnostics, not a fragmentation fix.
+
+## Experimental exact DMA2D transfer
+
+`quake dma e1m1` selects a DMA2D memory-to-memory backend. Normal `quake` still
+uses CPU transfer; `smooth` retains the separate PPA bilinear prototype. These
+backends cannot be selected together. Engine rendering, palette, 320x200 source,
+960x720 viewport and nearest-neighbor sample positions remain unchanged.
+
+The exact backend reuses CPU damage bounds and expands one column into each of
+two alternating 1.5 KiB kernel-owned SRAM buffers. Three linked descriptor pairs
+copy the same RGB565 column into the rotated framebuffer. The next column is
+prepared while the previous transfer runs. Descriptor cache lines are separate;
+viewport cache lines are flushed/invalidated before DMA, with no intervening CPU
+writes inside the claimed viewport. Dirty ranges round outwards to word-aligned
+boundaries, recomputing adjacent unchanged pixels identically. There is no large
+RGB staging image or PPA filtering. Waiting for DMA completion is polling, so
+scheduled time includes busy-waiting; this is not an asynchronous CPU-idle API.
+
+Only a clock-gated DMA2D module is acquired, atomically against other users. A
+bounded wait, descriptor error or failed offscreen test retains/returns to CPU
+transfer; failure disables this experimental backend until reset. Kernel buffers
+and descriptors survive app reclamation. Cleanup drains/resets its owned engine
+before releasing the display. Active-burst forced kills and injected faults
+remain physical qualification gaps, despite normal quit/relaunch checks passing.
+
+Diagnostics (no PAK required):
+
+- `quake dmatest`: offscreen linear/triplet copy with guard checks.
+- `quake blitbench`: static/full/odd-band CPU transfer timings.
+- `quake dmabench`: CPU and DMA transfer timings/checksums in one app lifetime.
+- `quake dmaview`: holds readable color bars, grid, checkerboard and corner marks.
+  Space switches CPU/DMA; A moves/pauses a bar; Ctrl-C or EXIT closes. `MEM PASS`
+  means a full viewport pixel comparison passed, not that scanout was observed.
+  The device screen must also be inspected for tearing or other visible errors.
+
+Generate the static reference without game data or extra Python packages:
+
+```
+python3 tools/quake/visual_reference.py /tmp/dma-reference.png
+```
+
+Its expected physical-viewport FNV32 is `986b6f69`, matching CPU and DMA readback.
+The initial performance benchmark's noisy pattern was ambiguous to the user;
+static/moving diagnostic patterns and actual Quake rendering subsequently passed
+user visual confirmation. A checksum alone is not visual acceptance.
+
+On the identified Tab5 prototype, full-view `timedemo demo1;toggleconsole` with
+effects and 969 frames gave 25.0 FPS twice for CPU and 32.0 FPS four times for DMA
+(two later runs were for filming), about 28% improvement. This is demo-average
+performance, not constant 30 FPS for every scene. Measurements identify the
+prototype image and source base; the final PR also integrates later SD/Wi-Fi
+changes and must not be described as an exact-head hardware measurement. See
+`dma-device-2026-10-25.json` for evidence and remaining gates.
+
+## Scheduled-time accounting
+
+The scheduler now accumulates scheduled wall time per PID at actual context
+switches. `task_current_runtime_us()` includes the current interval;
+`task_runtime_snapshot()` copies live task counters under the IRQ lock. The old
+`task_snapshot()`/`task_info_t` ABI is unchanged, as are priority/round-robin and
+sleep policies. Counters include kernel and interrupt work charged to the task
+at the switch boundary; they do not isolate instruction execution.
+
+`quake cpu` reports interval time for the game and other stable live PIDs. New
+PIDs need a baseline, and tasks disappearing between snapshots are omitted;
+`other-live` is not a complete system CPU ledger. The first interval is omitted.
+The measured replay showed about 1 ms/frame in other tasks, with keyboard polling
+the largest listed contributor. Host scheduler tests cover ongoing/same-task
+intervals, snapshots, reclaim and the 32-bit time boundary; stack tests verify
+counter reset on TCB reuse. Foundation CI runs these tests.

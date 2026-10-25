@@ -65,6 +65,11 @@ void display_draw_indexed_viewport_delta(int x,const uint8_t *pixels,uint8_t *pr
 
 #if M5OS_BOARD_TAB5 && M5OS_QUAKE
 bool display_smooth_begin(uint32_t owner);
+bool display_dma_begin(uint32_t owner);
+bool display_dma_present(const uint8_t *pixels,uint8_t *previous,const uint16_t palette[256],bool force);
+void display_dma_end(uint32_t owner);
+uint32_t display_viewport_checksum(void); /* Quake diagnostic, after presentation */
+uint32_t display_verify_viewport(const uint8_t *pixels,const uint16_t palette[256],int *bad_x,int *bad_y);
 bool display_smooth_present(const uint8_t *pixels,const uint16_t palette[256]);
 void display_smooth_end(uint32_t owner);
 #endif

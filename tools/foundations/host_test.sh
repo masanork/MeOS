@@ -16,3 +16,4 @@ for TEST in crash pi cleanup app time health; do
         -DM5OS_BOARD_TAB5=1 -Ikernel/include "tools/foundations/${TEST}_test.c" $SRC -o "$OUT/$TEST"
     "$OUT/$TEST"
 done
+sh tools/runtime/host_test.sh
