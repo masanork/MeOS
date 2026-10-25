@@ -6,6 +6,7 @@
 #include <m5os/kmalloc.h>
 #include <m5os/mutex.h>
 #include <m5os/sdcard.h>
+#include <m5os/task.h>
 #include <m5os/vfs.h>
 #define SECTORS 65536u
 static unsigned char *card;
@@ -25,6 +26,8 @@ void *kmalloc(size_t n){return malloc(n);}
 void *kmalloc_psram(size_t n){return malloc(n);}
 void *kcalloc(size_t n,size_t z){return calloc(n,z);}
 void kfree(void *p){free(p);}
+static task_t host_task;
+task_t *task_current(void){return &host_task;}
 void mutex_lock(mutex_t *m){assert(!m->owner);m->owner=(void *)1;}
 void mutex_unlock(mutex_t *m){assert(m->owner);m->owner=NULL;}
 void kprintf(const char *fmt,...){va_list ap;va_start(ap,fmt);vprintf(fmt,ap);va_end(ap);}
