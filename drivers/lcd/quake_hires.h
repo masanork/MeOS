@@ -1,7 +1,19 @@
 #pragma once
 #include "bitmap_resize.h"
-/* Baseline 512x300 -> 1024x600, centered. Same word damage scan and column-copy
- * scheme as the low-resolution port; no renderer optimizations are added. */
+/* Read adjacent PSRAM pixels together before expanding columns. A full indexed
+ * frame is larger than L2; walking all 300 rows separately for each column
+ * repeatedly evicts adjacent pixels. The 4,800-byte tile lives on the internal
+ * task stack and is never passed to DMA. */
+#define TAB5_HIRES_TILE_COLS 16
+static inline void tab5_hires_stage(uint8_t tile[TAB5_HIRES_TILE_COLS][300],
+    const uint8_t *pixels,unsigned x,unsigned count){
+ for(unsigned y=0;y<300;y++)for(unsigned i=0;i<count;i++)tile[i][y]=pixels[y*512+x+i];
+}
+static inline void tab5_hires_expand(uint16_t *dst,const uint8_t column[300],
+    const uint16_t palette[256],unsigned first,unsigned last){
+ typedef uint32_t word __attribute__((may_alias));word *out=(word *)dst;
+ for(unsigned y=first;y<=last;y++){uint32_t color=palette[column[y]];out[y]=color|(color<<16);}
+}
 static inline bool tab5_hires_damage(const uint8_t *pixels,uint8_t *previous,bool force,
     uint16_t first[512],uint16_t last[512],unsigned *left,unsigned *right){
  for(unsigned x=0;x<512;x++){first[x]=300;last[x]=0;}
@@ -25,10 +37,17 @@ static inline bool tab5_hires_delta(uint16_t *fb,const uint8_t *pixels,uint8_t *
  uint16_t first[512],last[512];unsigned left,right;
  if(!tab5_hires_damage(pixels,previous,force,first,last,&left,&right))return false;
  uint32_t column[300] __attribute__((aligned(16)));
- for(unsigned x=left;x<=right;x++)if(first[x]<300){
-  for(unsigned y=first[x];y<=last[x];y++){uint32_t color=palette[pixels[y*512+x]];column[y]=color|(color<<16);}
+ uint8_t tile[TAB5_HIRES_TILE_COLS][300];
+ for(unsigned base=left;base<=right;base+=TAB5_HIRES_TILE_COLS){
+  unsigned count=right-base+1;if(count>TAB5_HIRES_TILE_COLS)count=TAB5_HIRES_TILE_COLS;
+  bool dirty=false;for(unsigned i=0;i<count;i++)if(first[base+i]<300)dirty=true;
+  if(!dirty)continue;
+  tab5_hires_stage(tile,pixels,base,count);
+  for(unsigned i=0;i<count;i++){unsigned x=base+i;if(first[x]>=300)continue;
+  tab5_hires_expand((uint16_t *)column,tile[i],palette,first[x],last[x]);
   for(unsigned repeat=0;repeat<2;repeat++)tab5_copy_column(fb+(1279-(128+x*2+repeat))*720+60+first[x]*2,
    (const uint16_t *)column+first[x]*2,(last[x]-first[x]+1)*2);
+  }
  }
  *first_col=128+(int)left*2;*last_col=128+(int)right*2+1;return true;
 }

@@ -100,20 +100,35 @@ bool tab5_dma_copy_present(const uint8_t *pixels,uint8_t *previous,const uint16_
   * DMA; CPU never writes inside this region until the completed frame returns. */
  sync_buffer(fb+(1280-QV_X-QV_OUT_WIDTH)*720,QV_OUT_WIDTH*720*2,ESP_CACHE_MSYNC_FLAG_DIR_C2M|ESP_CACHE_MSYNC_FLAG_INVALIDATE);
  unsigned buffer=0;
+#if M5OS_QUAKE_HIGHRES
+ uint8_t tile[TAB5_HIRES_TILE_COLS][300];
+ for(unsigned base=left;base<=right;base+=TAB5_HIRES_TILE_COLS){
+  unsigned count=right-base+1;if(count>TAB5_HIRES_TILE_COLS)count=TAB5_HIRES_TILE_COLS;
+  bool dirty=false;for(unsigned i=0;i<count;i++)if(first[base+i]<QV_HEIGHT)dirty=true;
+  if(!dirty)continue;
+  tab5_hires_stage(tile,pixels,base,count);
+  for(unsigned i=0;i<count;i++){
+   unsigned col=base+i;if(first[col]>=QV_HEIGHT)continue;
+   uint16_t *src=source[buffer];buffer^=1;
+   tab5_hires_expand(src,tile[i],palette,first[col],last[col]);
+   sync_buffer(src,sizeof source[0],ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+   if(!wait_done())return false;
+   unsigned start=first[col]*2,end=(last[col]+1)*2;
+   if(!transfer(src+start,fb+(1280-QV_X-QV_REPEAT-col*QV_REPEAT)*720+QV_Y+start,(end-start)*2))return false;
+  }
+ }
+#else
  for(unsigned col=left;col<=right;col++){
   if(first[col]>=QV_HEIGHT)continue;
   uint16_t *src=source[buffer];buffer^=1;tab5_dma_column(src,pixels,palette,col);
   sync_buffer(src,sizeof source[0],ESP_CACHE_MSYNC_FLAG_DIR_C2M);
   if(!wait_done())return false;
-#if M5OS_QUAKE_HIGHRES
-  unsigned start=first[col]*2,end=(last[col]+1)*2;
-#else
   unsigned start=(((unsigned)first[col]*18+4)/5)&~1u;
   unsigned end=((((unsigned)last[col]+1)*18+4)/5+1)&~1u;
   if(end>720)end=720;
-#endif
   if(!transfer(src+start,fb+(1280-QV_X-QV_REPEAT-col*QV_REPEAT)*720+QV_Y+start,(end-start)*2))return false;
  }
+#endif
  return wait_done();
 }
 void tab5_dma_copy_end(uint32_t who){

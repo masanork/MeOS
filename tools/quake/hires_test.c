@@ -25,6 +25,18 @@ int main(void){
   for(unsigned y=0;y<600;y++)assert(column[y]==palette[pixels[(y/2)*512+x]]);
   for(unsigned y=600;y<768;y++)assert(column[y]==0x5a5a);
  }
+ /* Partial tiles, untouched rows, last column and native DMA destination guards. */
+ uint8_t tile[TAB5_HIRES_TILE_COLS][300];
+ for(unsigned base=0;base<512;base+=13){
+  unsigned count=512-base;if(count>13)count=13;
+  memset(tile,0xa5,sizeof tile);tab5_hires_stage(tile,pixels,base,count);
+  for(unsigned i=0;i<TAB5_HIRES_TILE_COLS;i++)for(unsigned y=0;y<300;y++)
+   assert(tile[i][y]==(i<count?pixels[y*512+base+i]:0xa5));
+  for(unsigned i=0;i<count;i++){
+   memset(column,0x5a,sizeof column);tab5_hires_expand(column,tile[i],palette,257,299);
+   for(unsigned y=0;y<768;y++)assert(column[y]==(y>=514&&y<600?palette[pixels[(y/2)*512+base+i]]:0x5a5a));
+  }
+ }
  memset(unaligned,0x5a,sizeof unaligned);memset(old_unaligned,0x5a,sizeof old_unaligned);
  memcpy(unaligned+1,pixels,sizeof pixels);memcpy(old_unaligned+1,pixels,sizeof pixels);
  unaligned[1+299*512+511]^=37;
