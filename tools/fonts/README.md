@@ -137,6 +137,8 @@ return. Provision the currently pinned source without committing the cache:
 python3 tools/push_file.py --port /dev/cu.usbmodemXXXX \
   tools/fonts/cache/BIZUDGothic-Regular.ttf \
   /assets/fonts/BIZUDGothic-Regular.ttf
+python3 tools/fonts/outline_device_test.py /dev/cu.usbmodemXXXX \
+  --size 24 --leave-open
 ```
 
 This first measurement deliberately uses an in-memory face so that rendering
