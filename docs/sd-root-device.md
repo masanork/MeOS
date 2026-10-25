@@ -202,6 +202,11 @@ by a successful dictionary-load receipt. It rejects a non-MeOS boot before
 sending shell commands. Dictionary-load overlap is not a network-throughput or
 power-loss test. The harness leaves 50 ms between boot-time command pairs so
 the higher-priority shell cannot starve the lower-priority IME reader.
+When background services still change their startup allocations, add
+`--settle-seconds 60` to wait on the same serial connection after the verified
+IME overlap and before sampling the memory baseline. This keeps the original
+32 KiB drift limit. The [aligned-sector cache comparison](sd-sector-cache.md)
+records an initial unsettled failure and the passing settled rerun.
 
 On physical Tab5 firmware `65eaf0c`, this test completed 628 cache releases
 while the 5,228 KiB dictionary loaded successfully (loader stack guard OK),
