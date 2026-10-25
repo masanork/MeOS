@@ -43,6 +43,12 @@ def main():
     try:
         link.write(b"\x03\r")
         read_until(b"> ", 45)
+        # Opening USB serial can reset Tab5.  The first prompt can precede the
+        # queued Ctrl-C, so synchronize once more with an already-running shell.
+        time.sleep(0.2)
+        link.reset_input_buffer()
+        link.write(b"\x03\r")
+        read_until(b"> ", 10)
         listing = command("ls /assets/fonts/BIZUDGothic-Regular.ttf")
         if "4667380" not in listing:
             raise RuntimeError(f"pinned TTF missing or wrong size: {listing!r}")
