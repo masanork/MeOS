@@ -147,3 +147,44 @@ counters were zero. The sampled game stack reached 13,088 / 49,152 bytes, guard 
 The user subsequently confirmed audible effect output from the speaker. CD/BGM support remains disabled. A second E1M1
 launch reached gameplay after cleanup (44.1–44.2 FPS sampled at the starting view). No SD format, data upload or engine registration
 check bypass was performed.
+
+
+## Integrated SDMMC / OTA qualification — 2026-10-25
+
+Source f2c8d0e integrates the committed masanork SDMMC, SD font/dictionary,
+A/B layout, Home and editor changes with the Quake optimization/profiling work.
+The physical partition table and OTA sequences were read first: ota_1 was
+selected. A private full 16 MiB backup was made before installing and hash-verifying
+only ota_0 (0x410000), then selecting it. Factory recovery and ota_1 were retained;
+no bootloader/partition-table replacement, card format or PAK upload was performed.
+The new image is 1613920 bytes; exact hash and observations are in
+`sdmmc-device-2026-10-25.json` (the JSON image length is authoritative).
+
+Sound-enabled shareware E1M1 reached complete signon in 24,732 ms on the first
+launch; successive PPA and CPU launches took 15,942 and 15,847 ms. Boot-to-shell
+samples were 4.3–4.7 seconds. Loading/background activity differs between runs;
+these are not cold-cache, identical-condition comparisons. Home was suppressed
+using the shell-ready grace period for deterministic serial recovery.
+
+The CPU starting view ran about 46 FPS. A 2-second forward input followed by
+8 seconds of left-turn/fire produced intervals down to 25.1 FPS; a low-detail
+wall view subsequently exceeded 60 FPS. Steady gameplay read no SD data. CPU
+copy/flush reached about 17–18 ms/frame during motion, whereas game-task effect
+mixing remained well below 1 ms. The cache reported no thrash transitions in
+these intervals; the 600 KiB default was retained.
+
+The PPA offscreen test passed twice, but its E1M1 starting view ran about 29 FPS,
+and motion still included sub-30 FPS intervals. It is not a universal speedup.
+The two input sequences were equal-duration serial scripts, not frame-identical
+A/B runs, and cannot isolate the near-clamp change from the other integration
+changes. CPU remains the default.
+
+Normal exits after 2,143 CPU frames and 1,506 PPA frames restored keyboard text
+routing and reported respectively 3,140 / 3,015 audio DMA blocks, zero reported
+underruns/errors, and nonzero PCM output. All sampled stack guards were OK.
+Internal heap usage settled at 92 KiB after both; the internal failure counter
+increased once during the first session and then remained at one. Its origin is
+untraced (internal-to-PSRAM fallbacks also increment it); no visible app/audio
+failure occurred. PSRAM failure count stayed zero. PPA retained its expected
+roughly 455 KiB reusable kernel buffers. A third CPU E1M1 launch reached gameplay
+and was left for the user. Constant 30 FPS remains unqualified.
