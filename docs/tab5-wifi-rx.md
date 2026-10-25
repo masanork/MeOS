@@ -110,3 +110,11 @@ host/device discrepancies and invalid device durations.
 
 On macOS, `caffeinate -i python3 ...` can prevent idle system sleep for the
 duration of a test command. It does not change persistent power settings.
+
+With that temporary assertion and clock guards active, the ordinary one-packet
+25/100 pps follow-up passed all eight phases: 5,333/5,333 verified echoes and
+the same number of device ICMP requests/replies. All three PAK CRCs matched.
+At 100 pps, four fragments were retained with up to 13,931 bytes pending, so
+the corrected path also ran with single-packet pacing. All transport/error
+counters were zero and trimmed memory returned within 16 KiB of baseline.
+The complete clock-validated receipt is `tools/wifi/uniform-device-20261025.json`.
