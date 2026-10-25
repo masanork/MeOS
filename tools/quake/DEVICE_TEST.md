@@ -263,3 +263,25 @@ post-diagnostic internal-heap fragmentation startup failure required a reset
 and early game start; normal measured game quit/relaunches then passed.
 Both resolution builds and ASan/UBSan checks pass; low-resolution transfer
 branches remain unchanged. See the two `hires-tile*-device-2026-10-26.json` files.
+
+## Batched DMA — 2026-10-26
+
+Compare latest baseline `7c343f6` with selected two-column candidate `333a366`:
+969-frame full-view demo1, effect audio, CPU/cache/renderer settings unchanged.
+Baseline: 55.3 / 55.3 seconds, 17.5 / 17.5 FPS. Selected: 52.7 / 52.7 seconds,
+18.4 / 18.4 FPS. Low-resolution shared submission compatibility: 29.7 / 29.7
+seconds, 32.6 / 32.6 FPS. Native static/moving CPU/DMA pixel comparisons pass;
+selected audio reports nonzero PCM and zero underruns/errors on normal exit.
+Sampled selected stack peak is 29,696 / 49,152 bytes, guards intact.
+
+Verify the actual `audio: ES8388` startup message and positive nonzero PCM
+output before accepting sound-enabled performance. The four-column prototype
+failed audio allocation at stage 4; its silent 19.3 FPS is not comparable.
+One two-column attempt with no result row is also excluded. Late diagnostic
+exit can still fragment internal RAM and prevent the 48 KiB app stack from
+starting; early game launch after reset was used. The selected 5,247-byte
+source allocation is permanent kernel-owned internal memory, not app-owned.
+
+Detailed evidence and incomplete qualification are recorded in
+`dma-batch-device-2026-10-26.json`. Human display/audio acceptance remains
+separate from automated pixel checks and PCM counters.
