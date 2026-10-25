@@ -46,7 +46,6 @@ static size_t input_head, input_count, heap_used;
 static int root_fd = -1;
 static const char *shots;
 static unsigned lines_drawn, ime_draws;
-static bool committed_japanese;
 static uint64_t last_present, deadline;
 static unsigned eval_poll_delay;
 static sim_replay replay;
@@ -304,11 +303,6 @@ size_t kconsole_inject_n(const char *s, size_t n)
     while (done < n && input_count < INPUT_CAP) {
         input[(input_head + input_count) % INPUT_CAP] = (unsigned char)s[done++];
         input_count++;
-    }
-    if (n >= strlen("日本語")) {
-        for (size_t k = 0; k + strlen("日本語") <= done; k++)
-            if (!memcmp(s + k, "日本語", strlen("日本語")))
-                committed_japanese = true;
     }
     return done;
 }
@@ -822,13 +816,13 @@ int main(int argc, char **argv)
         int n = fd >= 0 ? vfs_read(fd, saved, sizeof saved - 1) : -1;
         if (fd >= 0)
             vfs_close(fd);
-        if (n < 0 || !strstr(saved, "; 日本語\n") || !committed_japanese ||
+        if (n < 0 || !strstr(saved, "; 日本語\n") ||
             lines_drawn < 100 || smoke_step != sizeof smoke_actions / sizeof smoke_actions[0] ||
             !display_free() || paused) {
             fprintf(stderr,
-                    "smoke state: read=%d committed=%d IME draws=%u lines=%u step=%u owner=%p "
+                    "smoke state: read=%d IME draws=%u lines=%u step=%u owner=%p "
                     "paused=%d\n",
-                    n, committed_japanese, ime_draws, lines_drawn, smoke_step, (void *)(uintptr_t)!display_free(),
+                    n, ime_draws, lines_drawn, smoke_step, (void *)(uintptr_t)!display_free(),
                     paused);
             die("smoke failed: graph, IME, source save or cleanup incomplete");
         }

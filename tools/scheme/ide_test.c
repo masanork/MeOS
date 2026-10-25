@@ -109,6 +109,12 @@ void display_draw_line(int a, int b, int c, int d, uint16_t color)
 }
 void ime_clear_anchor(void) {}
 void ime_set_app_view(bool enabled) { (void)enabled; }
+size_t ime_take_commit(char *out, size_t capacity)
+{
+    (void)out;
+    (void)capacity;
+    return 0;
+}
 bool ime_read_view(ime_view *view)
 {
     memset(view, 0, sizeof *view);

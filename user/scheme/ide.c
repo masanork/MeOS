@@ -53,6 +53,7 @@ typedef struct {
     unsigned char pending[256];
     double xs[129], ys[129];
     char staging[SCHEME_SOURCE_CAP + 1];
+    char commit[IME_COMMIT_BYTES];
     size_t starts[SCHEME_SOURCE_CAP + 2];
     int visual_rows;
     uint16_t *frame;
@@ -717,6 +718,16 @@ static bool minibuffer(ide *i, const char *prompt, char *text, size_t cap)
     uint32_t revision = ~0u;
     bool redraw = true;
     for (;;) {
+        size_t committed = ime_take_commit(i->commit, sizeof i->commit);
+        if (committed) {
+            if (len + committed < cap && scheme_utf8_text(i->commit, committed)) {
+                memcpy(text + len, i->commit, committed);
+                len += committed; text[len] = 0;
+            } else {
+                ksnprintf(hint, sizeof hint, "Input rejected: invalid UTF-8 or full buffer");
+            }
+            redraw = true;
+        }
         ime_view view;
         ime_read_view(&view);
         if (redraw || revision != view.revision) {
@@ -816,6 +827,12 @@ bool scheme_ide(const char *path)
         uint32_t revision = ~0u;
         bool redraw = true;
         while (i->running) {
+            size_t committed = ime_take_commit(i->commit, sizeof i->commit);
+            if (committed) {
+                if (!scheme_buffer_insert(&i->buffer, i->commit, committed))
+                    message(i, "Insertion rejected: invalid UTF-8 or full buffer");
+                redraw = true;
+            }
             ime_view view;
             ime_read_view(&view);
             if (redraw || revision != view.revision) {

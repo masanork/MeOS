@@ -9,7 +9,10 @@ r=pathlib.Path(sys.argv[1])
 text='日本語と English を、無理なく読める大きさで。\n文章を書く道具として、余白と行間も大切にしたい。\n'+('長い文章も画面の幅に合わせて自然に折り返します。'*5)+'\n'
 (r/'work/home/note.txt').write_text(text)
 # Toggle MeOS IME, type nihongo, open candidates, select first candidate, commit.
-keys=[(44,1)]+[(ord(c)-97+4,0) for c in 'nihongo']+[(44,0),(44,0),(30,0),(40,0),(44,1),(22,1)]
+conversion=[(ord(c)-97+4,0) for c in 'nihongo']+[(44,0),(44,0),(30,0),(40,0)]
+# Undo must remove the first confirmed conversion as one edit. Confirm it
+# again; a byte/codepoint-at-a-time path leaves a visible prefix and fails cmp.
+keys=[(44,1)]+conversion+[(29,1)]+conversion+[(44,1),(22,1)]
 a=['shot 100 initial']+[f'key 70 {k} {m} 0' for k,m in keys[:10]]
 a+=['shot 100 candidates']+[f'key 70 {k} {m} 0' for k,m in keys[10:]]
 a+=['shot 100 saved','key 70 23 1 0','shot 100 horizontal','key 70 20 1 0']

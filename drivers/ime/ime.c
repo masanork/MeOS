@@ -69,8 +69,12 @@ static struct ime_big {
     conv_cands_t cl;                       /* candidates of the focused phrase */
     conv_cands_t tmp;
     char         text[CONV_MAX_SEG * CONV_MAX_TEXT * 3 + 4];
+    char         commit[IME_COMMIT_BYTES];
+    uint16_t     commit_len;
     cells_t      pre, lines[CAND_LINES], bpre, bline, bcand;
 } *B;
+_Static_assert(IME_COMMIT_BYTES >= CONV_MAX_SEG * CONV_MAX_TEXT * 3 + 4,
+               "IME commit mailbox is smaller than converted text");
 #define s_cv (B->cv)
 
 extern const uint8_t ime_mini_dict[];
@@ -93,6 +97,19 @@ static void out_raw(const char *s, size_t n)
 }
 
 static void out_str(const char *s) { out_raw(s, strlen(s)); }
+
+static void commit_raw(const char *s, size_t n)
+{
+    bool queued = false;
+    uint32_t irq = arch_irq_disable();
+    if (g.app_view && B && !B->commit_len && n <= sizeof B->commit) {
+        memcpy(B->commit, s, n);
+        B->commit_len = (uint16_t)n;
+        queued = true;
+    }
+    arch_irq_restore(irq);
+    if (!queued) out_raw(s, n);
+}
 
 static void out_cps(const uint16_t *c, int n)
 {
@@ -187,7 +204,9 @@ static void rom_flush(void)
 static void pre_commit(void)
 {
     rom_flush();
-    out_cps(g.pre, g.plen);
+    char buf[PRE_MAX * 3 + 4];
+    int len = ime_cps_to_u8(g.pre, g.plen, buf, (int)sizeof buf);
+    commit_raw(buf, (size_t)len);
     pre_reset();
 }
 
@@ -247,7 +266,7 @@ static void conv_commit(void)
 {
     conv_learn(&s_cv);
     int n = conv_text(&s_cv, B->text, (int)sizeof B->text);
-    out_raw(B->text, (size_t)n);
+    commit_raw(B->text, (size_t)n);
     pre_reset();
 }
 
@@ -676,6 +695,7 @@ void ime_set_app_view(bool enabled)
     fbcon_overlay_begin(); fbcon_overlay_end();
     uint32_t irq = arch_irq_disable();
     pre_reset(); g.app_view = enabled; g.shown = false; g.view_revision++;
+    if (B) B->commit_len = 0;
     arch_irq_restore(irq);
 }
 
@@ -705,4 +725,19 @@ bool ime_read_view(ime_view *out)
         }
     }
     arch_irq_restore(irq); return true;
+}
+
+size_t ime_take_commit(char *out, size_t capacity)
+{
+    if (!out || !B) return 0;
+    uint32_t irq = arch_irq_disable();
+    size_t n = B->commit_len;
+    if (n && n <= capacity) {
+        memcpy(out, B->commit, n);
+        B->commit_len = 0;
+    } else if (n > capacity) {
+        n = 0;
+    }
+    arch_irq_restore(irq);
+    return n;
 }

@@ -30,7 +30,9 @@ inserted at the document cursor in either direction, reflowing following text
 without entering the file. Its two-column candidate popup remains horizontal
 beside the active column. Ctrl-Space toggles the IME; Space converts and Enter
 commits. Ctrl-S saves, Ctrl-Q exits (repeat to discard unsaved edits), and Ctrl-Z
-undoes the last edit. PgUp/PgDn navigate a screenful. Buffer limit 16 KiB, one
+undoes the last edit. An entire confirmed IME conversion is inserted atomically,
+so it takes one buffer update, one repaint and one undo step instead of one of
+each per character. PgUp/PgDn navigate a screenful. Buffer limit 16 KiB, one
 undo snapshot. UTF-8 files and MeOS VFS are used.
 
 Only BIZ UD is used. On Tab5, Write first opens
@@ -51,4 +53,5 @@ non-editor. The same BIZ UD IME presentation code is shared by both editors.
 
 `sh tools/sim/write_test.sh` replays the real MeOS IME through HID input, saves
 Japanese text, verifies exact UTF-8 file contents, captures vertical composition,
-and verifies that Ctrl-T produces a distinct horizontal frame.
+verifies phrase-granular undo, and checks that Ctrl-T produces a distinct
+horizontal frame.

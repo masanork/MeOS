@@ -33,6 +33,7 @@ const char *ime_status(void);
  * no pointers into the conversion engine escape to the application. */
 #define IME_VIEW_CPS 200
 #define IME_VIEW_CANDIDATES 9
+#define IME_COMMIT_BYTES 4612
 typedef struct {
     uint32_t revision;
     bool active, converting, listing;
@@ -44,6 +45,11 @@ typedef struct {
 } ime_view;
 void ime_set_app_view(bool enabled);
 bool ime_read_view(ime_view *out);
+/* App-owned editors receive one complete IME confirmation at a time instead
+ * of reconstructing it from the console byte stream.  The returned UTF-8 is
+ * not NUL-terminated.  Zero means none is pending or capacity is too small;
+ * a too-small buffer leaves the confirmation pending. */
+size_t ime_take_commit(char *out, size_t capacity);
 /* A full-screen program that edits a line of text says where its insertion point is (in text cells); while it is set
  * the composition is drawn inline there, with the candidate list under it, instead of as a bar at the bottom.
  * Call it before every wait for a key (cheap), and ime_clear_anchor() when the field goes away. */

@@ -31,6 +31,7 @@ typedef struct {
     unsigned font_px;
     uint16_t *frame;
     char status[120];
+    char commit[IME_COMMIT_BYTES];
 } writer;
 
 static void *editor_alloc(size_t bytes) {
@@ -283,6 +284,13 @@ bool write_file(const char *path) {
     if(!view){ime_set_app_view(false);fbcon_pause(false);display_release_claim(w);bizime_set_font(false,24);
         if(w->outline)otfont_end();else bizud_end();kfree(w->frame);kfree(w);return false;}
     while(run) {
+        size_t committed = ime_take_commit(w->commit, sizeof w->commit);
+        if (committed) {
+            w->confirm = false; w->status[0] = 0;
+            if (!scheme_buffer_insert(&w->b, w->commit, committed))
+                ksnprintf(w->status, sizeof w->status, "入力できません（最大16 KB）");
+            redraw = true;
+        }
         ime_read_view(view);if(redraw||revision!=view->revision){layout(w);paint(w,path,view);revision=view->revision;redraw=false;}
         int k=dq_pollkey();if(k==DQK_NONE){task_sleep(10);continue;}redraw=true;
         if(k==CTRL('q')){if(!w->b.modified||w->confirm)run=false;else{w->confirm=true;ksnprintf(w->status,sizeof w->status,"未保存です。もう一度 Ctrl-Q で終了 / Ctrl-S で保存");}continue;}
