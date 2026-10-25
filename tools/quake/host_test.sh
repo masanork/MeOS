@@ -37,3 +37,9 @@ cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined -DM5OS_BOA
 
 cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -DM5OS_QUAKE=1 -DM5OS_QUAKE_HIGHRES=1 -Ikernel/include tools/quake/input_test.c apps/quake/input.c kernel/dev/keyboard_raw.c drivers/usbkbd/hid_keys.c -o "$OUT/hires-input-test"
 "$OUT/hires-input-test"
+
+# Exercise the production descriptor submission/pipeline with delayed hardware.
+for RES in 0 1; do
+    cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -DM5OS_QUAKE=1 -DM5OS_QUAKE_HIGHRES=$RES -Itools/quake/dma_mock -Ikernel/include tools/quake/dma_batch_test.c -o "$OUT/dma-batch-$RES"
+    "$OUT/dma-batch-$RES"
+done

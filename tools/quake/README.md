@@ -522,3 +522,38 @@ does not fix allocator fragmentation or reduce the requested stack.
 `hires-tile16-device-2026-10-26.json` and
 `hires-tile64-device-2026-10-26.json` retain exact image identities and results.
 CPU remains the default; use `quake dma e1m1` for the selected fast path.
+
+## Two-column DMA chains — 2026-10-26
+
+High-resolution exact DMA now chains two dirty source columns (four physical
+rows) per hardware submission. Alternating kernel-owned source banks preserve
+packing/transfer overlap, including sparse columns and final partial batches.
+The next chain waits for completion before changing shared descriptors. Each
+600-pixel expanded column is padded to 640 pixels for cache-line alignment.
+Source payload is 5,120 bytes in a once-only 5,247-byte internal-heap allocation;
+DMA never references an app allocation or task stack. Allocation failure
+releases the claim and retains CPU rendering. Existing timeout/clock shutdown
+semantics are unchanged. Low-resolution DMA still submits one source column.
+
+With the same 360 MHz CPU, 128 KiB L2, 600 KiB surface cache and effect audio,
+full-view 969-frame demo1 returns baseline **17.5 / 17.5 FPS** (55.3 s each)
+and two-column DMA **18.4 / 18.4 FPS** (52.7 s each), about 5% faster.
+Baseline source `7c343f6` includes the concurrent SD sector-cache improvement;
+selected source is `333a366`. Low-resolution compatibility returns
+**32.6 / 32.6 FPS** with effect audio. Native CPU/DMA static/moving comparisons
+match their independent references, and selected normal exit reports zero
+audio underruns/errors with nonzero PCM output. Stack guards pass at a sampled
+peak of 29,696 / 49,152 bytes.
+
+Four-column storage caused an audio-buffer allocation failure in a prototype;
+its silent 19.3 FPS is excluded. An intervening two-column attempt yielded no
+result row and is excluded; two other completed runs match. The known
+post-diagnostic stack-fragmentation failure still requires an early launch
+after reset in some cases. See `dma-batch-device-2026-10-26.json` for exact
+identities and qualification limits. Human final display/audio acceptance is
+separate from the native pixel comparison and nonzero PCM counters.
+
+Host ASan/UBSan tests run the actual driver with delayed DMA completion. They
+check descriptor/source bank lifetime, variable span lengths, sparse/partial
+chains, rows above 255, full framebuffer/margin guards, palette repaint,
+allocation failure fallback and once-only buffer reuse at both resolutions.
