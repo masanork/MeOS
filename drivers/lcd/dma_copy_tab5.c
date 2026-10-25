@@ -21,7 +21,7 @@ static void *test_raw;
 /* Kernel-owned SRAM buffers survive forced app termination. Never use a task
  * stack or owner-reclaimed allocation for an outstanding transfer. */
 #if M5OS_QUAKE_HIGHRES
-#define DMA_BATCH_COLS 4
+#define DMA_BATCH_COLS 2
 #define DMA_DESC_MAX (DMA_BATCH_COLS*QV_REPEAT)
 /* Each 600-pixel expanded column is padded to cache-line boundaries. */
 static uint16_t (*source)[DMA_BATCH_COLS][640];
