@@ -483,3 +483,42 @@ moving DMA comparisons report zero mismatches. Stack guards remain intact;
 normal exits report zero audio underruns/errors. Physical display, sound and
 controls still require user acceptance for this resolution. Detailed image
 identity and measurements are in `hires-device-2026-10-26.json`.
+
+## High-resolution column staging — 2026-10-26
+
+A 512x300 indexed frame occupies 150 KiB, exceeding the 128 KiB L2 cache.
+Reading each full column separately wastes adjacent PSRAM pixels when cache
+lines are evicted. The high-resolution CPU and DMA paths now read 64 adjacent
+columns row by row into a 19,200-byte internal-stack tile, then expand columns
+from that tile. DMA only receives the existing persistent kernel RGB buffers;
+it never reads this stack tile. The 320x200 CPU/DMA branches are unchanged.
+
+Full-view demo1, 969 frames per run, effect audio, two repeats each:
+
+| 512x300 transfer | CPU FPS | DMA FPS | Tile bytes |
+| --- | --- | --- | --- |
+| Baseline | 10.7 / 10.7 | 5.7 / 5.7 | 0 |
+| 16 columns | 14.1 / 14.1 | 16.0 / 16.0 | 4,800 |
+| 64 columns (selected) | 15.9 / 15.9 | 17.5 / 17.5 | 19,200 |
+
+The selected DMA candidate improves its own baseline by about 3.1x, and the
+CPU candidate by about 49%. This does not reach 30 FPS. Representative moving
+DMA intervals fall from roughly 130 ms transfer to 17–18 ms; renderer/other
+work remains significant. No renderer math, clocks, cache capacity or compiler
+options changed.
+
+ASan/UBSan checks compare the full framebuffer to an independent RGB expansion,
+including palette changes, sparse damage, unaligned input, rows above 255,
+partial staging tiles and untouched margins. Native static/moving CPU/DMA
+comparisons report zero mismatches; static FNV32 remains `a4258a41`. The user
+confirmed normal display on the 16-column candidate and normal display/controls
+on the final 64-column DMA game after relaunch. Sampled stack usage peaks
+at 30,896 / 49,152 bytes with intact guards. Normal measured CPU/DMA exits
+report zero audio underruns/errors. Repeated normal game exits/relaunches pass.
+
+An existing late-start internal-memory fragmentation failure also occurred
+after diagnostics. Starting the game early after reset succeeded; this change
+does not fix allocator fragmentation or reduce the requested stack.
+`hires-tile16-device-2026-10-26.json` and
+`hires-tile64-device-2026-10-26.json` retain exact image identities and results.
+CPU remains the default; use `quake dma e1m1` for the selected fast path.
