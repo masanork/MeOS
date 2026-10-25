@@ -196,7 +196,7 @@ void D_DrawSurfaces (void)
 			d_ziorigin = s->d_ziorigin;
 
 			D_DrawSolidSurface (s, (intptr_t)s->data & 0xFF);
-			D_DrawZSpans (s->spans);
+			{ QUAKE_DETAIL_BEGIN(qd_scope); D_DrawZSpans (s->spans); QUAKE_DETAIL_END(QD_ZSPANS,qd_scope); }
 		}
 	}
 	else
@@ -219,8 +219,8 @@ void D_DrawSurfaces (void)
 					R_MakeSky ();
 				}
 
-				D_DrawSkyScans8 (s->spans);
-				D_DrawZSpans (s->spans);
+				{ QUAKE_DETAIL_BEGIN(qd_scope); D_DrawSkyScans8 (s->spans); QUAKE_DETAIL_END(QD_SKY,qd_scope); }
+				{ QUAKE_DETAIL_BEGIN(qd_scope); D_DrawZSpans (s->spans); QUAKE_DETAIL_END(QD_ZSPANS,qd_scope); }
 			}
 			else if (s->flags & SURF_DRAWBACKGROUND)
 			{
@@ -231,7 +231,7 @@ void D_DrawSurfaces (void)
 				d_ziorigin = -0.9;
 
 				D_DrawSolidSurface (s, (int)r_clearcolor.value & 0xFF);
-				D_DrawZSpans (s->spans);
+				{ QUAKE_DETAIL_BEGIN(qd_scope); D_DrawZSpans (s->spans); QUAKE_DETAIL_END(QD_ZSPANS,qd_scope); }
 			}
 			else if (s->flags & SURF_DRAWTURB)
 			{
@@ -257,8 +257,8 @@ void D_DrawSurfaces (void)
 				}
 
 				D_CalcGradients (pface);
-				Turbulent8 (s->spans);
-				D_DrawZSpans (s->spans);
+				{ QUAKE_DETAIL_BEGIN(qd_scope); Turbulent8 (s->spans); QUAKE_DETAIL_END(QD_WATER,qd_scope); }
+				{ QUAKE_DETAIL_BEGIN(qd_scope); D_DrawZSpans (s->spans); QUAKE_DETAIL_END(QD_ZSPANS,qd_scope); }
 
 				if (s->insubmodel)
 				{
@@ -297,16 +297,16 @@ void D_DrawSurfaces (void)
 				* pface->texinfo->mipadjust);
 
 			// FIXME: make this passed in to D_CacheSurface
-				pcurrentcache = D_CacheSurface (pface, miplevel);
+				{ QUAKE_DETAIL_BEGIN(qd_scope); pcurrentcache = D_CacheSurface (pface, miplevel); QUAKE_DETAIL_END(QD_CACHE,qd_scope); }
 
 				cacheblock = (pixel_t *)pcurrentcache->data;
 				cachewidth = pcurrentcache->width;
 
 				D_CalcGradients (pface);
 
-				(*d_drawspans) (s->spans);
+				{ QUAKE_DETAIL_BEGIN(qd_scope); (*d_drawspans) (s->spans); QUAKE_DETAIL_END(QD_SPANS,qd_scope); }
 
-				D_DrawZSpans (s->spans);
+				{ QUAKE_DETAIL_BEGIN(qd_scope); D_DrawZSpans (s->spans); QUAKE_DETAIL_END(QD_ZSPANS,qd_scope); }
 
 				if (s->insubmodel)
 				{

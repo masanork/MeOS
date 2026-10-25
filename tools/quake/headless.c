@@ -65,6 +65,10 @@ int main(int argc,char **argv){
  if(!profile.completed_frames||!profile.phase_us[QP_RENDER]||!profile.read_bytes||
     !profile.cache[QC_HIT]||!profile.cache[QC_REBUILD]||profile.cache[QC_ALLOC]>profile.cache[QC_REBUILD])return 1;
  printf("HEADLESS profile: %u completed frames, %u bytes read\n",profile.completed_frames,(unsigned)profile.read_bytes);
+#ifdef MEOS_QUAKE_DETAIL_PROFILE
+ if(!profile.detail_calls[QD_EDGES]||!profile.detail_calls[QD_CACHE]||!profile.detail_calls[QD_SPANS])return 1;
+ printf("HEADLESS detail scopes: edges=%u cache=%u spans=%u\n",profile.detail_calls[QD_EDGES],profile.detail_calls[QD_CACHE],profile.detail_calls[QD_SPANS]);
+#endif
  printf("HEADLESS cache: hit=%llu rebuild=%llu alloc=%llu evict=%llu wrap=%llu thrash=%llu pixels=%llu bytes=%llu dynamic=%llu texture=%llu lightstyle=%llu\n",
  (unsigned long long)profile.cache[QC_HIT],(unsigned long long)profile.cache[QC_REBUILD],
  (unsigned long long)profile.cache[QC_ALLOC],(unsigned long long)profile.cache[QC_EVICT],

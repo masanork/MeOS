@@ -929,6 +929,7 @@ void R_RenderView_ (byte *warpbuffer)
 	if (r_timegraph.value || r_speeds.value || r_dspeeds.value)
 		r_time1 = Sys_FloatTime ();
 
+	QUAKE_DETAIL_BEGIN(qd_setup);
 	R_SetupFrame ();
 
 #ifdef PASSAGES
@@ -936,6 +937,8 @@ SetVisibilityByPassages ();
 #else
 	R_MarkLeaves ();	// done here so we know if we're in water
 #endif
+
+	QUAKE_DETAIL_END(QD_SETUP,qd_setup);
 
 // make FDIV fast. This reduces timing precision after we've been running for a
 // while, so we don't do it globally.  This also sets chop mode, and we do it
@@ -953,7 +956,9 @@ SetVisibilityByPassages ();
 		VID_LockBuffer ();
 	}
 	
+	QUAKE_DETAIL_BEGIN(qd_edges);
 	R_EdgeDrawing ();
+	QUAKE_DETAIL_END(QD_EDGES,qd_edges);
 
 	if (!r_dspeeds.value)
 	{
@@ -968,7 +973,9 @@ SetVisibilityByPassages ();
 		de_time1 = se_time2;
 	}
 
+	QUAKE_DETAIL_BEGIN(qd_entities);
 	R_DrawEntitiesOnList ();
+	QUAKE_DETAIL_END(QD_ENTITIES,qd_entities);
 
 	if (r_dspeeds.value)
 	{
@@ -976,7 +983,9 @@ SetVisibilityByPassages ();
 		dv_time1 = de_time2;
 	}
 
+	QUAKE_DETAIL_BEGIN(qd_viewmodel);
 	R_DrawViewModel ();
+	QUAKE_DETAIL_END(QD_VIEWMODEL,qd_viewmodel);
 
 	if (r_dspeeds.value)
 	{
@@ -984,13 +993,18 @@ SetVisibilityByPassages ();
 		dp_time1 = Sys_FloatTime ();
 	}
 
+	QUAKE_DETAIL_BEGIN(qd_particles);
 	R_DrawParticles ();
+	QUAKE_DETAIL_END(QD_PARTICLES,qd_particles);
 
 	if (r_dspeeds.value)
 		dp_time2 = Sys_FloatTime ();
 
-	if (r_dowarp)
+	if (r_dowarp) {
+		QUAKE_DETAIL_BEGIN(qd_warp);
 		D_WarpScreen ();
+		QUAKE_DETAIL_END(QD_WARP,qd_warp);
+	}
 
 	V_SetContentsColor (r_viewleaf->contents);
 

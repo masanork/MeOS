@@ -240,7 +240,9 @@ void R_DrawSurface (void)
 	texture_t		*mt;
 
 // calculate the lightings
+	QUAKE_DETAIL_BEGIN(qd_light);
 	R_BuildLightMap ();
+	QUAKE_DETAIL_END(QD_LIGHT,qd_light);
 	
 	surfrowbytes = r_drawsurf.rowbytes;
 
