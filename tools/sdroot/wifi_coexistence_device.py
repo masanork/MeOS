@@ -45,6 +45,22 @@ def checksum(data):
     return total ^ 65535
 
 
+def sd_io_stats(receipt):
+    rows = {"read": {}, "write": {}}
+    required = {"calls", "blocks", "errors", "wait_ms", "prepare_ms", "dma_ms",
+                "finish_ms", "hold_ms", "max_wait_us", "max_prepare_us",
+                "max_dma_us", "max_finish_us", "max_hold_us", "max_polls"}
+    for direction, limit, fields in re.findall(r"SDMMC (READ|WRITE) max_blocks=(\d+) ([^\n]+)", receipt):
+        key = direction.lower()
+        values = {name: int(value) for name, value in re.findall(r"([a-z_]+)=(\d+)", fields)}
+        if limit in rows[key] or not required.issubset(values):
+            raise RuntimeError("duplicate/incomplete SDMMC diagnostic row")
+        rows[key][limit] = values
+    if any(set(table) != {"1", "8", "32", "128"} for table in rows.values()):
+        raise RuntimeError("SDMMC diagnostic classes missing")
+    return rows
+
+
 class PingLoad:
     def __init__(self, target, pps, payload_bytes=1400, burst_packets=1):
         self.target = str(ipaddress.IPv4Address(target))
@@ -172,6 +188,8 @@ def main():
                         help="1..16 packets per group; pps limits the average group pacing")
     parser.add_argument("--diagnostics", action="store_true",
                         help="record wifi stats counters on firmware that supports them")
+    parser.add_argument("--sd-diagnostics", action="store_true",
+                        help="record native SDMMC stage timings outside traffic phases")
     parser.add_argument("--reset", action="store_true", help="reset the board, discarding unsaved RAM")
     parser.add_argument("--settle-seconds", type=int, default=0,
                         help="hold the serial connection open before measurements for background services")
@@ -263,11 +281,18 @@ def main():
                 return result
 
             for _ in range(args.reads):
-                report["baseline"].append(verify_pak())
+                if args.sd_diagnostics:
+                    sd_io_stats(session.command("sd stats reset"))
+                sample = verify_pak()
+                if args.sd_diagnostics:
+                    sample["sd_io"] = sd_io_stats(session.command("sd stats"))
+                report["baseline"].append(sample)
             session.command("mem trim")
             free_before, _, _ = memory(session.command("mem"))
             report["trimmed_psram_before_kib"] = free_before
             for rate in args.pps:
+                if args.sd_diagnostics:
+                    sd_io_stats(session.command("sd stats reset"))
                 if args.diagnostics:
                     receipt = session.command("wifi stats reset")
                     if "WIFI RX" not in receipt:
@@ -314,6 +339,8 @@ def main():
                     if "icmp_requests" not in diag or "rx_partials" not in diag:
                         raise RuntimeError("Wi-Fi diagnostic receipt incomplete")
                     summary["device_diagnostics"] = diag
+                if args.sd_diagnostics:
+                    summary["sd_io"] = sd_io_stats(session.command("sd stats"))
                 summary["pak"] = pak
                 summary["font_receipt"] = font.strip()
                 report["loads"].append(summary)
@@ -325,6 +352,10 @@ def main():
             if cache or atlas or abs(free_after - free_before) > 32:
                 raise RuntimeError("PSRAM cleanup drift after concurrent I/O")
             failures = []
+            for sample in report["baseline"] + report["loads"]:
+                for direction in sample.get("sd_io", {}).values():
+                    if any(row["errors"] for row in direction.values()):
+                        failures.append("native SDMMC transfer error")
             for summary in report["loads"]:
                 if summary["invalid_replies"]:
                     failures.append("invalid ICMP reply payload/checksum")

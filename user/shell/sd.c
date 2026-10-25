@@ -29,6 +29,24 @@ static bool number(const char *text,unsigned *out) {
 }
 int shell_sd(int argc, char **argv)
 {
+    if (argc >= 2 && !strcmp(argv[1], "stats")) {
+        if (argc > 3 || (argc == 3 && strcmp(argv[2], "reset"))) goto usage;
+        sdcard_io_stats_t io;
+        if (!sdcard_get_io_stats(&io, argc == 3)) {
+            kputs("sd: native SDMMC diagnostics unavailable\n"); return 1;
+        }
+        const unsigned limit[] = {1,8,32,128};
+        for (unsigned write = 0; write < 2; write++) for (unsigned i = 0; i < SDCARD_IO_CLASSES; i++) {
+            const sdcard_io_class_t *c = write ? &io.write[i] : &io.read[i];
+            kprintf("SDMMC %s max_blocks=%u calls=%u blocks=%u errors=%u wait_ms=%u prepare_ms=%u dma_ms=%u finish_ms=%u hold_ms=%u max_wait_us=%u max_prepare_us=%u max_dma_us=%u max_finish_us=%u max_hold_us=%u max_polls=%u\n",
+                    write ? "WRITE" : "READ", limit[i], c->calls, c->blocks, c->errors,
+                    (uint32_t)(c->wait_us/1000u), (uint32_t)(c->prepare_us/1000u),
+                    (uint32_t)(c->dma_us/1000u), (uint32_t)(c->finish_us/1000u),
+                    (uint32_t)(c->hold_us/1000u), c->max_wait_us, c->max_prepare_us,
+                    c->max_dma_us, c->max_finish_us, c->max_hold_us, c->max_polls);
+        }
+        return 0;
+    }
     if(sdroot_active() && !(argc==1 || (argc==2 && !strcmp(argv[1],"status")))) {
         kputs("sd: card is the active littlefs system root; raw probe/FAT mount/benchmark disabled\n");return 1;
     }
@@ -65,7 +83,7 @@ int shell_sd(int argc, char **argv)
     else kprintf("sd: FAT mount failed (%d); unsupported/damaged filesystem or read error; no formatting\n", rc);
     return rc == ERR_OK ? 0 : 1;
 usage:
-    kputs("usage: sd [status|probe|mount [ro|rw]|unmount|bench [FILES [SMALL_BYTES [LARGE_MiB]]]] (default read/write; FAT12/16/32, UTF-8 long names; no exFAT)\n");
+    kputs("usage: sd [status|stats [reset]|probe|mount [ro|rw]|unmount|bench [FILES [SMALL_BYTES [LARGE_MiB]]]] (default read/write; FAT12/16/32, UTF-8 long names; no exFAT)\n");
     return 1;
 }
 #endif

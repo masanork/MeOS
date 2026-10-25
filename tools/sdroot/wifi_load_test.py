@@ -3,7 +3,7 @@
 import struct
 import unittest
 
-from wifi_coexistence_device import PingLoad, checksum, MeasurementInvalid, validate_clock
+from wifi_coexistence_device import PingLoad, checksum, MeasurementInvalid, validate_clock, sd_io_stats
 
 
 def reply(load, index):
@@ -86,6 +86,17 @@ class IntegrityTests(unittest.TestCase):
                      (38, 30, 38000), (38, 38, 0)):
             with self.assertRaises(MeasurementInvalid):
                 validate_clock(*args)
+
+    def test_sd_timings_require_all_classes_and_fields(self):
+        fields = "calls=2 blocks=2 errors=0 wait_ms=1 prepare_ms=2 dma_ms=3 finish_ms=4 hold_ms=9 " \
+                 "max_wait_us=100 max_prepare_us=200 max_dma_us=300 max_finish_us=400 max_hold_us=900 max_polls=50"
+        lines = [f"SDMMC {op} max_blocks={n} {fields}" for op in ("READ", "WRITE") for n in (1,8,32,128)]
+        text = "\n".join(lines)
+        parsed = sd_io_stats(text)
+        self.assertEqual(parsed["read"]["128"]["max_hold_us"], 900)
+        for invalid in ("\n".join(lines[:-1]), text + "\n" + lines[0], text.replace("max_polls=50", "")):
+            with self.assertRaises(RuntimeError):
+                sd_io_stats(invalid)
 
 
 if __name__ == "__main__":
