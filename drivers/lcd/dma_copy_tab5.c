@@ -20,8 +20,16 @@ static uint16_t *fb,*test;
 static void *test_raw;
 /* Kernel-owned SRAM buffers survive forced app termination. Never use a task
  * stack or owner-reclaimed allocation for an outstanding transfer. */
+#if M5OS_QUAKE_HIGHRES
+#define DMA_BATCH_COLS 4
+#define DMA_DESC_MAX (DMA_BATCH_COLS*QV_REPEAT)
+/* Each 600-pixel expanded column is padded to cache-line boundaries. */
+static uint16_t source[2][DMA_BATCH_COLS][640] __attribute__((aligned(128)));
+#else
+#define DMA_DESC_MAX 3
 static uint16_t source[2][768] __attribute__((aligned(128)));
-static union {dma2d_descriptor_t d;uint8_t line[128];} tx[3] __attribute__((aligned(128))),rx[3] __attribute__((aligned(128)));
+#endif
+static union {dma2d_descriptor_t d;uint8_t line[128];} tx[DMA_DESC_MAX] __attribute__((aligned(128))),rx[DMA_DESC_MAX] __attribute__((aligned(128)));
 static bool clocks(bool enable){
  uint32_t irq=arch_irq_disable();int __DECLARE_RCC_ATOMIC_ENV=0;
  if(enable&&dma2d_ll_is_bus_clock_enabled(0)){arch_irq_restore(irq);return false;}
@@ -44,15 +52,9 @@ static bool wait_done(void){
  }
 }
 static void sync_buffer(void *p,size_t n,int flags){esp_cache_msync(p,n,flags);}
-static bool transfer(uint16_t *src,uint16_t *dst,unsigned bytes){
- if(!wait_done())return false;
+static bool start_chain(unsigned descriptors){
  dma2d_ll_tx_reset_channel(hw,0);dma2d_ll_rx_reset_channel(hw,0);
- memset(tx,0,sizeof tx);memset(rx,0,sizeof rx);
- for(unsigned i=0;i<QV_REPEAT;i++){
-  tx[i].d=(dma2d_descriptor_t){.vb_size=bytes,.hb_length=bytes,.owner=1,.suc_eof=i==QV_REPEAT-1,.buffer=src,.next=i<QV_REPEAT-1?&tx[i+1].d:NULL};
-  rx[i].d=(dma2d_descriptor_t){.vb_size=bytes,.owner=1,.suc_eof=i==QV_REPEAT-1,.buffer=dst+i*720,.next=i<QV_REPEAT-1?&rx[i+1].d:NULL};
- }
- sync_buffer(tx,sizeof tx,ESP_CACHE_MSYNC_FLAG_DIR_C2M);sync_buffer(rx,sizeof rx,ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+ sync_buffer(tx,descriptors*sizeof tx[0],ESP_CACHE_MSYNC_FLAG_DIR_C2M);sync_buffer(rx,descriptors*sizeof rx[0],ESP_CACHE_MSYNC_FLAG_DIR_C2M);
  dma2d_ll_tx_enable_interrupt(hw,0,UINT32_MAX,false);dma2d_ll_rx_enable_interrupt(hw,0,UINT32_MAX,false);
  dma2d_ll_tx_clear_interrupt_status(hw,0,UINT32_MAX);dma2d_ll_rx_clear_interrupt_status(hw,0,UINT32_MAX);
  dma2d_ll_tx_connect_to_periph(hw,0,DMA2D_TRIG_PERIPH_M2M,4);dma2d_ll_rx_connect_to_periph(hw,0,DMA2D_TRIG_PERIPH_M2M,3);
@@ -68,20 +70,52 @@ static bool transfer(uint16_t *src,uint16_t *dst,unsigned bytes){
  dma2d_ll_tx_set_desc_addr(hw,0,(uintptr_t)&tx[0].d);dma2d_ll_rx_set_desc_addr(hw,0,(uintptr_t)&rx[0].d);
  pending=true;dma2d_ll_rx_start(hw,0);dma2d_ll_tx_start(hw,0);return true;
 }
+static void set_descriptor(unsigned n,unsigned total,uint16_t *src,uint16_t *dst,unsigned bytes){
+ tx[n].d=(dma2d_descriptor_t){.vb_size=bytes,.hb_length=bytes,.owner=1,.suc_eof=n==total-1,.buffer=src,.next=n+1<total?&tx[n+1].d:NULL};
+ rx[n].d=(dma2d_descriptor_t){.vb_size=bytes,.owner=1,.suc_eof=n==total-1,.buffer=dst,.next=n+1<total?&rx[n+1].d:NULL};
+}
+static bool transfer(uint16_t *src,uint16_t *dst,unsigned bytes){
+ if(!wait_done())return false;
+ memset(tx,0,sizeof tx);memset(rx,0,sizeof rx);
+ for(unsigned i=0;i<QV_REPEAT;i++)set_descriptor(i,QV_REPEAT,src,dst+i*720,bytes);
+ return start_chain(QV_REPEAT);
+}
+#if M5OS_QUAKE_HIGHRES
+typedef struct {unsigned col,start,end;} column_span;
+static bool transfer_batch(unsigned bank,const column_span *spans,unsigned count){
+ /* The other bank can be active while this bank is filled/flushed. Shared
+  * descriptors must not be modified until the preceding chain completes. */
+ sync_buffer(source[bank],count*sizeof source[bank][0],ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+ if(!wait_done())return false;
+ memset(tx,0,sizeof tx);memset(rx,0,sizeof rx);
+ unsigned total=count*QV_REPEAT;
+ for(unsigned c=0;c<count;c++)for(unsigned r=0;r<QV_REPEAT;r++){
+  unsigned start=spans[c].start;
+  uint16_t *dst=fb+(1280-QV_X-QV_REPEAT-spans[c].col*QV_REPEAT+r)*720+QV_Y+start;
+  set_descriptor(c*QV_REPEAT+r,total,source[bank][c]+start,dst,(spans[c].end-start)*2);
+ }
+ return start_chain(total);
+}
+#endif
 bool tab5_dma_copy_begin(uint32_t who,uint16_t *framebuffer){
  if(!who||owner||disabled||!framebuffer||((uintptr_t)framebuffer&127u)||!clocks(true))return false;
  owner=who;fb=framebuffer;dma2d_ll_hw_enable(hw,true);
  if(!test_raw)test_raw=kmalloc_psram(4608+127);
  if(!test_raw){tab5_dma_copy_end(who);return false;}
  test=(uint16_t *)(((uintptr_t)test_raw+127)&~(uintptr_t)127);
- for(unsigned i=0;i<768;i++)source[0][i]=(uint16_t)(i*17+3);
+#if M5OS_QUAKE_HIGHRES
+ uint16_t *probe=source[0][0];unsigned probe_pixels=600,probe_capacity=640;
+#else
+ uint16_t *probe=source[0];unsigned probe_pixels=720,probe_capacity=768;
+#endif
+ for(unsigned i=0;i<probe_capacity;i++)probe[i]=(uint16_t)(i*17+3);
  for(unsigned i=0;i<2304;i++)test[i]=0x5a5a;
- sync_buffer(source[0],sizeof source[0],ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+ sync_buffer(probe,probe_capacity*2,ESP_CACHE_MSYNC_FLAG_DIR_C2M);
  sync_buffer(test,4608,ESP_CACHE_MSYNC_FLAG_DIR_C2M|ESP_CACHE_MSYNC_FLAG_INVALIDATE);
- bool ok=transfer(source[0],test+64,1440)&&wait_done();
+ bool ok=transfer(probe,test+64,probe_pixels*2)&&wait_done();
  if(ok){
   sync_buffer(test,4608,ESP_CACHE_MSYNC_FLAG_DIR_M2C);
-  for(unsigned i=0;i<2304;i++)if(test[i]!=(i>=64&&i<64+QV_REPEAT*720?source[0][(i-64)%720]:0x5a5a))ok=false;
+  for(unsigned i=0;i<2304;i++)if(test[i]!=(i>=64&&(i-64)/720<QV_REPEAT&&(i-64)%720<probe_pixels?probe[(i-64)%720]:0x5a5a))ok=false;
  }
  if(!ok){disabled=true;kputs("dma-copy: offscreen self-test failed; CPU retained\n");tab5_dma_copy_end(who);return false;}
  kputs("dma-copy: offscreen linear/triplet/guards PASS\n");return true;
@@ -102,6 +136,7 @@ bool tab5_dma_copy_present(const uint8_t *pixels,uint8_t *previous,const uint16_
  unsigned buffer=0;
 #if M5OS_QUAKE_HIGHRES
  uint8_t tile[TAB5_HIRES_TILE_COLS][300];
+ column_span spans[DMA_BATCH_COLS];unsigned queued=0;
  for(unsigned base=left;base<=right;base+=TAB5_HIRES_TILE_COLS){
   unsigned count=right-base+1;if(count>TAB5_HIRES_TILE_COLS)count=TAB5_HIRES_TILE_COLS;
   bool dirty=false;for(unsigned i=0;i<count;i++)if(first[base+i]<QV_HEIGHT)dirty=true;
@@ -109,14 +144,14 @@ bool tab5_dma_copy_present(const uint8_t *pixels,uint8_t *previous,const uint16_
   tab5_hires_stage(tile,pixels,base,count);
   for(unsigned i=0;i<count;i++){
    unsigned col=base+i;if(first[col]>=QV_HEIGHT)continue;
-   uint16_t *src=source[buffer];buffer^=1;
+   uint16_t *src=source[buffer][queued];
    tab5_hires_expand(src,tile[i],palette,first[col],last[col]);
-   sync_buffer(src,sizeof source[0],ESP_CACHE_MSYNC_FLAG_DIR_C2M);
-   if(!wait_done())return false;
    unsigned start=first[col]*2,end=(last[col]+1)*2;
-   if(!transfer(src+start,fb+(1280-QV_X-QV_REPEAT-col*QV_REPEAT)*720+QV_Y+start,(end-start)*2))return false;
+   spans[queued++]=(column_span){col,start,end};
+   if(queued==DMA_BATCH_COLS){if(!transfer_batch(buffer,spans,queued))return false;buffer^=1;queued=0;}
   }
  }
+ if(queued&&!transfer_batch(buffer,spans,queued))return false;
 #else
  for(unsigned col=left;col<=right;col++){
   if(first[col]>=QV_HEIGHT)continue;
