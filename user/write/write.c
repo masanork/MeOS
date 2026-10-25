@@ -19,11 +19,14 @@
 #define ACCENT RGB565(25,85,115)
 #define LEFT 48
 #define RIGHT (DISPLAY_WIDTH-48)
-#define H_BASELINE 92
+#define HEADER_BASELINE 30
+#define HEADER_RULE 40
+#define H_BASELINE 70
 #define H_PITCH 36
-#define H_ROWS ((DISPLAY_HEIGHT-250)/H_PITCH)
-#define V_TOP 68
-#define V_BOTTOM (DISPLAY_HEIGHT-190)
+#define H_BOTTOM (DISPLAY_HEIGHT-12)
+#define H_ROWS (((H_BOTTOM-H_BASELINE)/H_PITCH)+1)
+#define V_TOP 48
+#define V_BOTTOM (DISPLAY_HEIGHT-36)
 #define V_COLUMN_PITCH 40
 #define V_TRACKING 6
 #define V_COLUMNS (((RIGHT-LEFT-24)/V_COLUMN_PITCH)+1)
@@ -136,7 +139,7 @@ static void move_inside_column(writer *w,int delta) {
 }
 
 static void draw_horizontal_tail(writer *w,bizime_point point) {
-    int bottom=H_BASELINE+(H_ROWS-1)*H_PITCH+6,x=point.x,y=point.baseline;
+    int bottom=H_BOTTOM,x=point.x,y=point.baseline;
     for(size_t p=w->b.cursor;p<w->b.length;p=scheme_buffer_next(&w->b,p)) {
         uint32_t cp=at(w,p);if(cp=='\n'){x=LEFT;y+=H_PITCH;continue;}
         int advance=hwidth(w,p);if(x+advance>RIGHT){x=LEFT;y+=H_PITCH;}
@@ -177,12 +180,12 @@ static void paint_horizontal(writer *w,const ime_view *view) {
     }
     int cx=cursor_hx(w,line),cy=H_BASELINE+(line-w->top)*H_PITCH;
     if(view->count) {
-        int bottom=H_BASELINE+(H_ROWS-1)*H_PITCH+6,next=cy+H_PITCH-27;
+        int bottom=H_BOTTOM,next=cy+H_PITCH-27;
         display_fill_rect(cx,cy-27,RIGHT-cx,32,BG);
         if(next<bottom)display_fill_rect(LEFT,next,RIGHT-LEFT,bottom-next,BG);
         bizime_point after=bizime_measure(view,cx,cy,LEFT,RIGHT,H_PITCH);
         draw_horizontal_tail(w,after);
-        bizime_draw(view,cx,cy,LEFT,RIGHT,55,DISPLAY_HEIGHT-165,H_PITCH,FG,BG,ACCENT);
+        bizime_draw(view,cx,cy,LEFT,RIGHT,HEADER_RULE+2,H_BOTTOM,H_PITCH,FG,BG,ACCENT);
     } else display_fill_rect(cx,cy-26,2,31,ACCENT);
 }
 
@@ -204,21 +207,20 @@ static void paint_vertical(writer *w,const ime_view *view) {
         display_fill_rect(cx,cy,24,V_BOTTOM-cy+28,BG);
         bizime_vpoint after=bizime_measure_vertical(view,cx,cy,V_TOP,V_BOTTOM,V_COLUMN_PITCH,V_TRACKING);
         draw_vertical_tail(w,after);
-        bizime_draw_vertical(view,cx,cy,LEFT,RIGHT,V_TOP,DISPLAY_HEIGHT-165,
+        bizime_draw_vertical(view,cx,cy,LEFT,RIGHT,V_TOP,V_BOTTOM,
                              V_COLUMN_PITCH,V_TRACKING,FG,BG,ACCENT);
     } else display_fill_rect(cx,cy,24,2,ACCENT);
 }
 
 static void paint(writer *w,const char *path,const ime_view *view) {
     display_set_target(w->frame);display_fill_rect(0,0,DISPLAY_WIDTH,DISPLAY_HEIGHT,BG);
-    char header[176];ksnprintf(header,sizeof header,"WRITE  %s  [%s]%s",path,w->vertical?"縦書き":"横書き",w->b.modified?" *":"");
-    bizud_text(LEFT,38,header,RIGHT,ACCENT,BG);display_fill_rect(LEFT,54,RIGHT-LEFT,1,ACCENT);
+    char header[256];
+    ksnprintf(header,sizeof header,"WRITE %s%s  ^S保存 ^Q終了 ^Z戻す ^T%s  IME:%s(C-SPC)%s%s  %s",
+              w->vertical?"縦":"横",w->b.modified?"*":"",w->vertical?"横":"縦",
+              ime_status(),w->status[0]?"  ":"",w->status,path);
+    bizud_text(LEFT,HEADER_BASELINE,header,RIGHT,view->active?ACCENT:FG,BG);
+    display_fill_rect(LEFT,HEADER_RULE,RIGHT-LEFT,1,ACCENT);
     if(w->vertical)paint_vertical(w,view);else paint_horizontal(w,view);
-    int y=DISPLAY_HEIGHT-155;display_fill_rect(LEFT,y-12,RIGHT-LEFT,1,ACCENT);
-    char ime_line[104];ksnprintf(ime_line,sizeof ime_line,"BIZ UD 24px / 日本語入力: %s / Ctrl-Space",ime_status());
-    bizud_text(LEFT,y+25,ime_line,RIGHT,view->active?ACCENT:FG,BG);
-    bizud_text(LEFT,DISPLAY_HEIGHT-37,w->vertical?"^S 保存   ^Q 終了   ^Z 戻す   ^T 横書き":"^S 保存   ^Q 終了   ^Z 戻す   ^T 縦書き",RIGHT,FG,BG);
-    if(w->status[0])bizud_text(LEFT,DISPLAY_HEIGHT-4,w->status,RIGHT,ACCENT,BG);
     display_present(0,0,DISPLAY_WIDTH,DISPLAY_HEIGHT);display_set_target(NULL);
 }
 

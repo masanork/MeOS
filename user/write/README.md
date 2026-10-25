@@ -6,6 +6,11 @@ Create DIR first; host files are confined to this workspace. F12 captures a BMP
 when `--screenshots DIR` is provided.
 
 BIZ UD Gothic Regular is rendered at 24 native pixels on a warm light page.
+The only editor chrome is a single line at the top containing the writing mode,
+modified mark, essential shortcuts, IME state, transient status and path (in
+that order, so a long path is clipped first). The document begins immediately
+below it and extends almost to the bottom edge. A vertical column fits 21 normal
+full-width characters; horizontal mode displays 18 lines.
 Write opens in Japanese vertical prose mode: text flows down from the upper
 right and subsequent columns advance left, with 6px character tracking and a
 40px column pitch. BIZ UD's OpenType `vrt2` alternates and vertical metrics place
