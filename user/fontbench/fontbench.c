@@ -72,9 +72,9 @@ bool fontbench_run(unsigned pixel_size) {
     vertical_column(1050,110,"日本語を書く。「括弧」、長音ー。",true);
     uint32_t vertical_us=(uint32_t)(hal_time_now_us()-vertical);
     display_present(0,0,DISPLAY_WIDTH,DISPLAY_HEIGHT);display_set_target(0);
-    kprintf("FONTBENCH %u px: load=%u ms metric=%u us first=%u us warm=%u us misses=%u hits=%u raster=%u us font=%u cache=%u io=%u reads=%u metrics=%u/%u\n",
+    kprintf("FONTBENCH %u px: load=%u ms metric=%u us first=%u us warm=%u us misses=%u hits=%u raster=%u us font=%u resident=%u cache=%u io=%u reads=%u metrics=%u/%u\n",
             pixel_size,st.load_ms,metric_us,first_us,warm_us,st.glyph_misses,st.glyph_hits,
-            (uint32_t)st.raster_us,st.font_bytes,(uint32_t)st.cache_bytes,st.io_bytes,st.io_reads,
+            (uint32_t)st.raster_us,st.font_bytes,st.resident_bytes,(uint32_t)st.cache_bytes,st.io_bytes,st.io_reads,
             st.metric_misses,st.metric_hits);
     kprintf("VERTBENCH %u px: draw=%u us\n",pixel_size,vertical_us);
     for(;;){int key=dq_pollkey();if(key=='q'||key=='Q'||key==DQK_ESC||key==3)break;task_sleep(10);}

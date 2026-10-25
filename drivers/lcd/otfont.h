@@ -5,6 +5,7 @@
 
 typedef struct {
     uint32_t font_bytes;
+    uint32_t resident_bytes;
     uint32_t load_ms;
     uint32_t glyph_hits;
     uint32_t glyph_misses;
@@ -19,6 +20,9 @@ typedef struct {
 /* Experimental runtime OpenType renderer.  A bounded VFS stream cache and the
  * 4-bit glyph cache live in PSRAM; callers still own display serialization. */
 bool otfont_begin(const char *path, unsigned pixel_size);
+/* Prefer a PSRAM-backed face, falling back to the streamed face when the full
+ * font cannot be allocated or read. */
+bool otfont_begin_resident(const char *path, unsigned pixel_size);
 bool otfont_set_pixel_size(unsigned pixel_size);
 void otfont_end(void);
 int otfont_width(uint32_t cp);

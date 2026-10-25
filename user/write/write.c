@@ -32,6 +32,7 @@ typedef struct {
     uint16_t *frame;
     char status[120];
     char commit[IME_COMMIT_BYTES];
+    uint32_t diversity[512];
 } writer;
 
 static void *editor_alloc(size_t bytes) {
@@ -263,6 +264,21 @@ static bool save(writer *w,const char *path) {
     return rc>=0;
 }
 
+static bool benefits_from_resident_font(writer *w) {
+    if(w->b.length<8192)return false;
+    memset(w->diversity,0,sizeof w->diversity);unsigned distinct=0;
+    for(size_t p=0;p<w->b.length;) {
+        uint32_t cp=at(w,p);p=scheme_buffer_next(&w->b,p);
+        if(cp<0x80)continue;
+        unsigned slot=(cp*2654435761u)&511u;
+        while(w->diversity[slot]&&w->diversity[slot]!=cp)slot=(slot+1u)&511u;
+        if(w->diversity[slot]==cp)continue;
+        w->diversity[slot]=cp;
+        if(++distinct>=256)return true;
+    }
+    return false;
+}
+
 bool write_file(const char *path) {
     writer *w=editor_alloc(sizeof *w);if(!w)return false;
     memset(w,0,sizeof *w);w->vertical=true;w->font_px=24;vfs_info_t st;
@@ -275,7 +291,9 @@ bool write_file(const char *path) {
     } else if(stat!=ERR_NOENT){kfree(w);return false;}
     if(!display_try_claim(w)){kfree(w);return false;}w->frame=editor_alloc(DISPLAY_BUFFER_BYTES);
     if(!w->frame){display_release_claim(w);kfree(w);return false;}
-    w->outline=otfont_begin(OTFONT_DEFAULT_PATH,w->font_px);
+    bool resident=benefits_from_resident_font(w);
+    w->outline=resident?otfont_begin_resident(OTFONT_DEFAULT_PATH,w->font_px):
+                        otfont_begin(OTFONT_DEFAULT_PATH,w->font_px);
     if(!w->outline&&!bizud_begin()){kfree(w->frame);display_release_claim(w);kfree(w);return false;}
     bizime_set_font(w->outline,w->font_px);
     kprintf("write: BIZ UD %upx %s\n",w->font_px,w->outline?"outline":"atlas fallback");

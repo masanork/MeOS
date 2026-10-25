@@ -68,15 +68,16 @@ def main():
         if "\n" not in receipt:
             result += read_until(b"\n", 10)
         pattern = (r"FONTBENCH (\d+) px: load=(\d+) ms metric=(\d+) us first=(\d+) us warm=(\d+) us "
-                   r"misses=(\d+) hits=(\d+) raster=(\d+) us font=(\d+) cache=(\d+) "
+                   r"misses=(\d+) hits=(\d+) raster=(\d+) us font=(\d+) resident=(\d+) cache=(\d+) "
                    r"io=(\d+) reads=(\d+) metrics=(\d+)/(\d+)")
         match = re.search(pattern, result)
         if not match:
             raise RuntimeError(f"benchmark receipt missing: {result!r}")
         values = list(map(int, match.groups()))
         if (values[0] != args.size or values[5] == 0 or values[6] == 0 or
-                values[8] != 4667380 or values[10] == 0 or values[11] == 0 or
-                values[12] == 0 or values[13] == 0):
+                values[8] != 4667380 or values[9] != 0 or
+                values[11] == 0 or values[12] == 0 or
+                values[13] == 0 or values[14] == 0):
             raise RuntimeError(f"invalid benchmark counters: {values}")
         time.sleep(2)
         link.reset_input_buffer()
@@ -88,9 +89,9 @@ def main():
         print("FREETYPE DEVICE PASS: "
               f"{values[0]}px load {values[1]} ms; metrics {values[2]} us; "
               f"first {values[3]} us; warm {values[4]} us; raster {values[7]} us; "
-              f"miss/hit {values[5]}/{values[6]}; cache {values[9] // 1024} KiB; "
-              f"I/O {values[10] // 1024} KiB/{values[11]} reads; "
-              f"metrics miss/hit {values[12]}/{values[13]}; "
+              f"miss/hit {values[5]}/{values[6]}; resident {values[9] // 1024} KiB; "
+              f"cache {values[10] // 1024} KiB; I/O {values[11] // 1024} KiB/{values[12]} reads; "
+              f"metrics miss/hit {values[13]}/{values[14]}; "
               f"PSRAM restored to {after} KiB")
         if args.leave_open:
             link.write(f"fontbench {args.size}\r".encode())

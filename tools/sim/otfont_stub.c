@@ -2,6 +2,7 @@
 #include <string.h>
 
 bool otfont_begin(const char *path,unsigned pixel_size) {(void)path;(void)pixel_size;return false;}
+bool otfont_begin_resident(const char *path,unsigned pixel_size) {(void)path;(void)pixel_size;return false;}
 bool otfont_set_pixel_size(unsigned pixel_size) {(void)pixel_size;return false;}
 void otfont_end(void) {}
 int otfont_width(uint32_t cp) {(void)cp;return 0;}
