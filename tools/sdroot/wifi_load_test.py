@@ -56,6 +56,29 @@ class IntegrityTests(unittest.TestCase):
         self.assertEqual(self.load.invalid, 0)
         self.assertIn(123, self.load.pending)
 
+    def test_burst_accounting_and_bounds(self):
+        class Sink:
+            def __init__(self):
+                self.packets = []
+
+            def send(self, data):
+                self.packets.append(data)
+                return len(data)
+
+        load = PingLoad("127.0.0.1", 100, burst_packets=12)
+        load.sock = Sink()
+        load.phase = "burst"
+        self.assertEqual(load.send_burst(70000), 70012)
+        self.assertEqual(load.phases["burst"]["sent"], 12)
+        self.assertEqual(len(load.pending), 12)
+        for i, packet in enumerate(load.sock.packets):
+            self.assertEqual(checksum(packet), 0)
+            self.assertEqual(struct.unpack("!I", packet[16:20])[0], 70000 + i)
+            self.assertEqual(load.pending[70000 + i][1], "burst")
+        for invalid in (0, 17):
+            with self.assertRaises(ValueError):
+                PingLoad("127.0.0.1", 100, burst_packets=invalid)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,6 +29,7 @@
 #include "esp_rom_gpio.h"
 #include "esp_rom_sys.h"
 #include "esp32p4/sdmmc_shared.h"
+#include "sdio_rx.h"
 
 /* =========================================================================
  * Pin & SDIO Register Definitions
@@ -123,8 +124,15 @@
 
 static sdmmc_desc_t s_dma_desc[16] __attribute__((aligned(64)));
 static uint8_t      s_dma_buf[8192] __attribute__((aligned(64)));
-static uint8_t      s_rx_packet_buf[8192];
+static wifi_sdio_rx_t s_rx_stream;
 static uint8_t      s_tx_packet_buf[2048];
+static wifi_diagnostics_t s_diag;
+static uint64_t s_last_rx_poll;
+static void record_max_us(uint32_t *value, uint64_t elapsed)
+{
+    uint32_t bounded = elapsed > UINT32_MAX ? UINT32_MAX : (uint32_t)elapsed;
+    if (bounded > *value) *value = bounded;
+}
 
 static mutex_t      s_wifi_lock;
 static bool         s_lock_ready;
@@ -486,7 +494,9 @@ static bool sdio_cmd52(bool is_write, uint8_t fn, uint32_t addr,
 static bool sdio_cmd53(bool is_write, uint8_t fn, uint32_t addr,
                        bool block_mode, void *buf, size_t len)
 {
+    uint64_t before = hal_time_now_us();
     sdmmc_bus_lock();
+    record_max_us(&s_diag.bus_max_wait_us, hal_time_now_us() - before);
     bool ok = sdio_cmd53_locked(is_write, fn, addr, block_mode, buf, len);
     sdmmc_bus_unlock();
     return ok;
@@ -681,6 +691,7 @@ static bool sdio_init_hardware(void)
     }
 
     s_sdio_rx_bytes = 0;
+    s_rx_stream.used = 0;
     s_sdio_tx_bufs  = 0;
     s_seq_num       = 0;
     s_sdio_ready    = true;
@@ -723,7 +734,7 @@ static bool sdio_send_packet(uint8_t if_type, uint8_t if_num, const uint8_t *pay
         }
         esp_rom_delay_us(500);
     }
-    if (!has_buf) return false;
+    if (!has_buf) { s_diag.tx_no_credit++; return false; }
 
     size_t block_len = ((total_len + SDIO_BLOCK_SIZE - 1u) / SDIO_BLOCK_SIZE) * SDIO_BLOCK_SIZE;
     mem_zero(s_tx_packet_buf, block_len);
@@ -752,6 +763,7 @@ static bool sdio_send_packet(uint8_t if_type, uint8_t if_num, const uint8_t *pay
 
     uint32_t addr = (ESP_SLAVE_CMD53_END - (uint32_t)total_len) & 0x1FFFFu;
     if (!sdio_cmd53(true, 1, addr, true, s_tx_packet_buf, block_len)) {
+        s_diag.tx_io_errors++;
         return false;
     }
 
@@ -766,18 +778,32 @@ static void handle_serial_packet(const uint8_t *payload, size_t len);
 static void handle_sta_rx_frame(const uint8_t *frame, size_t len);
 static void dhcp_send_discover(void);
 
+static void dispatch_sdio_frame(void *ctx, uint8_t if_type, const uint8_t *payload, size_t plen)
+{
+    (void)ctx;
+    if (if_type == ESP_PRIV_IF) handle_priv_packet(payload, plen);
+    else if (if_type == ESP_SERIAL_IF) handle_serial_packet(payload, plen);
+    else if (if_type == ESP_STA_IF) {
+        s_status.rx_packets++;
+        handle_sta_rx_frame(payload, plen);
+    }
+}
+
 static void sdio_poll_rx_locked(void)
 {
     static bool s_in_sdio_poll = false;
     if (!s_sdio_ready || s_in_sdio_poll) return;
     s_in_sdio_poll = true;
+    uint64_t started = hal_time_now_us();
+    if (s_last_rx_poll) record_max_us(&s_diag.poll_max_gap_us, started - s_last_rx_poll);
+    s_last_rx_poll = started;
 
     for (int iter = 0; iter < 8; iter++) {
         uint8_t regs[20];
         mem_zero(regs, sizeof regs);
         if (!sdio_reg_read(ESP_SLAVE_INT_RAW_REG, regs, 20)) {
-            s_in_sdio_poll = false;
-            return;
+            s_diag.rx_reg_errors++;
+            goto out;
         }
 
         uint32_t intr = (uint32_t)regs[0] | ((uint32_t)regs[1] << 8) |
@@ -791,42 +817,22 @@ static void sdio_poll_rx_locked(void)
 
         uint32_t len_from_slave = ((pkt_reg & 0xFFFFFu) + 0x100000u - s_sdio_rx_bytes) % 0x100000u;
         if (len_from_slave == 0) break;
-
-        if (len_from_slave > sizeof(s_rx_packet_buf) - SDIO_BLOCK_SIZE) {
-            len_from_slave = sizeof(s_rx_packet_buf) - SDIO_BLOCK_SIZE;
-        }
-        size_t block_len = ((len_from_slave + SDIO_BLOCK_SIZE - 1u) / SDIO_BLOCK_SIZE) * SDIO_BLOCK_SIZE;
-        uint32_t addr = (ESP_SLAVE_CMD53_END - len_from_slave) & 0x1FFFFu;
-
-        if (!sdio_cmd53(false, 1, addr, true, s_rx_packet_buf, block_len)) {
+        if (len_from_slave > s_diag.rx_max_pending) s_diag.rx_max_pending = len_from_slave;
+        size_t logical, physical; uint32_t addr;
+        if (pkt_reg == UINT32_MAX ||
+            !wifi_sdio_rx_plan(&s_rx_stream, len_from_slave, &logical, &physical, &addr)) {
+            s_diag.rx_plan_errors++;
             break;
         }
-        s_sdio_rx_bytes = (s_sdio_rx_bytes + len_from_slave) % 0x100000u;
-
-        /* De-frame one or more back-to-back esp_payload_header packets */
-        size_t pos = 0;
-        while (pos + 12u <= len_from_slave) {
-            const uint8_t *hdr = &s_rx_packet_buf[pos];
-            uint8_t  if_type = hdr[0] & 0x0Fu;
-            uint16_t plen    = (uint16_t)hdr[2] | ((uint16_t)hdr[3] << 8);
-            uint16_t offset  = (uint16_t)hdr[4] | ((uint16_t)hdr[5] << 8);
-
-            if (offset < 12u || plen == 0 || plen > 4096u || pos + offset + plen > block_len) {
-                break;
-            }
-
-            const uint8_t *payload = hdr + offset;
-            if (if_type == ESP_PRIV_IF) {
-                handle_priv_packet(payload, plen);
-            } else if (if_type == ESP_SERIAL_IF) {
-                handle_serial_packet(payload, plen);
-            } else if (if_type == ESP_STA_IF) {
-                s_status.rx_packets++;
-                handle_sta_rx_frame(payload, plen);
-            }
-            pos += (size_t)offset + (size_t)plen;
+        if (!sdio_cmd53(false, 1, addr, true, s_rx_stream.data + s_rx_stream.used, physical)) {
+            s_diag.rx_io_errors++;
+            break;
         }
+        s_sdio_rx_bytes = (s_sdio_rx_bytes + (uint32_t)logical) % 0x100000u;
+        wifi_sdio_rx_commit(&s_rx_stream, logical, dispatch_sdio_frame, NULL);
     }
+out:
+    record_max_us(&s_diag.poll_max_duration_us, hal_time_now_us() - started);
     s_in_sdio_poll = false;
 }
 
@@ -1520,6 +1526,7 @@ static void handle_ipv4_rx_locked(const uint8_t *frame, size_t frame_len, const 
                             ip[16] == s_tun_ip[0] && ip[17] == s_tun_ip[1] &&
                             ip[18] == s_tun_ip[2] && ip[19] == s_tun_ip[3]);
             if (for_sta && frame && frame_len >= 14u + ip_total_len) {
+                s_diag.icmp_requests++;
                 static uint8_t reply[1514];
                 size_t rlen = 14u + ip_total_len;
                 mem_copy(reply, frame, rlen);
@@ -1539,7 +1546,8 @@ static void handle_ipv4_rx_locked(const uint8_t *frame, size_t frame_len, const 
                 uint16_t icsum = ip_checksum(ricmp, icmp_len);
                 ricmp[2] = (uint8_t)(icsum >> 8);
                 ricmp[3] = (uint8_t)(icsum & 0xFFu);
-                sdio_send_packet(ESP_STA_IF, 0, reply, rlen);
+                if (sdio_send_packet(ESP_STA_IF, 0, reply, rlen)) s_diag.icmp_replies++;
+                else s_diag.icmp_reply_failures++;
             } else if (for_tun && s_tun_tx_cb) {
                 static uint8_t rip[1480];
                 mem_copy(rip, ip, ip_total_len);
@@ -2347,6 +2355,26 @@ void wifi_get_status(wifi_status_t *out)
         }
     }
     *out = s_status;
+    mutex_unlock(&s_wifi_lock);
+}
+
+void wifi_get_diagnostics(wifi_diagnostics_t *out)
+{
+    if (!out) return;
+    ensure_lock(); mutex_lock(&s_wifi_lock);
+    *out = s_diag;
+    out->rx_frames = s_rx_stream.frames;
+    out->rx_partials = s_rx_stream.partials;
+    out->rx_bad_headers = s_rx_stream.bad_headers;
+    mutex_unlock(&s_wifi_lock);
+}
+
+void wifi_reset_diagnostics(void)
+{
+    ensure_lock(); mutex_lock(&s_wifi_lock);
+    s_diag = (wifi_diagnostics_t){0};
+    s_rx_stream.frames = s_rx_stream.partials = s_rx_stream.bad_headers = 0;
+    s_last_rx_poll = 0;
     mutex_unlock(&s_wifi_lock);
 }
 

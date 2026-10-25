@@ -31,12 +31,14 @@ def checksum(data):
 
 
 class PingLoad:
-    def __init__(self, target, pps, payload_bytes=1400):
+    def __init__(self, target, pps, payload_bytes=1400, burst_packets=1):
         self.target = str(ipaddress.IPv4Address(target))
-        if not 1 <= pps <= 200 or not 12 <= payload_bytes <= 1400:
-            raise ValueError("rate must be 1..200 pps and payload 12..1400 bytes")
+        if (not 1 <= pps <= 200 or not 12 <= payload_bytes <= 1400 or
+                not 1 <= burst_packets <= 16):
+            raise ValueError("rate must be 1..200 pps, payload 12..1400 bytes and burst 1..16")
         self.pps = pps
         self.payload_bytes = payload_bytes
+        self.burst_packets = burst_packets
         self.nonce = os.urandom(8)
         self.pattern = bytes((i * 29 + 7) & 255 for i in range(payload_bytes - 12))
         self.identifier = int.from_bytes(os.urandom(2), "big")
@@ -92,20 +94,28 @@ class PingLoad:
             while not self.stop_event.is_set():
                 now = time.monotonic()
                 if not self.pause_event.is_set() and now >= next_send:
-                    phase = self.phase
-                    stats = self.phases.setdefault(phase, {"sent": 0, "rtt_ms": []})
-                    packet = self.packet(index)
-                    if self.sock.send(packet) != len(packet):
-                        raise OSError("short ICMP datagram send")
-                    self.pending[index] = (now, phase)
-                    stats["sent"] += 1
-                    index += 1
-                    next_send = now + 1 / self.pps
+                    index = self.send_burst(index)
+                    # Pace groups at the requested average rate, without
+                    # catching up with additional groups after a host stall.
+                    next_send = time.monotonic() + self.burst_packets / self.pps
                 delay = 0.05 if self.pause_event.is_set() else min(0.05, max(0, next_send - now))
                 if select.select([self.sock], [], [], delay)[0]:
                     self.accept(self.sock.recv(4096), time.monotonic())
         except Exception as exc:
             self.error = exc
+
+    def send_burst(self, index):
+        phase = self.phase
+        stats = self.phases.setdefault(phase, {"sent": 0, "rtt_ms": []})
+        for _ in range(self.burst_packets):
+            packet = self.packet(index)
+            now = time.monotonic()
+            if self.sock.send(packet) != len(packet):
+                raise OSError("short ICMP datagram send")
+            self.pending[index] = (now, phase)
+            stats["sent"] += 1
+            index += 1
+        return index
 
     def finish(self):
         self.pause_event.set()
@@ -119,6 +129,7 @@ class PingLoad:
         if self.error:
             raise self.error
         report = {"pps": self.pps, "payload_bytes": self.payload_bytes,
+                  "burst_packets": self.burst_packets,
                   "invalid_replies": self.invalid, "phases": {}}
         for phase, stats in self.phases.items():
             rtt = sorted(stats["rtt_ms"])
@@ -140,6 +151,10 @@ def main():
     parser.add_argument("port")
     parser.add_argument("--pps", type=int, nargs="+", default=[25, 100])
     parser.add_argument("--reads", type=int, default=2)
+    parser.add_argument("--burst-packets", type=int, default=1,
+                        help="1..16 packets per group; pps limits the average group pacing")
+    parser.add_argument("--diagnostics", action="store_true",
+                        help="record wifi stats counters on firmware that supports them")
     parser.add_argument("--reset", action="store_true", help="reset the board, discarding unsaved RAM")
     parser.add_argument("--settle-seconds", type=int, default=0,
                         help="hold the serial connection open before measurements for background services")
@@ -149,8 +164,9 @@ def main():
     args = parser.parse_args()
     if (not 1 <= args.reads <= 10 or not 0 <= args.max_loss_percent <= 100 or
             not 0 <= args.settle_seconds <= 120 or
+            not 1 <= args.burst_packets <= 16 or
             any(not 1 <= rate <= 200 for rate in args.pps)):
-        parser.error("reads must be 1..10, pps 1..200, loss limit 0..100, settle-seconds 0..120")
+        parser.error("reads 1..10, pps 1..200, burst 1..16, loss limit 0..100, settle-seconds 0..120")
     if args.report.exists() or args.log.resolve() == args.report.resolve():
         parser.error("report must be a new path distinct from the serial log")
     report = {"result": "INCOMPLETE", "baseline": [], "loads": [],
@@ -219,7 +235,11 @@ def main():
             free_before, _, _ = memory(session.command("mem"))
             report["trimmed_psram_before_kib"] = free_before
             for rate in args.pps:
-                load = PingLoad(target, rate)
+                if args.diagnostics:
+                    receipt = session.command("wifi stats reset")
+                    if "WIFI RX" not in receipt:
+                        raise RuntimeError("Wi-Fi diagnostic firmware missing")
+                load = PingLoad(target, rate, burst_packets=args.burst_packets)
                 load.phase = "idle"
                 load.start()
                 time.sleep(3)
@@ -251,6 +271,15 @@ def main():
                 session.until(b"> ")
                 summary = load.finish()
                 load = None
+                if args.diagnostics:
+                    receipt = session.command("wifi stats")
+                    diag = {}
+                    for group, fields in re.findall(r"WIFI (RX|TX|ICMP|TIME) ([^\n]+)", receipt):
+                        for name, value in re.findall(r"([a-z_]+)=(\d+)", fields):
+                            diag[f"{group.lower()}_{name}"] = int(value)
+                    if "icmp_requests" not in diag or "rx_partials" not in diag:
+                        raise RuntimeError("Wi-Fi diagnostic receipt incomplete")
+                    summary["device_diagnostics"] = diag
                 summary["pak"] = pak
                 summary["font_receipt"] = font.strip()
                 report["loads"].append(summary)
@@ -264,6 +293,11 @@ def main():
             for summary in report["loads"]:
                 if summary["invalid_replies"]:
                     failures.append("invalid ICMP reply payload/checksum")
+                diag = summary.get("device_diagnostics", {})
+                if any(diag.get(key, 0) for key in (
+                        "rx_bad", "rx_reg_errors", "rx_io_errors", "rx_plan_errors",
+                        "tx_no_credit", "tx_io_errors", "icmp_failures")):
+                    failures.append(f"transport errors: {diag}")
                 for phase, stats in summary["phases"].items():
                     if stats["sent"] < 2 or stats["loss_percent"] > args.max_loss_percent:
                         failures.append(f"{summary['pps']} pps {phase}: {stats['loss_percent']}% loss")
