@@ -32,6 +32,7 @@ void *kmalloc_psram(size_t n)
         allocations++;
     return p;
 }
+size_t sdroot_asset_cache_trim(void) { return 0; }
 void kfree(void *p)
 {
     if (p)

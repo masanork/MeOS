@@ -71,16 +71,19 @@ static uint32_t read_ahead_base[READ_AHEAD_SLOTS],read_ahead_sectors[READ_AHEAD_
 static uint32_t read_ahead_stamp[READ_AHEAD_SLOTS],read_ahead_clock;
 static bool read_ahead_valid[READ_AHEAD_SLOTS];
 static uint32_t sector_cache_clock;
+static bool asset_cache_retry=true;
 static void invalidate_read_ahead(void){
     memset(read_ahead_valid,0,sizeof read_ahead_valid);
     if(asset_buffers)memset(asset_buffers->sector_cache_valid,0,sizeof asset_buffers->sector_cache_valid);
 }
 static void ensure_asset_cache(void){
-    if(asset_buffers)return;
-    asset_buffers=kmalloc_psram(sizeof *asset_buffers);
-    if(asset_buffers) {
-        memset(asset_buffers->sector_cache_valid,0,sizeof asset_buffers->sector_cache_valid);
-        kprintf("sdroot: asset read cache %u KiB\n",(uint32_t)(sizeof *asset_buffers/1024u));
+    if(asset_buffers||!asset_cache_retry)return;
+    asset_cache_retry=false;
+    struct asset_cache_buffers *fresh=kmalloc_psram(sizeof *fresh);
+    if(fresh) {
+        memset(fresh->sector_cache_valid,0,sizeof fresh->sector_cache_valid);
+        asset_buffers=fresh;
+        kprintf("sdroot: asset read cache %u KiB\n",(uint32_t)(sizeof *fresh/1024u));
     } else kputs("sdroot: asset read cache unavailable; using direct I/O\n");
 }
 static void mount_mark(const char *stage,uint64_t start,uint64_t *last) {
@@ -290,8 +293,20 @@ void sdroot_status(void){
     kprintf("SDROOT SECTOR hit=%u miss=%u slots=%u\n",
             io_stats.sector_hits,io_stats.sector_misses,SECTOR_CACHE_SLOTS);
     mutex_unlock(&lfs_mutex);
+    kprintf("SDROOT ASSET CACHE resident=%u KiB\n",(uint32_t)(sdroot_asset_cache_bytes()/1024u));
 }
 void sdroot_io_reset(void){mutex_lock(&lfs_mutex);memset(&io_stats,0,sizeof io_stats);invalidate_read_ahead();mutex_unlock(&lfs_mutex);}
+size_t sdroot_asset_cache_bytes(void){
+    mutex_lock(&asset_read_mutex);size_t bytes=asset_buffers?sizeof *asset_buffers:0;
+    mutex_unlock(&asset_read_mutex);return bytes;
+}
+size_t sdroot_asset_cache_trim(void){
+    if(!active)return 0;
+    mutex_lock(&asset_read_mutex);mutex_lock(&lfs_mutex);
+    struct asset_cache_buffers *old=asset_buffers;size_t bytes=old?sizeof *old:0;
+    invalidate_read_ahead();asset_buffers=NULL;asset_cache_retry=true;
+    mutex_unlock(&lfs_mutex);kfree(old);mutex_unlock(&asset_read_mutex);return bytes;
+}
 static int save(const fs_tx_ops_t *ops,void *ctx){
     const char *text=ctx;int fd=ops->open("/home/sd-boot.txt",FS_O_WRITE|FS_O_CREATE|FS_O_TRUNC);
     if(fd<0)return fd;
@@ -334,7 +349,7 @@ static int asset_open(void *ctx,const char *rel,uint32_t flags,void **out){
 }
 static int asset_close(void *file){struct asset_file *f=file;int rc=lfs_file_close(&lfs,&f->file);kfree(f);return asset_error(rc);}
 static int asset_read(void *file,void *buf,size_t n){
-    mutex_lock(&asset_read_mutex);asset_read_owner=task_current();
+    mutex_lock(&asset_read_mutex);ensure_asset_cache();asset_read_owner=task_current();
     int rc=lfs_file_read(&lfs,&((struct asset_file *)file)->file,buf,n);
     asset_read_owner=NULL;mutex_unlock(&asset_read_mutex);return asset_error(rc);
 }
@@ -367,7 +382,7 @@ int sdroot_assets_mount(void){
     if(!active)return ERR_NODEV;
     int rc=lfs_mkdir(&lfs,"/assets");if(rc&&rc!=LFS_ERR_EXIST)return asset_error(rc);
     rc=vfs_mount("/assets",&assets_vfs,NULL);
-    if(!rc)ensure_asset_cache();
+    if(!rc){mutex_lock(&asset_read_mutex);asset_cache_retry=true;ensure_asset_cache();mutex_unlock(&asset_read_mutex);}
     return rc;
 }
 #endif

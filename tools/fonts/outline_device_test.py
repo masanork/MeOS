@@ -12,6 +12,8 @@ def main():
     parser.add_argument("port")
     parser.add_argument("--size", type=int, default=24)
     parser.add_argument("--leave-open", action="store_true")
+    parser.add_argument("--trim-sd-cache", action="store_true",
+                        help="release the SD asset cache first and verify lazy recreation")
     args = parser.parse_args()
     if not 12 <= args.size <= 48:
         parser.error("--size must be 12..48")
@@ -49,6 +51,12 @@ def main():
             raise RuntimeError(f"cannot parse PSRAM: {text!r}")
         return int(match.group(1))
 
+    def sd_cache_kib(text):
+        match = re.search(r"SD asset\s+(\d+) KB cached", text)
+        if not match:
+            raise RuntimeError(f"cannot parse SD asset cache: {text!r}")
+        return int(match.group(1))
+
     try:
         link.write(b"\x03\r")
         read_until(b"> ", 45)
@@ -67,7 +75,19 @@ def main():
         listing = command("ls /assets/fonts/BIZUDGothic-Regular.ttf")
         if "4667380" not in listing:
             raise RuntimeError(f"pinned TTF missing or wrong size: {listing!r}")
-        before = free_psram(command("mem"))
+        before_text = command("mem")
+        before = free_psram(before_text)
+        cache_before = sd_cache_kib(before_text)
+        if args.trim_sd_cache:
+            if cache_before < 1100:
+                raise RuntimeError(f"SD asset cache not resident before trim: {before_text!r}")
+            receipt = command("mem trim")
+            if "SD asset cache: trimmed" not in receipt:
+                raise RuntimeError(f"SD asset trim receipt missing: {receipt!r}")
+            trimmed_text = command("mem")
+            trimmed = free_psram(trimmed_text)
+            if sd_cache_kib(trimmed_text) != 0 or trimmed < before + 1100:
+                raise RuntimeError(f"SD asset cache not reclaimed: before={before} KiB trimmed={trimmed} KiB")
         link.write(f"fontbench {args.size}\r".encode())
         result = read_until(b"FONTBENCH ", 60)
         receipt = result[result.rfind("FONTBENCH "):]
@@ -89,16 +109,21 @@ def main():
         link.reset_input_buffer()
         link.write(b"q")
         read_until(b"> ", 20)
-        after = free_psram(command("mem"))
+        after_text = command("mem")
+        after = free_psram(after_text)
         if abs(after - before) > 32:
             raise RuntimeError(f"PSRAM not reclaimed: before={before} KiB after={after} KiB")
+        if args.trim_sd_cache:
+            if sd_cache_kib(after_text) != cache_before:
+                raise RuntimeError(f"SD asset cache not recreated: {after_text!r}")
         print("FREETYPE DEVICE PASS: "
               f"{values[0]}px load {values[1]} ms; metrics {values[2]} us; "
               f"first {values[3]} us; warm {values[4]} us; raster {values[7]} us; "
               f"miss/hit {values[5]}/{values[6]}; resident {values[9] // 1024} KiB; "
               f"cache {values[10] // 1024} KiB; I/O {values[11] // 1024} KiB/{values[12]} reads; "
               f"metrics miss/hit {values[13]}/{values[14]}; "
-              f"PSRAM restored to {after} KiB")
+              f"PSRAM restored to {after} KiB"
+              f"{'; SD asset trim/recreate PASS' if args.trim_sd_cache else ''}")
         if args.leave_open:
             link.write(f"fontbench {args.size}\r".encode())
             read_until(b"FONTBENCH ", 60)

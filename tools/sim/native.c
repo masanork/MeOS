@@ -274,6 +274,7 @@ void *kmalloc_psram(size_t n)
     heap_used += n;
     return p + 1;
 }
+size_t sdroot_asset_cache_trim(void) { return 0; }
 void kfree(void *data)
 {
     if (data) {

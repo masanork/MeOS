@@ -44,6 +44,8 @@ font read for ordinary notes while eliminating repeated random microSD reads
 for diverse long-form text. The SD-root asset path can satisfy sequential font
 reads from two 64 KiB windows and repeated littlefs traversal from a 1 MiB
 four-way sector cache; it falls back to direct I/O if PSRAM is unavailable.
+`mem trim` releases that optional cache, and a failed Write/FreeType PSRAM
+allocation also releases it before retrying the required editor allocation.
 The bounded 384-glyph 4-bit cache and font source
 are released on exit. A separate four-way metrics cache lets full
 document layout obtain advances without rasterizing off-screen glyphs. The

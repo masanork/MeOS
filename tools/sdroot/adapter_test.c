@@ -85,6 +85,9 @@ int main(void){
     assert(!fs_unmount());close_files();fail_asset_alloc=false;
     assert(!sdroot_mount()&&!asset_buffers);assert(!sdroot_assets_mount()&&asset_buffers);
     verify_asset_read(true);
+    size_t cache_bytes=sdroot_asset_cache_bytes();assert(cache_bytes==sizeof *asset_buffers);
+    assert(sdroot_asset_cache_trim()==cache_bytes&&!sdroot_asset_cache_bytes()&&!asset_buffers);
+    verify_asset_read(true);assert(sdroot_asset_cache_bytes()==cache_bytes);
     unsigned before=write_requests,probed=probe_attempts;
     assert(sdroot_format(SECTORS)<0);assert(sdroot_mount()<0);
     assert(write_requests==before&&probe_attempts==probed);
