@@ -260,7 +260,9 @@ int quake_command(int argc,char **argv) {
     ksnprintf(quake_basedir,sizeof quake_basedir,"%s",base);
     char path[128];ksnprintf(path,sizeof path,"%s/id1/pak0.pak",base);
     vfs_info_t info;if(!controls_only&&vfs_stat(path,&info)<0){kprintf("quake: missing %s; use quake receive BYTES CRC32hex\n",path);return 1;}
-    pending=true;uint32_t id;int rc=app_start("quake",&id);if(rc<0)pending=false;return rc<0;
+    pending=true;uint32_t id;int rc=app_start("quake",&id);
+    if(rc<0){pending=false;kprintf("quake: could not start app (%d)\n",rc);}
+    return rc<0;
 }
 #else
 void quake_main(void *arg) {(void)arg;}

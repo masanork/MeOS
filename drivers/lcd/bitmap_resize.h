@@ -23,12 +23,20 @@ static inline bool tab5_bitmap_resize(uint16_t *dst_fb,int x,int y,int w,int h,
     return true;
 }
 
-/* Avoid the generic ROM memcpy on the aligned full-height path. Use alias-safe
- * word loads/stores; clipped odd pixel offsets retain the generic fallback. */
+/* Use alias-safe word loads/stores. Congruent halfword offsets peel one pixel;
+ * incompatible alignments retain the generic memcpy fallback. */
 static inline void tab5_copy_column(uint16_t *dst,const uint16_t *src,unsigned pixels)
 {
+    if (!pixels) return;
     if (((uintptr_t)dst | (uintptr_t)src) & 3u) {
-        memcpy(dst,src,(size_t)pixels*2); return;
+        if ((((uintptr_t)dst ^ (uintptr_t)src) & 3u) || ((uintptr_t)dst & 1u)) {
+            memcpy(dst,src,(size_t)pixels*2); return;
+        }
+        /* Rotated framebuffer rows and the SRAM column are both word-aligned.
+         * Odd damage starts offset both by one halfword. Peel that pixel rather
+         * than falling back to ROM memcpy for the entire column. */
+        __builtin_memcpy(dst,src,sizeof(uint16_t));
+        dst++;src++;pixels--;
     }
     typedef uint32_t alias_word __attribute__((may_alias));
     alias_word *d=(alias_word *)dst;
@@ -40,7 +48,33 @@ static inline void tab5_copy_column(uint16_t *dst,const uint16_t *src,unsigned p
         d+=8;s+=8;n-=8;
     }
     while(n--) *d++=*s++;
-    if(pixels&1u) memcpy(dst+pixels-1,(const unsigned char *)src+(pixels-1)*sizeof(uint16_t),sizeof(uint16_t));
+    if(pixels&1u) __builtin_memcpy(dst+pixels-1,(const unsigned char *)src+(pixels-1)*sizeof(uint16_t),sizeof(uint16_t));
+}
+/* Three physical rows contain the same source column. Load each SRAM word once
+ * and broadcast it to the three destinations instead of rereading it thrice. */
+static inline void tab5_copy_column_triplet(uint16_t *dst,const uint16_t *src,unsigned pixels)
+{
+    if(!pixels)return;
+    uint16_t *b=dst+DISPLAY_HEIGHT,*c=b+DISPLAY_HEIGHT;
+    if((((uintptr_t)dst^(uintptr_t)src)&3u)||((uintptr_t)dst&1u)){
+        tab5_copy_column(dst,src,pixels);tab5_copy_column(b,src,pixels);tab5_copy_column(c,src,pixels);return;
+    }
+    if((uintptr_t)dst&2u){
+        __builtin_memcpy(dst,src,2);__builtin_memcpy(b,src,2);__builtin_memcpy(c,src,2);
+        dst++;b++;c++;src++;pixels--;
+    }
+    typedef uint32_t alias_word __attribute__((may_alias));
+    alias_word *d0=(alias_word *)dst,*d1=(alias_word *)b,*d2=(alias_word *)c;
+    const alias_word *s=(const alias_word *)src;unsigned n=pixels/2;
+    while(n>=4){
+        for(unsigned i=0;i<4;i++){uint32_t v=s[i];d0[i]=v;d1[i]=v;d2[i]=v;}
+        s+=4;d0+=4;d1+=4;d2+=4;n-=4;
+    }
+    while(n--){uint32_t v=*s++;*d0++=v;*d1++=v;*d2++=v;}
+    if(pixels&1u){
+        const uint16_t *tail=src+pixels-1;
+        __builtin_memcpy(dst+pixels-1,tail,2);__builtin_memcpy(b+pixels-1,tail,2);__builtin_memcpy(c+pixels-1,tail,2);
+    }
 }
 /* Cache-friendly 320x200 -> 960x720 path: read eight adjacent source
  * columns together, then expand from a small SRAM tile. This avoids repeatedly
@@ -71,10 +105,8 @@ static inline void tab5_indexed_viewport_spans(uint16_t *fb,int x,const uint8_t 
                 out[4]=v|(v<<16); out[5]=v|(d<<16); out[6]=d|(d<<16);
                 out[7]=d|(e<<16); out[8]=e|(e<<16);out+=9;
             }
-            for(unsigned repeat=0;repeat<3;repeat++) {
-                unsigned logical=(unsigned)x+(bx+c)*3+repeat;
-                tab5_copy_column(fb+(DISPLAY_WIDTH-1-logical)*DISPLAY_HEIGHT+start,(const uint16_t *)column+start,end-start);
-            }
+            unsigned physical=DISPLAY_WIDTH-3-(unsigned)x-(bx+c)*3;
+            tab5_copy_column_triplet(fb+physical*DISPLAY_HEIGHT+start,(const uint16_t *)column+start,end-start);
         }
     }
 }
@@ -90,7 +122,24 @@ static inline bool tab5_indexed_viewport_delta(uint16_t *fb,int x,const uint8_t 
     if(!fb||!pixels||!previous||!palette||x<0||x>DISPLAY_WIDTH-960)return false;
     uint8_t first[320],last[320];memset(first,200,sizeof first);memset(last,0,sizeof last);
     if(force){memset(first,0,sizeof first);memset(last,199,sizeof last);memcpy(previous,pixels,64000);}
-    else for(unsigned y=0;y<200;y++)for(unsigned col=0;col<320;col++){
+    else
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    if (!(((uintptr_t)pixels | (uintptr_t)previous) & 3u)) {
+        typedef uint32_t alias_word __attribute__((may_alias));
+        const alias_word *now=(const alias_word *)pixels;
+        alias_word *old=(alias_word *)previous;
+        for(unsigned y=0;y<200;y++)for(unsigned col=0;col<320;col+=4){
+            unsigned at=(y*320+col)/4;uint32_t value=now[at],diff=value^old[at];
+            if(!diff)continue;
+            old[at]=value;
+            for(unsigned byte=0;byte<4;byte++,diff>>=8)if(diff&255u){
+                if(first[col+byte]==200)first[col+byte]=(uint8_t)y;
+                last[col+byte]=(uint8_t)y;
+            }
+        }
+    } else
+#endif
+    for(unsigned y=0;y<200;y++)for(unsigned col=0;col<320;col++){
         unsigned at=y*320+col;uint8_t p=pixels[at];
         if(previous[at]!=p){if(first[col]==200)first[col]=(uint8_t)y;last[col]=(uint8_t)y;previous[at]=p;}
     }

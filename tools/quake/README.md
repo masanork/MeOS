@@ -321,3 +321,31 @@ python3 tools/quake/headless.py /path/to/pak0.pak --steps 1200 --reference-near-
 
 The original-predicate option modifies only a temporary source copy, not the
 checkout. These are host correctness/counter tests, not physical speed evidence.
+
+## Exact column-copy follow-up — 2026-10-25
+
+Congruent halfword-offset source/destination columns now peel the first pixel
+and keep the word-copy path; other alignments retain memcpy. Three identical
+physical rows use one SRAM load per word, broadcasting to all three destinations.
+The exact damage scan compares four aligned indices at once and updates byte
+bounds only for differences; unaligned buffers keep the original byte scan.
+Viewport, sampling, palette behavior and the 48 KiB task stack are unchanged.
+
+Host tests compare all lengths 0..720 and 16 halfword alignment combinations
+for single/triplet copies against memcpy, including untouched guards. The delta
+blitter is compared against an independent generic RGB scaler for 100 frames,
+including odd-start motion and unaligned inputs. Quake/Doom host checks and both
+native builds pass, as does the clean-source simulator check.
+
+Physical full-view `timedemo demo1;toggleconsole` (effects enabled, CPU rendering,
+969 frames per run): baseline 24.6 / 24.6 FPS, peeled-copy + word-scan candidate
+24.8 / 24.8, triplet broadcast 25.0 / 25.0. The first console-visible baseline
+run was excluded. Reported gain is about 1.6%, not 30 FPS. Native memory bandwidth
+and full-frame writes still require larger improvements; counters alone do not
+establish a particular hardware bandwidth limit. Detailed observations and image
+identity: `columns-device-2026-10-25.json`.
+
+A late launch failed when the largest free internal block was 47 KiB, below the
+unchanged 48 KiB stack request. Benchmark launches used the shell-ready startup
+window on reset; the failure return code is now printed instead of silently
+returning to the prompt. This adds diagnostics, not a fragmentation fix.

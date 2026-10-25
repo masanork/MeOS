@@ -188,3 +188,19 @@ untraced (internal-to-PSRAM fallbacks also increment it); no visible app/audio
 failure occurred. PSRAM failure count stayed zero. PPA retained its expected
 roughly 455 KiB reusable kernel buffers. A third CPU E1M1 launch reached gameplay
 and was left for the user. Constant 30 FPS remains unqualified.
+
+
+## CPU column transfer follow-up — 2026-10-25
+
+`columns-device-2026-10-25.json` records two full-view 969-frame demo1 timedemos
+per firmware, with effects enabled and CPU rendering. The old image returned
+24.6 FPS twice; congruent-halfword peeling plus word damage scanning returned
+24.8 twice; three-row broadcast copying returned 25.0 twice. One initial
+console-visible run is explicitly excluded. This is about 1.6% reported gain,
+not constant 30 FPS. Every candidate matches the independent host RGB reference.
+Normal app exits reported zero audio DMA errors and restored keyboard routing;
+all reported stack guards passed, with the 48 KiB stack request retained.
+Only the selected Quake OTA slot was replaced; recovery/other-slot images and SD
+data were retained. The final candidate was restarted into CPU E1M1 for the user.
+A late-start internal-memory fragmentation failure remains separate from this
+transfer change; its return code is now exposed without reducing stack capacity.
