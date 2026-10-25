@@ -60,6 +60,7 @@ bool fontbench_run(unsigned pixel_size) {
     for(;;){int key=dq_pollkey();if(key=='q'||key=='Q'||key==DQK_ESC||key==3)break;task_sleep(10);}
 done:
     display_set_target(0);if(outline)otfont_end();if(atlas)bizud_end();
+    if(atlas)bizud_trim();
     if(frame)kfree(frame);
     fbcon_pause(false);display_release_claim(&owner);return outline;
 }

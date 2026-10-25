@@ -31,6 +31,7 @@ def main():
         raise TimeoutError(f"waiting for {token!r}; tail={data[-800:]!r}")
 
     def command(text, timeout=45):
+        link.reset_input_buffer()
         link.write(text.encode() + b"\r")
         return read_until(b"> ", timeout)
 
@@ -64,6 +65,7 @@ def main():
         if values[0] != args.size or values[4] == 0 or values[5] == 0 or values[7] != 4667380:
             raise RuntimeError(f"invalid benchmark counters: {values}")
         time.sleep(2)
+        link.reset_input_buffer()
         link.write(b"q")
         read_until(b"> ", 20)
         after = free_psram(command("mem"))
