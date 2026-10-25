@@ -10,6 +10,7 @@
 #include <m5os/vfs.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
+#include FT_ADVANCES_H
 #include FT_MODULE_H
 #include FT_SYSTEM_H
 #include <string.h>
@@ -18,6 +19,9 @@
 #define OTFONT_MAX_GLYPH 64u
 #define OTFONT_CELL_BYTES ((OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH)/2u)
 #define OTFONT_CACHE_SLOTS 384u
+#define OTFONT_METRIC_SETS 256u
+#define OTFONT_METRIC_WAYS 4u
+#define OTFONT_METRIC_SLOTS (OTFONT_METRIC_SETS*OTFONT_METRIC_WAYS)
 #define OTFONT_STREAM_PAGE (16u*1024u)
 #define OTFONT_STREAM_SLOTS 16u
 #define OTFONT_STREAM_CACHE (OTFONT_STREAM_PAGE*OTFONT_STREAM_SLOTS)
@@ -28,6 +32,12 @@ typedef struct {
     int16_t left,top;
     uint8_t width,height,valid;
 } cache_entry;
+
+typedef struct {
+    uint32_t glyph,stamp;
+    uint16_t advance,vadvance;
+    uint8_t valid;
+} metric_entry;
 
 typedef struct {uint32_t cp;uint16_t glyph;} vertical_map_entry;
 #include "otfont_bizud_vertical.inc"
@@ -40,9 +50,11 @@ typedef struct {
     uint8_t *stream_cache,*cells;
     uint16_t *scratch;
     cache_entry *entries;
+    metric_entry *metrics;
     int font_fd;
     uint32_t font_bytes,stream_base[OTFONT_STREAM_SLOTS],stream_length[OTFONT_STREAM_SLOTS];
     uint32_t stream_stamp[OTFONT_STREAM_SLOTS],stream_clock,load_ms,stamp,hits,misses;
+    uint32_t metric_stamp,metric_hits,metric_misses;
     uint32_t io_bytes,io_reads;
     uint64_t raster_us;
     unsigned pixel_size,users;
@@ -129,7 +141,7 @@ static void release_all(void) {
     if(s_font.face)FT_Done_Face(s_font.face);
     else if(s_font.font_fd>=0)vfs_close(s_font.font_fd);
     if(s_font.library)FT_Done_Library(s_font.library);
-    kfree(s_font.stream_cache);kfree(s_font.cells);kfree(s_font.entries);kfree(s_font.scratch);
+    kfree(s_font.stream_cache);kfree(s_font.cells);kfree(s_font.entries);kfree(s_font.metrics);kfree(s_font.scratch);
     memset(&s_font,0,sizeof s_font);s_font.font_fd=-1;
 }
 
@@ -150,10 +162,12 @@ bool otfont_begin(const char *path,unsigned pixel_size) {
     if(FT_Open_Face(s_font.library,&args,0,&s_font.face))goto fail;
     if(FT_Select_Charmap(s_font.face,FT_ENCODING_UNICODE)||FT_Set_Pixel_Sizes(s_font.face,0,pixel_size))goto fail;
     s_font.entries=kmalloc_psram(sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
+    s_font.metrics=kmalloc_psram(sizeof(metric_entry)*OTFONT_METRIC_SLOTS);
     s_font.cells=kmalloc_psram(OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS);
     s_font.scratch=kmalloc_psram(OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH*sizeof(uint16_t));
-    if(!s_font.entries||!s_font.cells||!s_font.scratch)goto fail;
+    if(!s_font.entries||!s_font.metrics||!s_font.cells||!s_font.scratch)goto fail;
     memset(s_font.entries,0,sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
+    memset(s_font.metrics,0,sizeof(metric_entry)*OTFONT_METRIC_SLOTS);
     s_font.pixel_size=pixel_size;s_font.users=1;
     s_font.load_ms=(uint32_t)((hal_time_now_us()-started)/1000u);
     kprintf("otfont: opened %u-byte OpenType face at %u px in %u ms; read %u KiB/%u ops; cache %u KiB\n",
@@ -173,10 +187,52 @@ bool otfont_set_pixel_size(unsigned pixel_size) {
     if(pixel_size==s_font.pixel_size)return true;
     if(FT_Set_Pixel_Sizes(s_font.face,0,pixel_size))return false;
     memset(s_font.entries,0,sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
+    memset(s_font.metrics,0,sizeof(metric_entry)*OTFONT_METRIC_SLOTS);
     s_font.pixel_size=pixel_size;return true;
 }
 
 static uint8_t *cell(unsigned slot) {return s_font.cells+slot*OTFONT_CELL_BYTES;}
+
+static metric_entry *metric_slot(FT_UInt index,bool count_hit)
+{
+    unsigned set=(index*2654435761u)&(OTFONT_METRIC_SETS-1u);
+    metric_entry *entries=s_font.metrics+set*OTFONT_METRIC_WAYS;
+    metric_entry *victim=&entries[0];
+    for(unsigned i=0;i<OTFONT_METRIC_WAYS;i++) {
+        metric_entry *e=&entries[i];
+        if(e->valid&&e->glyph==index) {
+            e->stamp=++s_font.metric_stamp;
+            if(count_hit)s_font.metric_hits++;
+            return e;
+        }
+        if(!e->valid)return e;
+        if(e->stamp<victim->stamp)victim=e;
+    }
+    return victim;
+}
+
+static metric_entry *metric_store(FT_UInt index,uint16_t advance,uint16_t vadvance)
+{
+    metric_entry *e=metric_slot(index,false);
+    e->glyph=index;e->advance=advance;e->vadvance=vadvance;
+    e->stamp=++s_font.metric_stamp;e->valid=1;
+    return e;
+}
+
+static metric_entry *glyph_metrics(FT_UInt index)
+{
+    if(!index)return 0;
+    metric_entry *e=metric_slot(index,true);
+    if(e->valid&&e->glyph==index)return e;
+    FT_Fixed horizontal=0,vertical=0;
+    if(FT_Get_Advance(s_font.face,index,FT_LOAD_NO_HINTING,&horizontal))return 0;
+    if(FT_Get_Advance(s_font.face,index,FT_LOAD_NO_HINTING|FT_LOAD_VERTICAL_LAYOUT,&vertical))return 0;
+    uint16_t advance=(uint16_t)((horizontal+0x8000L)>>16);
+    uint16_t vadvance=(uint16_t)((vertical+0x8000L)>>16);
+    if(!vadvance)vadvance=(uint16_t)s_font.pixel_size;
+    s_font.metric_misses++;
+    return metric_store(index,advance,vadvance);
+}
 
 static cache_entry *glyph_index(FT_UInt index,unsigned *slot_out) {
     if(!index)return 0;
@@ -208,6 +264,7 @@ static cache_entry *glyph_index(FT_UInt index,unsigned *slot_out) {
     e->vadvance=(uint16_t)((g->metrics.vertAdvance+32)>>6);
     if(!e->vadvance)e->vadvance=(uint16_t)s_font.pixel_size;
     e->width=(uint8_t)b->width;e->height=(uint8_t)b->rows;e->stamp=++s_font.stamp;e->valid=1;
+    metric_store(index,e->advance,e->vadvance);
     s_font.misses++;s_font.raster_us+=hal_time_now_us()-started;*slot_out=victim;return e;
 }
 
@@ -225,7 +282,7 @@ static FT_UInt vertical_glyph_index(uint32_t cp) {
 
 int otfont_width(uint32_t cp) {
     if(!s_font.users)return 0;
-    unsigned slot=0;cache_entry *e=glyph(cp,&slot);
+    metric_entry *e=glyph_metrics(FT_Get_Char_Index(s_font.face,cp));
     return e?e->advance:(int)s_font.pixel_size;
 }
 
@@ -248,7 +305,7 @@ int otfont_draw(int x,int baseline,uint32_t cp,uint16_t fg,uint16_t bg) {
 
 int otfont_vertical_advance(uint32_t cp) {
     if(!s_font.users)return 0;
-    unsigned slot=0;cache_entry *e=glyph_index(vertical_glyph_index(cp),&slot);
+    metric_entry *e=glyph_metrics(vertical_glyph_index(cp));
     return e?e->vadvance:(int)s_font.pixel_size;
 }
 
@@ -272,8 +329,10 @@ void otfont_get_stats(otfont_stats *out) {
     if(!out)return;
     out->font_bytes=s_font.font_bytes;out->load_ms=s_font.load_ms;
     out->glyph_hits=s_font.hits;out->glyph_misses=s_font.misses;out->raster_us=s_font.raster_us;
+    out->metric_hits=s_font.metric_hits;out->metric_misses=s_font.metric_misses;
     out->io_bytes=s_font.io_bytes;out->io_reads=s_font.io_reads;
     out->cache_bytes=s_font.entries?OTFONT_STREAM_CACHE+sizeof(cache_entry)*OTFONT_CACHE_SLOTS+
+        sizeof(metric_entry)*OTFONT_METRIC_SLOTS+
         OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS+OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH*sizeof(uint16_t):0;
 }
 #endif

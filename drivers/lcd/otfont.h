@@ -8,6 +8,8 @@ typedef struct {
     uint32_t load_ms;
     uint32_t glyph_hits;
     uint32_t glyph_misses;
+    uint32_t metric_hits;
+    uint32_t metric_misses;
     uint32_t io_bytes;
     uint32_t io_reads;
     uint64_t raster_us;

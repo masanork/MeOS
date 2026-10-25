@@ -46,6 +46,11 @@ bool fontbench_run(unsigned pixel_size) {
     display_fill_rect(LEFT,116,RIGHT-LEFT,1,GUIDE);atlas_line(116,sample1);
     display_fill_rect(LEFT,162,RIGHT-LEFT,1,GUIDE);atlas_line(162,sample2);
     bizud_text(LEFT,232,"FreeType（ヒンティングあり）",RIGHT,ACCENT,BG);
+    uint64_t metric=hal_time_now_us();const char *scan=sample1;
+    while(*scan)otfont_width(bizud_decode(&scan));
+    scan=sample2;while(*scan)otfont_width(bizud_decode(&scan));
+    scan=sample1;while(*scan)otfont_vertical_advance(bizud_decode(&scan));
+    uint32_t metric_us=(uint32_t)(hal_time_now_us()-metric);
     uint64_t first=hal_time_now_us();
     display_fill_rect(LEFT,270,TEXT_RIGHT-LEFT,1,GUIDE);otfont_text(LEFT,270,sample1,TEXT_RIGHT,FG,BG);
     display_fill_rect(LEFT,320,TEXT_RIGHT-LEFT,1,GUIDE);otfont_text(LEFT,320,sample2,TEXT_RIGHT,FG,BG);
@@ -67,9 +72,10 @@ bool fontbench_run(unsigned pixel_size) {
     vertical_column(1050,110,"日本語を書く。「括弧」、長音ー。",true);
     uint32_t vertical_us=(uint32_t)(hal_time_now_us()-vertical);
     display_present(0,0,DISPLAY_WIDTH,DISPLAY_HEIGHT);display_set_target(0);
-    kprintf("FONTBENCH %u px: load=%u ms first=%u us warm=%u us misses=%u hits=%u raster=%u us font=%u cache=%u io=%u reads=%u\n",
-            pixel_size,st.load_ms,first_us,warm_us,st.glyph_misses,st.glyph_hits,
-            (uint32_t)st.raster_us,st.font_bytes,(uint32_t)st.cache_bytes,st.io_bytes,st.io_reads);
+    kprintf("FONTBENCH %u px: load=%u ms metric=%u us first=%u us warm=%u us misses=%u hits=%u raster=%u us font=%u cache=%u io=%u reads=%u metrics=%u/%u\n",
+            pixel_size,st.load_ms,metric_us,first_us,warm_us,st.glyph_misses,st.glyph_hits,
+            (uint32_t)st.raster_us,st.font_bytes,(uint32_t)st.cache_bytes,st.io_bytes,st.io_reads,
+            st.metric_misses,st.metric_hits);
     kprintf("VERTBENCH %u px: draw=%u us\n",pixel_size,vertical_us);
     for(;;){int key=dq_pollkey();if(key=='q'||key=='Q'||key==DQK_ESC||key==3)break;task_sleep(10);}
 done:
