@@ -66,21 +66,32 @@ def wifi_bus_stats(receipt):
     transfer = common | {"pre_idle_timeouts", "post_idle_timeouts", "wait_ms", "prepare_ms",
                          "dma_ms", "finish_ms", "max_wait_us", "peak_prepare_us", "peak_dma_us",
                          "peak_finish_us", "peak_bytes"}
+    waiting = {"max_wait_us", "blocked_us", "ready_us", "other_us", "owner_pid", "contended", "profiled"}
     rows = {}
-    for label, fields in re.findall(r"WIFI (SDIO READ|SDIO WRITE|CMD52) ([^\n]+)", receipt):
+    for label, fields in re.findall(r"WIFI (SDIO READ|SDIO WRITE|WAIT READ|WAIT WRITE|CMD52) ([^\n]+)", receipt):
         pairs = re.findall(r"([a-z_]+)=(\d+)", fields)
         values = {name: int(value) for name, value in pairs}
-        required = common if label == "CMD52" else transfer
+        required = waiting if label.startswith("WAIT ") else common if label == "CMD52" else transfer
         if label in rows or len(pairs) != len(values) or not required.issubset(values):
             raise RuntimeError("duplicate/incomplete Wi-Fi bus diagnostic row")
-        if values["peak_scheduled_us"] > values["max_hold_us"]:
+        if not label.startswith("WAIT ") and values["peak_scheduled_us"] > values["max_hold_us"]:
             raise RuntimeError("Wi-Fi scheduled time exceeds paired lock occupancy")
-        if label != "CMD52" and values["max_hold_us"] < 0xffffffff:
+        if label.startswith("SDIO ") and values["max_hold_us"] < 0xffffffff:
             if sum(values[k] for k in ("peak_prepare_us", "peak_dma_us", "peak_finish_us")) != values["max_hold_us"]:
                 raise RuntimeError("Wi-Fi peak stages do not match paired lock occupancy")
         rows[label] = values
-    if set(rows) != {"SDIO READ", "SDIO WRITE", "CMD52"}:
+    if set(rows) != {"SDIO READ", "SDIO WRITE", "WAIT READ", "WAIT WRITE", "CMD52"}:
         raise RuntimeError("Wi-Fi bus diagnostic rows missing")
+    for op in ("READ", "WRITE"):
+        w = rows["WAIT " + op]
+        if w["max_wait_us"] != rows["SDIO " + op]["max_wait_us"]:
+            raise RuntimeError("Wi-Fi wait peak does not match paired SDIO row")
+        if w["max_wait_us"] < 0xffffffff and sum(w[k] for k in ("blocked_us", "ready_us", "other_us")) != w["max_wait_us"]:
+            raise RuntimeError("Wi-Fi wait parts do not match paired maximum")
+        if w["contended"] > 1 or w["profiled"] > 1 or (w["contended"] and not w["profiled"]):
+            raise RuntimeError("invalid Wi-Fi wait profiling flags")
+        if not w["contended"] and (w["blocked_us"] or w["ready_us"] or w["owner_pid"]):
+            raise RuntimeError("uncontended Wi-Fi wait has blocked/ready time")
     return rows
 
 
@@ -388,7 +399,7 @@ def main():
                     if any(row["errors"] for row in direction.values()):
                         failures.append("native SDMMC transfer error")
             for summary in report["loads"]:
-                if any(row["errors"] for row in summary.get("wifi_bus", {}).values()):
+                if any(row.get("errors", 0) for row in summary.get("wifi_bus", {}).values()):
                     failures.append("Wi-Fi bus command error")
                 if summary["invalid_replies"]:
                     failures.append("invalid ICMP reply payload/checksum")

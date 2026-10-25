@@ -1,6 +1,7 @@
 #include <m5os/mutex.h>
 #include <m5os/arch.h>
 #include <m5os/kernel.h>
+#include <m5os/hal_time.h>
 #include "../scheduler/sched_internal.h"
 
 #define IDLE_PID  1u
@@ -52,6 +53,8 @@ static task_t *release_locked(mutex_t *m, task_t *owner)
     }
     if (best) {
         held_push(best, m);
+        if (best->mutex_granted_us != UINT64_MAX)
+            best->mutex_granted_us = hal_time_now_us();
         best->wait_obj = NULL;
         best->wait_mutex = NULL;
         best->state = TASK_RUNNABLE;
@@ -71,9 +74,10 @@ bool mutex_trylock(mutex_t *m)
     return got;
 }
 
-void mutex_lock(mutex_t *m)
+static void lock_impl(mutex_t *m, mutex_wait_info_t *out)
 {
     task_t *self = task_current();
+    if (out) *out = (mutex_wait_info_t){0};
 
     if (self->id == IDLE_PID) {                 /* idle may not block: poll */
         while (!mutex_trylock(m)) task_yield();
@@ -81,10 +85,14 @@ void mutex_lock(mutex_t *m)
     }
 
     uint32_t irq = arch_irq_disable();
+    self->mutex_granted_us = out ? 0 : UINT64_MAX;
+    if (out) { out->profiled = true; out->entered_us = hal_time_now_us(); }
     if (m->owner == self) kernel_panic("mutex_lock: recursive lock");
     if (m->owner == NULL) {
         held_push(self, m);
+        if (out) self->mutex_granted_us = hal_time_now_us();
     } else {
+        if (out) { out->contended = true; out->owner_pid = m->owner->id; }
         self->wait_obj = m;
         self->wait_mutex = m;
         self->state = TASK_BLOCKED;
@@ -92,8 +100,13 @@ void mutex_lock(mutex_t *m)
         sched_reschedule();                     /* returns once unlock() handed the mutex to us */
         if (m->owner != self) kernel_panic("mutex_lock: woken without ownership");
     }
+    if (out) { out->granted_us = self->mutex_granted_us; out->resumed_us = hal_time_now_us(); }
+    self->mutex_granted_us = UINT64_MAX;
     arch_irq_restore(irq);
 }
+
+void mutex_lock(mutex_t *m) { lock_impl(m, NULL); }
+void mutex_lock_timed(mutex_t *m, mutex_wait_info_t *out) { lock_impl(m, out); }
 
 void mutex_unlock(mutex_t *m)
 {
@@ -110,6 +123,7 @@ void mutex_unlock(mutex_t *m)
 void mutex_release_all(task_t *t)
 {
     t->wait_mutex=NULL;
+    t->mutex_granted_us=UINT64_MAX;
     while (t->held) release_locked(t->held, t);
     mutex_recompute_priorities();
 }

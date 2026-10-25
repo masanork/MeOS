@@ -518,7 +518,8 @@ static bool sdio_cmd53(bool is_write, uint8_t fn, uint32_t addr,
                        bool block_mode, void *buf, size_t len)
 {
     uint64_t before = hal_time_now_us();
-    sdmmc_bus_lock();
+    mutex_wait_info_t waiting;
+    sdmmc_bus_lock_timed(&waiting);
     uint64_t held = hal_time_now_us(), scheduled = task_current_runtime_us();
     uint64_t wait = held - before;
     record_max_us(&s_diag.bus_max_wait_us, wait);
@@ -536,7 +537,18 @@ static bool sdio_cmd53(bool is_write, uint8_t fn, uint32_t addr,
     d->post_idle_timeouts += stages.post_idle_timeout;
     d->wait_us += wait; d->prepare_us += prepare; d->dma_us += dma;
     d->finish_us += finish; d->hold_us += hold; d->scheduled_us += ran;
-    record_max_us(&d->max_wait_us, wait);
+    if (wait > d->max_wait_us) {
+        uint64_t blocked = waiting.profiled && waiting.contended ? waiting.granted_us - waiting.entered_us : 0;
+        uint64_t ready = waiting.profiled && waiting.contended ? waiting.resumed_us - waiting.granted_us : 0;
+        uint64_t parts = blocked + ready;
+        d->max_wait_us = bounded_us(wait);
+        d->wait_peak_blocked_us = bounded_us(blocked);
+        d->wait_peak_ready_us = bounded_us(ready);
+        d->wait_peak_other_us = bounded_us(wait >= parts ? wait - parts : 0);
+        d->wait_peak_owner_pid = waiting.owner_pid;
+        d->wait_peak_contended = waiting.contended;
+        d->wait_peak_profiled = waiting.profiled;
+    }
     if (hold > d->max_hold_us) {
         d->max_hold_us = bounded_us(hold); d->peak_scheduled_us = bounded_us(ran);
         d->peak_prepare_us = bounded_us(prepare); d->peak_dma_us = bounded_us(dma);

@@ -21,8 +21,18 @@ typedef struct mutex {
 
 #define MUTEX_INIT   { 0, 0 }
 
+/* Optional task-context timestamps. The grant is recorded during direct
+ * handoff, before the recipient runs again. Idle retains its polling path
+ * and reports profiled=false. No task stack pointer is retained. */
+typedef struct {
+    uint64_t entered_us, granted_us, resumed_us;
+    uint32_t owner_pid;
+    bool profiled, contended;
+} mutex_wait_info_t;
+
 void mutex_init(mutex_t *m);
 void mutex_lock(mutex_t *m);
+void mutex_lock_timed(mutex_t *m, mutex_wait_info_t *out);
 bool mutex_trylock(mutex_t *m);
 void mutex_unlock(mutex_t *m);
 

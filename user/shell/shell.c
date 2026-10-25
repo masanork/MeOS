@@ -920,6 +920,12 @@ static int cmd_wifi(int argc, char **argv)
             if (timing_length > 0 && (size_t)timing_length < sizeof timing_line)
                 sh_write(timing_line,(size_t)timing_length);
             else sh_puts("wifi: diagnostic formatting overflow\n");
+            timing_length = ksnprintf(timing_line,sizeof timing_line,"WIFI WAIT %s max_wait_us=%u blocked_us=%u ready_us=%u other_us=%u owner_pid=%u contended=%u profiled=%u\n",
+                      i ? "WRITE" : "READ",b->max_wait_us,b->wait_peak_blocked_us,b->wait_peak_ready_us,
+                      b->wait_peak_other_us,b->wait_peak_owner_pid,b->wait_peak_contended,b->wait_peak_profiled);
+            if (timing_length > 0 && (size_t)timing_length < sizeof timing_line)
+                sh_write(timing_line,(size_t)timing_length);
+            else sh_puts("wifi: diagnostic formatting overflow\n");
         }
         timing_length = ksnprintf(timing_line,sizeof timing_line,"WIFI CMD52 calls=%u errors=%u hold_ms=%u scheduled_ms=%u max_hold_us=%u peak_scheduled_us=%u\n",
                   d.cmd52.calls,d.cmd52.errors,(uint32_t)(d.cmd52.hold_us/1000u),

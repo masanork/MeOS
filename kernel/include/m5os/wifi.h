@@ -83,6 +83,8 @@ typedef struct {
     uint32_t calls, errors, pre_idle_timeouts, post_idle_timeouts;
     uint64_t wait_us, prepare_us, dma_us, finish_us, hold_us, scheduled_us;
     uint32_t max_wait_us, max_hold_us;
+    uint32_t wait_peak_blocked_us, wait_peak_ready_us, wait_peak_other_us;
+    uint32_t wait_peak_owner_pid, wait_peak_contended, wait_peak_profiled;
     uint32_t peak_prepare_us, peak_dma_us, peak_finish_us, peak_scheduled_us, peak_bytes;
 } wifi_sdio_diagnostics_t;
 typedef struct {

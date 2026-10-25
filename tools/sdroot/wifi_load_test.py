@@ -104,12 +104,17 @@ class IntegrityTests(unittest.TestCase):
                 "max_wait_us=200 peak_prepare_us=100 peak_dma_us=300 peak_finish_us=600 peak_bytes=1465"
         lines = [f"WIFI SDIO {op} {common} {extra}" for op in ("READ", "WRITE")]
         lines.append(f"WIFI CMD52 {common}")
+        lines.extend(f"WIFI WAIT {op} max_wait_us=200 blocked_us=100 ready_us=80 other_us=20 owner_pid=8 contended=1 profiled=1"
+                     for op in ("READ", "WRITE"))
         receipt = "\n".join(lines)
         self.assertEqual(wifi_bus_stats(receipt)["SDIO READ"]["peak_bytes"], 1465)
         for invalid in ("\n".join(lines[:-1]), receipt + "\n" + lines[0],
                         receipt.replace("peak_bytes=1465", ""),
                         receipt.replace("peak_scheduled_us=800", "peak_scheduled_us=1001"),
                         receipt.replace("peak_finish_us=600", "peak_finish_us=601"),
+                        receipt.replace("blocked_us=100", "blocked_us=101"),
+                        receipt.replace("contended=1", "contended=0"),
+                        receipt.replace("profiled=1", "profiled=0"),
                         receipt.replace("calls=5", "calls=5 calls=6")):
             with self.assertRaises(RuntimeError):
                 wifi_bus_stats(invalid)
