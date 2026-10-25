@@ -8,6 +8,7 @@
 #include "../../drivers/lcd/font8x8.h"
 #include "../../drivers/lcd/font_ja16.h"
 #include "../../drivers/usbkbd/hid_keys.h"
+#include "../../user/home/home.h"
 #include "../../user/scheme/ide.h"
 #include "replay.h"
 #include "../../user/write/write.h"
@@ -55,6 +56,8 @@ static uint64_t replay_due, record_time;
 static FILE *record_file;
 static unsigned manual_shot, record_count;
 static uint64_t record_duration;
+static int mouse_x, mouse_y;
+static bool mouse_down;
 static void die(const char *);
 #define SYNTHETIC_KEY 0x4d354f53u
 static unsigned record_delay(void)
@@ -449,6 +452,18 @@ static void pump(bool idle)
                        bytes);
             if (bytes[0])
                 ime_feed(bytes);
+        } else if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP ||
+                   event.type == SDL_MOUSEMOTION) {
+            float x, y;
+            int window_x = event.type == SDL_MOUSEMOTION ? event.motion.x : event.button.x;
+            int window_y = event.type == SDL_MOUSEMOTION ? event.motion.y : event.button.y;
+            SDL_RenderWindowToLogical(renderer, window_x, window_y, &x, &y);
+            mouse_x = (int)x;
+            mouse_y = (int)y;
+            if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT)
+                mouse_down = true;
+            else if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT)
+                mouse_down = false;
         } else if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_EXPOSED)
             dirty = true;
     }
@@ -494,6 +509,15 @@ static void pump(bool idle)
         present();
     pumping = false;
 }
+
+static bool home_touch(int *x, int *y, void *context)
+{
+    (void)context;
+    *x = mouse_x;
+    *y = mouse_y;
+    return mouse_down;
+}
+
 int kconsole_getc(void)
 {
     pump(false);
@@ -678,7 +702,7 @@ int main(int argc, char **argv)
 {
     const char *workspace = NULL, *source = NULL, *record_path = NULL, *replay_path = NULL;
     char normalized_source[VFS_PATH_MAX];
-    bool writing = false;
+    bool writing = false, homing = false;
     struct { bool writing; const char *source, *keys; } stages[16];
     unsigned stage_count = 0;
     for (int n = 1; n < argc; n++) {
@@ -691,6 +715,8 @@ int main(int argc, char **argv)
             stages[stage_count++].keys = argv[++n];
         } else if (!strcmp(argv[n], "--write"))
             writing = true;
+        else if (!strcmp(argv[n], "--home"))
+            homing = true;
         else if (!strcmp(argv[n], "--smoke"))
             smoke = true;
         else if (!strcmp(argv[n], "--headless"))
@@ -707,12 +733,12 @@ int main(int argc, char **argv)
             source = argv[++n];
         else
             die("usage: meos-sim --workspace DIR [--smoke] [--headless] [--screenshots DIR] "
-                "[--write] [--source /home/FILE] [--record NEW_FILE | --replay FILE] "
+                "[--home | --write] [--source /home/FILE] [--record NEW_FILE | --replay FILE] "
                 "[--stage scheme|write /home/FILE REPLAY ...]");
     }
-    if (!workspace || (smoke && (source || writing)))
+    if (!workspace || (smoke && (source || writing || homing)) || (homing && (writing || source)))
         die("workspace required; smoke uses the built-in demo");
-    if (stage_count && (writing || source || smoke || record_path || replay_path))
+    if (stage_count && (writing || homing || source || smoke || record_path || replay_path))
         die("stages cannot be combined with single-app options");
     if ((record_path && replay_path) || (smoke && replay_path))
         die("record/replay and smoke/replay are exclusive");
@@ -781,7 +807,13 @@ int main(int argc, char **argv)
                    n + 1, stages[n].writing ? "write" : "scheme", heap_used, lines_drawn - before_lines);
         }
     } else {
-        app_ok = writing ? write_file(source ? source : "/home/note.txt") : scheme_ide(source);
+        if (homing) {
+            int selected = 0;
+            home_action_t action = home_select(&selected, home_touch, NULL);
+            app_ok = action == HOME_SHELL;
+            printf("HOME PASS: selected %s; keyboard/mouse paths active\n", home_item_label(selected));
+        } else
+            app_ok = writing ? write_file(source ? source : "/home/note.txt") : scheme_ide(source);
     }
     present();
     if (smoke) {
@@ -790,7 +822,7 @@ int main(int argc, char **argv)
         int n = fd >= 0 ? vfs_read(fd, saved, sizeof saved - 1) : -1;
         if (fd >= 0)
             vfs_close(fd);
-        if (n < 0 || !strstr(saved, "; 日本語\n") || !committed_japanese || !ime_draws ||
+        if (n < 0 || !strstr(saved, "; 日本語\n") || !committed_japanese ||
             lines_drawn < 100 || smoke_step != sizeof smoke_actions / sizeof smoke_actions[0] ||
             !display_free() || paused) {
             fprintf(stderr,

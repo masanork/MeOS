@@ -23,6 +23,13 @@ def elf(name, machine=243):
 
 
 class SafetyChecks(unittest.TestCase):
+    def test_erased_otadata_initializer_required(self):
+        good = b'\xff' * 0x2000
+        release.verify_flash_file(0x400000, 'ota_data_initial.bin', good)
+        for data in (good[:-1], b'\xff' * 0x1fff + b'\x00'):
+            with self.subTest(bytes=len(data)), self.assertRaisesRegex(ValueError, 'otadata initializer'):
+                release.verify_flash_file(0x400000, 'ota_data_initial.bin', data)
+
     def test_defined_symbols_include_embedded_asset(self):
         self.assertEqual(release.elf_symbols(elf('doom_wad_start')), {'doom_wad_start'})
 

@@ -19,9 +19,11 @@ drivers/usbkbd/hid_keys.h
 kernel/include/m5os/arch.h
 kernel/include/m5os/blockdev.h
 kernel/include/m5os/board_config.h
+kernel/include/m5os/crc32.h
 kernel/include/m5os/display.h
 kernel/include/m5os/errno.h
 kernel/include/m5os/fs.h
+kernel/include/m5os/hal_time.h
 kernel/include/m5os/ime.h
 kernel/include/m5os/kmalloc.h
 kernel/include/m5os/kprintf.h
@@ -30,6 +32,7 @@ kernel/include/m5os/task.h
 kernel/include/m5os/types.h
 kernel/include/m5os/vfs.h
 kernel/lib/number.c
+kernel/lib/crc32.c
 tools/ime/mini.skk
 tools/ime_mkdict.py
 tools/scheme/host_test.c
@@ -69,14 +72,24 @@ drivers/lcd/bizud.h
 drivers/lcd/bizud24_data.inc
 user/write/write.c
 user/write/write.h
+user/editor/bizime.c
+user/editor/bizime.h
 tools/fonts/licenses/BIZ-UD-OFL.txt
 tools/fonts/build_bizud.py
+tools/fonts/cache_test.c
+tools/fonts/cache_test.sh
 tools/sim/write_test.sh
 user/write/README.md
 tools/fonts/README.md
 tools/fonts/fetch24.py
 drivers/lcd/display_claim.c
 tools/sim/handoff_test.sh
+tools/sim/home_test.sh
+tools/sim/scheme_ui_test.sh
+
+# Tab5 Home launcher
+user/home/home.c
+user/home/home.h
 
 # Shared streaming fallback for host-only VFS adapters
 fs/vfs/write_file.c

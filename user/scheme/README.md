@@ -4,6 +4,9 @@ Run `scheme` from the MeOS shell to open a demonstration source buffer, a graph
 pane and a REPL transcript. `scheme /home/example.scm` opens an existing UTF-8
 file, or an empty buffer if the file does not exist. Relative command-line paths
 are resolved by the shell. Opening the IDE does not execute source automatically.
+Source, the graph pane, REPL transcript and minibuffer use the native 24px BIZ UD
+font on a flicker-free offscreen framebuffer. Comments, strings and delimiters
+have restrained syntax colours while retaining a prose-friendly page.
 
 This is an initial, deliberately bounded Scheme subset, not an R7RS-conforming
 implementation or an Emacs Lisp compatibility layer. The interpreter and UTF-8
@@ -62,13 +65,16 @@ to Scheme.
 ## Japanese input
 
 `Ctrl-Space` and `Alt-backtick` retain their existing IME meanings. The editor and
-minibuffer register their insertion point with `ime_set_anchor`; the existing IME
-owns the preedit and candidate overlays. Uncommitted text stays outside the
-source and evaluator. Confirmed text arrives through the normal console as UTF-8.
+minibuffer consume an immutable `ime_view`: preedit is inserted into the BIZ UD
+visual layout at the cursor, reflowing following text without entering the source.
+A second Space opens the same nearby two-column candidate popup as the writing
+editor. Uncommitted text stays outside the source and
+evaluator. Confirmed text arrives through the normal console as UTF-8.
 Comments, strings, identifiers, source paths, command names and plot titles can
 contain Japanese. Movement, backspace and delete preserve UTF-8 codepoint
 boundaries, including four-byte UTF-8; display glyph coverage remains that of the
-existing MeOS font. Combining sequences are not treated as grapheme clusters.
+BIZ UD asset. Combining sequences are not treated as grapheme clusters.
+Up/Down follows proportional soft-wrapped screen rows as well as explicit lines.
 
 The console API supplies committed bytes without an IME commit boundary, so
 keyboard/IME insertion currently records one undo step per codepoint, not per
@@ -134,7 +140,9 @@ reader inputs, editor extensions, UTF-8 deletion/undo, short VFS I/O, failure
 preservation, preceding-expression selection inside unfinished lists, Japanese
 command completion, and display/memory cleanup. Physical keyboard, IME overlay placement,
 rendering and concurrent floating-point execution still require Tab5 qualification.
+`sh tools/sim/scheme_ui_test.sh` additionally replays the BIZ UD minibuffer,
+evaluates `(sqrt 81)`, and checks the REPL result frame.
 
-The first firmware build used a separate `build-tab5-scheme` directory and
-sdkconfig to avoid interfering with the concurrent BASIC build. No device was
-flashed as part of this initial implementation.
+Write and Scheme share an idle BIZ UD atlas cache. The first editor reads it
+from microSD; subsequent editor launches reuse it. `mem trim` explicitly
+reclaims the cache, and Home does so before starting a non-editor application.

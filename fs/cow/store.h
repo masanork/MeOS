@@ -20,9 +20,12 @@ struct cow_store {
 };
 int cow_store_open(struct cow_store *, const struct cow_bank[2], uint64_t,
                    uint32_t, int (*)(void *,uint32_t,void *),void *);
+int cow_store_open_indexed(struct cow_store *, const struct cow_bank[2], uint64_t,
+                   uint32_t, int (*)(void *,uint32_t,void *),void *,uint32_t *,size_t);
 int cow_store_format(struct cow_store *, const struct cow_bank[2], uint64_t,
                      uint32_t, int (*)(void *,uint32_t,void *),void *);
 int cow_store_recover(struct cow_store *);
+int cow_store_recover_indexed(struct cow_store *,uint32_t *,size_t);
 int cow_store_compact(struct cow_store *);
 /* Minimum free log records (including commit) before starting a transaction.
  * This is a capacity budget, not an automatic callback retry. */

@@ -124,3 +124,27 @@ uses littlefs's `LFS_THREADSAFE` hooks with one kernel mutex shared by bulk file
 and base/delta operations. Normalized relative paths are confined to the asset
 directory. The root backing files are not exposed. No format is needed to add
 bulk data to an already mounted native SD root.
+
+## Integrated native SDMMC result
+
+Commit `2948a6c35bfaba48c41d99ffdfd2a12e756392cb` combines the Quake branch,
+the reviewed SD-root stack and the Tab5 native SDMMC transport. Only the app
+partition was flashed; the bootloader, partition table and SD contents were not
+replaced. The 4,038,720-byte app image has SHA-256
+`953e36f0a38e9f1772ee9f4f8a3e96ee40ea9592ec3805ec9323e7c5e3169948`.
+
+After a hardware reset, native slot 0 initialized at 4-bit / 20 MHz and mounted
+the existing 30,867,456-sector littlefs/COW root. Boot printed `RAM disk not
+allocated`; settled PSRAM was 159 KiB used / 27,272 KiB free. By comparison, the
+same integrated image's RAM-root fallback used 8,287 KiB, an observed 8,128 KiB
+difference. `/home/sd-boot.txt` still contained `qualification-099`, and
+`/assets/quake/id1/pak0.pak` still had size 18,689,235 bytes.
+
+Wi-Fi initialized concurrently on SDMMC slot 1 at 4-bit / 20 MHz and obtained an
+IPv4 address while the SD root remained active. A complete PAK reread returned
+CRC32 `74e3b084` in 77.315 seconds, or 236.1 KiB/s through littlefs/VFS. The older
+software-SPI/FAT result was 74.1 KiB/s for sequential reads, about 3.2x slower,
+but this is not a controlled transport-only comparison: the cards and filesystems
+differ. The current littlefs adapter issues 512-byte sector operations, so this
+measurement is far below the native bus ceiling and identifies batching as the
+next performance target. No media writes were performed in this validation.

@@ -16,6 +16,10 @@ cmp "$sim_result/record/home/workspace.scm" "$sim_result/replay/home/workspace.s
 for name in initial graph ime-candidates final; do
     cmp "$sim_result/images-a/$name.bmp" "$sim_result/images-b/$name.bmp"
 done
+cmp -s "$sim_result/images-a/graph.bmp" "$sim_result/images-a/ime-candidates.bmp" && {
+    echo 'Scheme IME candidate frame did not change' >&2
+    exit 1
+}
 echo "Replay PASS: saved source and all four screenshots match byte for byte"
 mkdir "$sim_result/caps" "$sim_result/images-c"
 "$sim_binary" --headless --workspace "$sim_result/caps" \

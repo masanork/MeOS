@@ -1,14 +1,17 @@
 # MeOS App Simulator
 
-This prototype runs the **real Scheme IDE** in a resizable 1280x720 SDL window on
-the host. It links the same Scheme engine, editor model, DQ widgets, ASCII/Japanese
+This prototype runs the **real Tab5 Home, Scheme IDE or writing editor** in a
+resizable 1280x720 SDL window on the host. It links the same launcher, Scheme
+engine, editor model, DQ widgets, ASCII/Japanese
 font data, keyboard HID decoder, romaji converter, kana/kanji converter and built-in
 SKK dictionary used by the Tab5 build. Only the display, timing, heap, console and
 VFS adapters are replaced. It neither flashes nor opens the physical Tab5.
 
 This is an application simulator: it does not boot MeOS, execute RISC-V firmware,
 or test the MeOS scheduler, interrupts, DMA, FPU context, MIPI, USB, SDIO or device
-drivers. Native host speed does not predict Tab5 performance. BASIC and Doom are not connected to this SDL frontend. Scheme and the writing
+drivers. Native host speed does not predict Tab5 performance. BASIC and Doom are
+not connected to this SDL frontend. Home launches no child apps in the simulator;
+it tests rendering and selection only. Scheme and the writing
 editor can run sequentially within one process, sharing the production display
 lease, IME, framebuffer and host VFS adapter.
 
@@ -55,7 +58,8 @@ Use the keyboard in the SDL window:
 
 The prototype deliberately takes physical key events through the existing US HID
 mapping instead of host `SDL_TEXTINPUT`, so use the host's Latin input source.
-Host-native Japanese composition, clipboard paste, mouse/touch, gamepads, sound
+In `--home` mode a left click follows the same press/release selection model as
+Tab5 touch. Host-native Japanese composition, clipboard paste, gamepads, sound
 and camera are not implemented. Windows can be resized, with the simulated
 display scaled at its original aspect ratio. Closing the window invokes the
 IDE's quit command and asks before discarding unsaved source.
@@ -187,6 +191,19 @@ a published or license-cleared release.
 Ctrl-S saves, Ctrl-Q exits, Ctrl-Z undoes the last edit. Missing characters are
 boxed. See `user/write/README.md`. Run `sh tools/sim/write_test.sh` for a real
 HID/IME/save replay. The default simulator target remains the Scheme workspace.
+
+### Tab5 Home mode
+
+`sh tools/sim/run.sh --home --workspace DIR` opens the two-column Home launcher.
+Use arrows and Enter, click a tile, or press Q/Esc to return to Shell. The host
+simulator stops after a selection instead of launching firmware-only apps.
+`sh tools/sim/home_test.sh` captures the initial, Scheme-selected and
+Camera-selected frames and verifies keyboard navigation and clean Shell exit.
+
+`sh tools/sim/scheme_ui_test.sh` opens Scheme's 24px BIZ UD workspace, captures
+the BIZ UD F2 minibuffer, evaluates `(sqrt 81)`, and verifies that the REPL result
+changes the rendered frame. Scheme and Write share the same proportional inline
+preedit and two-column candidate-popup renderer.
 
 ## Repeated application handoff
 

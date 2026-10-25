@@ -65,7 +65,8 @@ void hardware_print_storage(void)
     else kputs("Root capacity: read error\n");
     shell_sd_status();
     kputs("Use sd mount ro or sd mount rw explicitly, then access /sd; exFAT/format unsupported\n");
-    kputs("WASM apps: separate flash store, restored to /apps at boot\n");
+    if(rootfs_is_persistent())kputs("WASM apps: /apps on persistent SD root (legacy flash store bypassed)\n");
+    else kputs("WASM apps: legacy flash store restored to recovery /apps\n");
 }
 
 void hardware_print_devices(void)

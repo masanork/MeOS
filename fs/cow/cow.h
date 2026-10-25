@@ -26,6 +26,9 @@ struct cow {
 };
 int cow_mount(struct cow *, struct cow_io, uint64_t base_id, uint32_t sectors,
               int (*base_read)(void *, uint32_t, void *), void *base_ctx);
+int cow_mount_indexed(struct cow *, struct cow_io, uint64_t base_id, uint32_t sectors,
+              int (*base_read)(void *, uint32_t, void *), void *base_ctx,
+              uint32_t *offsets,size_t index_sectors);
 int cow_index(struct cow *, uint32_t *offsets, size_t sectors);
 int cow_read(struct cow *, uint32_t lba, void *);
 int cow_begin(struct cow *);

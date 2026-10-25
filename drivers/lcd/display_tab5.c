@@ -50,7 +50,6 @@
 #define DSI_PHY_LDO_CHAN   3            /* LDO_VO3 feeds VDD_MIPI_DPHY */
 #define DSI_PHY_LDO_MV     2500
 #define FIRST_FRAMES_MS    200
-#define SPLASH_MS          800
 #define SWRESET_MS         20           /* vendor BSP waits this long after the software reset */
 #define ST7121_RESET_MS    120          /* vendor BSP: wait after the software reset */
 #define ST7121_CMD_GAP_MS  5            /* ... and between init commands */
@@ -219,13 +218,6 @@ bool display_init(void)
     delay_ms(FIRST_FRAMES_MS);                        /* let a few frames go out, then check the refresh interrupt ran */
     kprintf("display: %u refresh interrupts, %d panel command(s) failed\n", (unsigned)s_frames, s_tx_failed);
     board_backlight(255);
-
-    /* Boot splash: colour bars (red, green, blue, white), one per quarter of the width.  They also tell the
-     * person at the board - who is the only one who can see the screen - whether scan-out works at all. */
-    static const uint16_t bars[] = { COLOR_RED, COLOR_GREEN, COLOR_BLUE, COLOR_WHITE };
-    for (int i = 0; i < 4; i++) display_fill_rect(i * (DISPLAY_WIDTH / 4), 0, DISPLAY_WIDTH / 4, DISPLAY_HEIGHT, bars[i]);
-    delay_ms(SPLASH_MS);
-    display_clear(COLOR_BLACK);
     return true;
 }
 

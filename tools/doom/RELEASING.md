@@ -72,8 +72,11 @@ and run from the extracted directory:
 python -m esptool --chip esp32p4 --port YOUR_PORT write_flash @flash_args
 ```
 
-This overwrites bootloader, partition table and app; it does not erase the full
-flash. Review partition changes and backup compatibility before upgrading.
+This overwrites the bootloader, partition table, factory app and 8 KiB OTA
+selection data; it does not erase the full flash. The erased OTA initializer
+selects the included factory image instead of a stale OTA slot. Existing OTA
+slot contents remain in flash but are not selected. Review partition changes
+and backup compatibility before upgrading.
 Provide your own lawfully obtained compatible IWAD separately. With a FAT card
 containing `DOOM1.WAD` at its root:
 

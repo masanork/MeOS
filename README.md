@@ -41,7 +41,7 @@ MeOS implements its own **preemptive/cooperative scheduler, task management, tim
 | **SoC** | ESP32-S3 (Xtensa LX7) + 8 MB PSRAM, 16 MB Flash | ESP32-S3FN8: 8 MB Flash, **no PSRAM** | **ESP32-P4 (Dual-core RISC-V @ 400 MHz)** + 32 MB PSRAM, 16 MB Flash + **ESP32-C6** co-processor |
 | **Display** | ILI9342C 320×240 (SPI, via AXP2101/AW9523) | ST7789 135×240 in landscape (240×135) | ST7121 / ILI9881C 720×1280 MIPI-DSI in landscape (**1280×720**) |
 | **Input** | Capacitive touch (FT6336U) | **Built-in Keyboard** (74HC138 matrix / TCA8418 I2C) | **Tab5 Keyboard** (I2C HID `0x6D`) or USB-A HID boot keyboard |
-| **UI Mode** | Touch GUI (Window Manager + Launcher) | Full-screen console (`fbcon`) + TUI apps (`dqwin`) | High-res console (`fbcon` 80×45) + TUI apps (`files`, `edit`, `camera`, `wifi`, `ssh`) |
+| **UI Mode** | Touch GUI (Window Manager + Launcher) | Full-screen console (`fbcon`) + TUI apps (`dqwin`) | Touch/keyboard Home launcher + high-res console (`fbcon` 80×45) + TUI apps |
 | **Camera** | — | — | **SC202CS** 1600×1200 MIPI-CSI + Hardware ISP + Auto-Gain/White-Balance |
 | **Wi-Fi / Net** | — | — | **ESP32-C6** over SDIO Slot 1 (DHCPv4/ARP/ICMP/DNS/TCP + **SSH-2 Client**) |
 | **Build Command** | `tools/build.sh cores3` | `tools/build.sh cardputer` | `tools/build.sh tab5` |
@@ -165,11 +165,26 @@ Key hardware subsystems supported on M5Stack Tab5:
 * **I/O Expanders (`hal/esp32p4/board_tab5.c`)**: Dual PI4IOE5V6408 I2C expanders (`0x43` / `0x44`) controlling LCD/touch reset, speaker enable, camera reset, USB 5V host power, and ESP32-C6 Wi-Fi power.
 * **Keyboard (`drivers/tab5kbd`, `drivers/usbkbd`)**: Polls the official M5Stack Tab5 I2C Keyboard (`0x6D` on Ext.Port1 G0/G1) in HID mode, with automatic fallback to USB-A HID boot keyboards over the DWC2 host controller.
 
+### Tab5 Home launcher
+
+After the shell announces its first prompt, Tab5 waits 1.5 seconds for a serial
+management command. With no input it opens the full-screen `home` launcher.
+Choose a large two-column tile by touch or arrows and Enter; Q/Esc opens the
+command shell. Run `home` at any later shell prompt to return. Write, Scheme,
+Files, Camera, Web, Wi-Fi, SSH, Tailscale, installed WebAssembly apps and BASIC
+are always available; Doom and Quake appear only in builds that enable them.
+Sending a command as soon as the first serial prompt appears suppresses automatic
+Home startup, so recovery and test scripts retain a deterministic shell path.
+Write and Scheme share the 24px BIZ UD atlas in an idle PSRAM cache, making the
+second editor launch immediate instead of rereading the font from microSD.
+Opening a non-editor tile releases the cache; `mem` reports it and `mem trim`
+reclaims it explicitly.
+
 ---
 
 ## TUI Window System (`dqwin`), Filer (`files`), and Text Editor (`edit`)
 
-Keyboard-equipped boards (**M5Cardputer** and **M5Stack Tab5**) feature a Dragon Quest-inspired retro TUI window toolkit (`user/tui/dqwin.c`) with thick white rounded borders on a black background and a `▶` selection cursor. Layout uses character cells (`8×8` glyph × `M5OS_FBCON_SCALE`), scaling cleanly from 40 columns on Cardputer to 80×22 on Tab5, and works simultaneously on both the built-in LCD+keyboard and serial terminals.
+Keyboard-equipped boards (**M5Cardputer** and **M5Stack Tab5**) feature a Dragon Quest-inspired retro TUI window toolkit (`user/tui/dqwin.c`) with thick white rounded borders on a black background and a `▶` selection cursor. Layout uses character cells (`8×8` glyph × `M5OS_FBCON_SCALE`), scaling cleanly from 40 columns on Cardputer to 80×45 on Tab5, and works simultaneously on both the built-in LCD+keyboard and serial terminals.
 
 ### Full-Screen Filer (`files [DIR]`)
 Implemented in `user/filer/filer.c` (inspired by VZ Editor's filer). Run `files` from the shell or launch `run files`.
@@ -293,11 +308,13 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
 * **Conversion** (`conv.c`) cuts the reading into phrases by dynamic programming: a dictionary word, plain or conjugating
   (SKK okuri-ari entries, checked against the conjugation form the okurigana spells), followed by particles / endings
   that stay kana. Choices are remembered for the session (`ime_dict_learn`).
-* **Screen**: console programs get an overlay at the text cursor (`fbcon_overlay_*`); programs that own the display
-  (`fbcon_pause`: filer, ssh, web) get the same UI as a two-line bar at the bottom, restored afterwards.
-* **Dictionary**: a small one is built in (`tools/ime/mini.skk`). For real use put an SKK dictionary in flash once:
-  `tools/ime_flash_dict.sh -p /dev/cu.usbmodemXXXX` (downloads SKK-JISYO.L, GPL-2.0+, and writes it to the `imedict` partition
-  at `0x400000`; it is loaded into PSRAM in the background after boot). `partitions_tab5.csv` now gives the app 3.9 MB.
+* **Screen**: console programs get an overlay at the text cursor (`fbcon_overlay_*`). Write and Scheme consume an
+  immutable IME view and insert BIZ UD preedit into their proportional layout, reflowing following text; other full-screen
+  programs (`fbcon_pause`: filer, ssh, web) use a two-line bar at the bottom, restored afterwards.
+* **Dictionary**: a small one is built in (`tools/ime/mini.skk`). For real use put an SKK dictionary on the SD card:
+  `tools/ime_flash_dict.sh -p /dev/cu.usbmodemXXXX` (downloads SKK-JISYO.L, GPL-2.0+, and uploads
+  `/assets/ime-dict.bin`; it is loaded into PSRAM in the background after the persistent root has mounted).
+  A missing/removed SD card simply leaves the built-in dictionary active.
 * **Tests** run on the host: `tools/ime/host_test.sh [dict.bin]`.
 
 ## Tab5 Device, Power and Storage Diagnostics
@@ -313,9 +330,9 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
   DC is shown as unknown. Charge permission and raw `CHG_STAT` are not treated as proof of actual charging
   or external power. The monitor must already be in continuous shunt+bus conversion mode; a missing,
   mismatched, unreadable or differently configured monitor produces an explicit unavailable result.
-* `storage` identifies the current root backing and its persistence. Tab5 uses an 8 MiB RAM disk unless a valid littlefs/COW SD root is available;
-  `sd mount` mounts Tab5 microSD as read/write FAT12/16/32 at `/sd`, with UTF-8 VFAT long names.
-  exFAT, card writes and formatting are disabled. The separate flash-backed WASM app store survives reboot.
+* `storage` identifies the current root backing and its persistence. Tab5 first tries a valid littlefs/COW SD root and allocates no 8 MiB RAM disk when it succeeds;
+  the RAM disk remains a rescue fallback for absent or unusable media. With a non-root card, `sd mount` mounts FAT12/16/32 read/write at `/sd`, with UTF-8 VFAT long names.
+  Native SDMMC slot 0 (4-bit, 20 MHz, 8 KiB PSRAM DMA staging) is the default and shares the controller safely with Wi-Fi on slot 1; `M5OS_SD_SPI=1` retains the slower diagnostic SPI transport. exFAT and FAT formatting are not supported. The separate flash-backed WASM app store survives reboot.
 * `play "/sd/path/track.mp3"` opens the Tab5 streaming MP3 player; the filer also opens MP3 files.
   Space pauses, +/- adjusts volume, Q/Esc stops. See [player notes](tools/player/README.md) for limits
   and the remaining physical-device validation.
@@ -426,7 +443,7 @@ Application details, validation and limitations:
 
 An opt-in hierarchical VFS store supports language sources without changing the default
 partition table or boot path. The optional `programs` data partition is exactly
-1 MiB at 0xC00000 (subtype 0x42), after the existing 0xA00000..0xBFFFFF WASM store.
+1 MiB at 0xC00000 (subtype 0x42), inside the unallocated tail after `ota_1`.
 The configuration preparer refuses overlaps and retains all existing entries:
 
 ```sh
@@ -458,8 +475,8 @@ EDIT and shell `edit` use `/data` through the same VFS interfaces.
 The ROM adapter checks the live partition table, exact label/type/offset/size,
 flags, available chip size and overlaps before allowing access. It uses bounded,
 aligned internal buffers around ROM flash calls; it does not call FreeRTOS-backed
-ESP-IDF VFS/flash services. Host adapter tests verify that app, SSH-key, dictionary
-and WASM-store sentinel bytes remain unchanged.
+ESP-IDF VFS/flash services. Host adapter tests verify that unrelated flash sentinel
+bytes remain unchanged.
 
 `/data/bas` and `/data/scm` are available immediately after mounting. Use
 `mkdir /data/lua` to add another language directory, or create nested directories.

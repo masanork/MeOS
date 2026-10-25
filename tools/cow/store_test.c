@@ -6,9 +6,10 @@
 #define CAP (512u+12u*COW_RECORD)
 struct bank {unsigned char live[CAP],durable[CAP];};
 static struct bank banks[2],saved[2];
-static int budget=-1,buffered,fail_sync,syncs,fail_after,fail_read,reads;
+static int budget=-1,buffered,fail_sync,syncs,fail_after,fail_read,reads,bank_reads[2];
 static int rd(void *ctx,uint32_t o,void *p,size_t n){
     struct bank *b=ctx;assert(o<=CAP&&n<=CAP-o);
+    bank_reads[b==&banks[1]]++;
     if(++reads==fail_read)return -1;
     memcpy(p,b->live+o,n);return 0;
 }
@@ -29,6 +30,7 @@ static int sync_io(void *ctx){
 static int base(void *ctx,uint32_t lba,void *p){(void)ctx;memset(p,(int)lba,512);return 0;}
 static struct cow_bank io[2];
 static void open_store(struct cow_store *s){assert(!cow_store_open(s,io,42,SECTORS,base,0));}
+static void open_store_indexed(struct cow_store *s,uint32_t index[SECTORS]){assert(!cow_store_open_indexed(s,io,42,SECTORS,base,0,index,SECTORS));}
 static void power(void){for(int i=0;i<2;i++)memcpy(banks[i].live,banks[i].durable,CAP);budget=-1;fail_sync=0;syncs=0;}
 static void transaction(struct cow_store *s,int value){unsigned char b[512];memset(b,value,512);assert(!cow_store_begin(s));assert(!cow_write(&s->view,1,b));assert(!cow_store_commit(s));}
 static void check(struct cow_store *s,int value){unsigned char b[512];
@@ -43,6 +45,12 @@ int main(void){
     assert(!cow_store_format(&s,io,42,SECTORS,base,0));transaction(&s,11);
     assert(!cow_store_compact(&s));transaction(&s,11);
     memcpy(saved,banks,sizeof saved);
+    bank_reads[0]=bank_reads[1]=0;open_store(&s);
+    assert(bank_reads[1-s.selected]==1); /* inactive bank header only */
+    uint32_t offsets[SECTORS];bank_reads[0]=bank_reads[1]=0;open_store_indexed(&s,offsets);
+    assert(bank_reads[1-s.selected]==1);
+    assert(bank_reads[s.selected]==2+(int)(s.view.committed/COW_RECORD)); /* header + log + zero tail */
+    assert(s.view.index==offsets);check(&s,11);
     /* Both banks already contain published states. Cut every byte of target
      * reuse: reset + header + one changed sector + snapshot commit. */
     unsigned cases=0;unsigned bytes=CAP+512+2*COW_RECORD;

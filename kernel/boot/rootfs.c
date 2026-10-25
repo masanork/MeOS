@@ -1,9 +1,9 @@
 /*
  * Root filesystem selection.
- *   1. An SD card that already holds an M5FS volume is mounted as "/" (persistent).
- *   2. Otherwise a RAM disk is formatted and mounted (volatile, lost at reset).
- * A card without M5FS is NEVER formatted automatically: that would destroy
- * whatever the user keeps on it.
+ *   1. Tab5 first tries an existing littlefs/COW M5FS root on SD.
+ *   2. A supplied legacy M5FS block device is tried if no SD-root was mounted.
+ *   3. Otherwise a RAM disk is formatted and mounted (volatile, lost at reset).
+ * Boot NEVER formats the SD card; failed or absent media remains untouched.
  */
 #include <m5os/vfs.h>
 #include <m5os/rootfs.h>
@@ -84,7 +84,7 @@ bool rootfs_mount(blockdev_t *sd)
             if (fd >= 0) { vfs_write(fd, img[i].data, img[i].size); vfs_close(fd); }
         }
     }
-    wasm_store_boot();                           /* installed WebAssembly apps come back from flash (Tab5 only) */
+    wasm_store_boot();                           /* persistent /apps, or built-in samples on a volatile root */
 #if defined(M5OS_BOARD_TAB5)
     if (sdroot_active()) kputs("SDROOT BOOT PASS: persistent root; RAM disk not allocated; kernel remains in Flash\n");
 #endif

@@ -30,6 +30,9 @@ with a.output.open('x') as log:
         if 'FAT: mounted' in state and 'not mounted' not in state:raise RuntimeError('card already mounted; close apps and unmount before running benchmark')
         mounted=command('sd mount',5)
         if 'mounted /sd read/write' not in mounted:raise RuntimeError('read/write mount failed')
+        transport_match=re.search(r'^Transport: (.+)$',mounted,re.MULTILINE)
+        if not transport_match:raise RuntimeError('firmware did not report SD transport')
+        transport=transport_match[1].strip()
         s.write(f'sd bench {a.files} {a.small_bytes} {a.large_mib}\r'.encode());s.flush()
         started=True
         # All five phases are bounded in firmware; retain complete output even on failure.
@@ -50,7 +53,7 @@ with a.output.open('x') as log:
         assert phases[2]['bytes']==phases[3]['bytes']==a.large_mib*1024*1024
         assert phases[1]['verified'] and phases[3]['verified']
         result=dict(files=a.files,small_bytes=a.small_bytes,large_MiB=a.large_mib,chunk=4096,
-                    transport='bit-banged SPI, CMD17/CMD24',mode='VFS write-through; content verification included in reads',phases=phases)
+                    transport=transport,mode='VFS write-through; content verification included in reads',phases=phases)
         a.output.with_suffix('.json').write_text(json.dumps(result,indent=2)+'\n')
         print('DEVICE_BENCHMARK_PASS',flush=True)
     except BaseException:

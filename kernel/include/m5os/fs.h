@@ -89,7 +89,6 @@ typedef struct {
     int (*unlink)(const char *);
 } fs_tx_ops_t;
 int fs_transaction(int (*callback)(const fs_tx_ops_t *, void *), void *);
-
 /* Whole-buffer replacement under the volume lock. Atomic with a transactional
  * backend; raw RAM volumes preserve legacy close/flush behavior. No fallback
  * after failure and no full-file copy. Recovery invalidates existing descriptors. */
