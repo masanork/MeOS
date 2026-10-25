@@ -27,6 +27,8 @@
 #include <m5os/tab5.h>
 #include "font8x8.h"
 #include "bitmap_resize.h"
+#include "quake_hires.h"
+#include <m5os/quake_video.h>
 #include "font_ja16.h"
 #include "ili9881c_tab5_init.h"
 #include "st7121_tab5_init.h"
@@ -499,7 +501,12 @@ void display_draw_indexed_viewport_delta(int x,const uint8_t *pixels,uint8_t *pr
     const uint16_t palette[256],bool force){
     if(!s_fb||s_draw!=s_fb)return;
     uint64_t start=hal_time_now_us();int first,last;
+    #if M5OS_QUAKE && M5OS_QUAKE_HIGHRES
+    if(x!=QV_X)return;
+    bool changed=tab5_hires_delta(s_draw,pixels,previous,palette,force,&first,&last);
+#else
     bool changed=tab5_indexed_viewport_delta(s_draw,x,pixels,previous,palette,force,&first,&last);
+#endif
     uint64_t copied=hal_time_now_us();
     if(changed)fb_flush_rows(DISPLAY_WIDTH-1-last,DISPLAY_WIDTH-1-first);
     s_copy_us=(uint32_t)(copied-start);s_flush_us=(uint32_t)(hal_time_now_us()-copied);
@@ -516,17 +523,17 @@ bool display_dma_present(const uint8_t *pixels,uint8_t *previous,const uint16_t 
 void display_dma_end(uint32_t owner){tab5_dma_copy_end(owner);}
 uint32_t display_viewport_checksum(void){
     if(!s_fb)return 0;
-    uint16_t *p=s_fb+160*720;esp_cache_msync(p,960*720*2,ESP_CACHE_MSYNC_FLAG_DIR_M2C);
-    uint32_t hash=2166136261u;for(unsigned i=0;i<960*720;i++)hash=(hash^p[i])*16777619u;
+    uint16_t *p=s_fb+(1280-QV_X-QV_OUT_WIDTH)*720;esp_cache_msync(p,QV_OUT_WIDTH*720*2,ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    uint32_t hash=2166136261u;for(unsigned i=0;i<QV_OUT_WIDTH*720;i++)hash=(hash^p[i])*16777619u;
     return hash;
 }
 uint32_t display_verify_viewport(const uint8_t *pixels,const uint16_t palette[256],int *bad_x,int *bad_y){
     *bad_x=*bad_y=-1;if(!s_fb)return UINT32_MAX;
-    esp_cache_msync(s_fb+160*720,960*720*2,ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    esp_cache_msync(s_fb+(1280-QV_X-QV_OUT_WIDTH)*720,QV_OUT_WIDTH*720*2,ESP_CACHE_MSYNC_FLAG_DIR_M2C);
     uint32_t mismatches=0;
-    for(unsigned x=0;x<960;x++)for(unsigned y=0;y<720;y++){
-        uint16_t want=palette[pixels[(y*200/720)*320+x/3]];
-        if(s_fb[(DISPLAY_WIDTH-1-(160+x))*720+y]!=want){
+    for(unsigned x=0;x<QV_OUT_WIDTH;x++)for(unsigned y=0;y<QV_OUT_HEIGHT;y++){
+        uint16_t want=palette[pixels[(y*QV_HEIGHT/QV_OUT_HEIGHT)*QV_WIDTH+x/QV_REPEAT]];
+        if(s_fb[(DISPLAY_WIDTH-1-(QV_X+x))*720+QV_Y+y]!=want){
             if(!mismatches){*bad_x=(int)x;*bad_y=(int)y;}mismatches++;
         }
     }

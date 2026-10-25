@@ -30,6 +30,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('pak0', type=Path)
     parser.add_argument('--image', type=Path, default=Path('/tmp/meos-quake-headless.ppm'))
+    parser.add_argument('--resolution', choices=['320x200','512x300'], default='320x200')
     parser.add_argument('--steps', type=int, default=120, choices=range(20,3001), metavar='20..3000')
     parser.add_argument('--surface-cache-kib', type=int, default=600, choices=[600,1024,2048])
     parser.add_argument('--reference-near-clamp', action='store_true', help='test original double near-clip comparisons in a temporary source copy')
@@ -45,6 +46,8 @@ def main():
         (build / 'socket.h').write_text('#include <sys/socket.h>\n#include <netinet/in.h>\n#include <arpa/inet.h>\n')
         flags = shlex.split(os.environ.get('CC', 'cc')) + ['-O1', '-g', '-fsanitize=address', '-w', '-fno-builtin', '-DMEOS_QUAKE_PROFILE=1',
             '-I' + str(build), '-I' + str(ROOT / 'kernel/include'), '-I' + str(ROOT / 'third_party/quakegeneric/source')]
+        if args.resolution == '512x300':
+            flags += ['-DM5OS_QUAKE_HIGHRES=1']
         component = ROOT / 'components/quakeengine'
         sources = [ROOT / 'third_party/quakegeneric/source' / n for n in re.findall(r'\$\{QROOT\}/(\w+\.c)', (component / 'CMakeLists.txt').read_text())]
         sources += [component / 'sys_meos.c', component / 'sound_null.c']

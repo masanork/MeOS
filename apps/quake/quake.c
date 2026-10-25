@@ -135,14 +135,14 @@ static void paint_buttons(uint32_t mask,bool all){
 }
 static void capture(const uint8_t *pixels) {
     static const char digits[]="0123456789abcdef";
-    char line[641];kprintf("QSHOT 320 200 %u\n",frames);
+    char line[QV_WIDTH*2+1];kprintf("QSHOT %u %u %u\n",QV_WIDTH,QV_HEIGHT,frames);
     for(unsigned row=0;row<16;row++) {
         for(unsigned col=0;col<16;col++) { unsigned n=palette[row*16+col];for(unsigned k=0;k<4;k++)line[col*4+k]=digits[(n>>(12-4*k))&15]; }
         line[64]=0;kprintf("QPAL %u %s\n",row,line);
     }
-    for(unsigned row=0;row<200;row++) {
-        for(unsigned col=0;col<320;col++){unsigned n=pixels[row*320+col];line[col*2]=digits[n>>4];line[col*2+1]=digits[n&15];}
-        line[640]=0;kprintf("QROW %u %s\n",row,line);
+    for(unsigned row=0;row<QV_HEIGHT;row++) {
+        for(unsigned col=0;col<QV_WIDTH;col++){unsigned n=pixels[row*QV_WIDTH+col];line[col*2]=digits[n>>4];line[col*2+1]=digits[n&15];}
+        line[QV_WIDTH*2]=0;kprintf("QROW %u %s\n",row,line);
     }
     kputs("QEND\n");
 }
@@ -153,8 +153,8 @@ void QG_DrawFrame(void *pixels) {
     if(!accelerated&&smooth_active)accelerated=display_smooth_present(pixels,palette);
     if(smooth_active&&!accelerated){display_smooth_end(quake_owner);smooth_active=false;palette_dirty=true;}
     if(accelerated){}
-    else if(previous_frame)display_draw_indexed_viewport_delta(160,pixels,previous_frame,palette,palette_dirty||!frames);
-    else display_draw_indexed_bitmap_resized(160,0,320,200,pixels,palette,960,720);
+    else if(previous_frame)display_draw_indexed_viewport_delta(QV_X,pixels,previous_frame,palette,palette_dirty||!frames);
+    else display_draw_indexed_bitmap_resized(QV_X,QV_Y,QV_WIDTH,QV_HEIGHT,pixels,palette,QV_OUT_WIDTH,QV_OUT_HEIGHT);
     palette_dirty=false;
     prof_draw+=hal_time_now_us()-t;
     uint32_t copy,flush;display_last_present_times(&copy,&flush);prof_copy+=copy;prof_flush+=flush;
@@ -185,22 +185,22 @@ int QG_GetKey(int *down,int *key) {
 void QG_GetMouseMove(int *x,int *y){quake_input_mouse(x,y);}
 void QG_GetJoyAxes(float *axes){for(int i=0;i<QUAKEGENERIC_JOY_MAX_AXES;i++)axes[i]=0;}
 static void transfer_benchmark(void){
-    uint8_t *pixels=quake_malloc(64000),*old=quake_malloc(64000);uint16_t colors[256];
+    uint8_t *pixels=quake_malloc(QV_PIXELS),*old=quake_malloc(QV_PIXELS);uint16_t colors[256];
     for(unsigned i=0;i<256;i++)colors[i]=(uint16_t)(i*239);
     bool available=dma_active;
     for(unsigned backend=0;backend<(available?2u:1u);backend++){
     dma_active=available&&backend==1;
     for(unsigned mode=0;mode<3;mode++){
-        for(unsigned i=0;i<64000;i++)pixels[i]=(uint8_t)(i*13);
+        for(unsigned i=0;i<QV_PIXELS;i++)pixels[i]=(uint8_t)(i*13);
         if(dma_active){if(!display_dma_present(pixels,old,colors,true))quake_exit(1);}
-        else display_draw_indexed_viewport_delta(160,pixels,old,colors,true);
+        else display_draw_indexed_viewport_delta(QV_X,pixels,old,colors,true);
         uint64_t wall=0,cpu=0;
         for(unsigned f=0;f<30;f++){
-            if(mode)for(unsigned y=mode==2?24:0;y<(mode==2?152:200);y++)
-                for(unsigned x=0;x<320;x++)pixels[y*320+x]=(uint8_t)(y*320+x+f);
+            if(mode)for(unsigned y=mode==2?24*QV_HEIGHT/200:0;y<(mode==2?152*QV_HEIGHT/200:QV_HEIGHT);y++)
+                for(unsigned x=0;x<QV_WIDTH;x++)pixels[y*QV_WIDTH+x]=(uint8_t)(y*QV_WIDTH+x+f);
             uint64_t own=task_current_runtime_us(),at=hal_time_now_us();
             if(dma_active){if(!display_dma_present(pixels,old,colors,false))quake_exit(1);}
-            else display_draw_indexed_viewport_delta(160,pixels,old,colors,false);
+            else display_draw_indexed_viewport_delta(QV_X,pixels,old,colors,false);
             wall+=hal_time_now_us()-at;cpu+=task_current_runtime_us()-own;
         }
         kprintf("quake blitbench: %s %s wall %u own %u us/frame checksum %08x\n",
@@ -211,7 +211,7 @@ static void transfer_benchmark(void){
     dma_active=available;
 }
 static void transfer_visual_test(void){
-    uint8_t *pixels=quake_malloc(64000),*old=quake_malloc(64000);
+    uint8_t *pixels=quake_malloc(QV_PIXELS),*old=quake_malloc(QV_PIXELS);
     const uint16_t colors[10]={0x0000,0xffff,0xf800,0x07e0,0x001f,0xffe0,0x07ff,0xf81f,0x8410,0x4208};
     uint16_t palette_test[256]={0};memcpy(palette_test,colors,sizeof colors);
     bool available=dma_active,use_dma=available,animate=false,redraw=true;unsigned phase=0;
@@ -223,28 +223,29 @@ static void transfer_visual_test(void){
             if(key=='a'||key=='A'){animate=!animate;redraw=true;}
         }
         if(redraw||animate){
-            for(unsigned y=0;y<200;y++)for(unsigned x=0;x<320;x++){
-                uint8_t color=y<140?(uint8_t)(2+x/40%6):y<170?(uint8_t)(8+(x/10%2)):(uint8_t)((x/8+y/8)&1);
-                if(x%40==0||y%20==0)color=1;
-                if(x<2||x>=318||y<2||y>=198)color=1;
-                if((x<12&&y<12)||(x>=308&&y>=188))color=2;
-                if((x>=308&&y<12)||(x<12&&y>=188))color=4;
-                if(animate&&x>=phase%312&&x<phase%312+8)color=0;
-                pixels[y*320+x]=color;
+            for(unsigned y=0;y<QV_HEIGHT;y++)for(unsigned x=0;x<QV_WIDTH;x++){
+                unsigned sx=x*320/QV_WIDTH,sy=y*200/QV_HEIGHT;
+                uint8_t color=sy<140?(uint8_t)(2+sx/40%6):sy<170?(uint8_t)(8+(sx/10%2)):(uint8_t)((sx/8+sy/8)&1);
+                if(sx%40==0||sy%20==0)color=1;
+                if(sx<2||sx>=318||sy<2||sy>=198)color=1;
+                if((sx<12&&sy<12)||(sx>=308&&sy>=188))color=2;
+                if((sx>=308&&sy<12)||(sx<12&&sy>=188))color=4;
+                if(animate&&sx>=phase%312&&sx<phase%312+8)color=0;
+                pixels[y*QV_WIDTH+x]=color;
             }
-            display_fill_rect(0,40,160,150,COLOR_BLACK);
+            display_fill_rect(0,40,QV_X,150,COLOR_BLACK);
             display_draw_text(8,48,use_dma?"DMA EXACT":"CPU REF",COLOR_WHITE,COLOR_BLACK,1);
             display_draw_text(8,72,animate?"MOVING":"STATIC HOLD",COLOR_WHITE,COLOR_BLACK,1);
             display_draw_text(8,100,"SPACE: switch",COLOR_WHITE,COLOR_BLACK,1);
             display_draw_text(8,124,"A: move/pause",COLOR_WHITE,COLOR_BLACK,1);
             if(use_dma){if(!display_dma_present(pixels,old,palette_test,true)){kputs("quake visual: DMA transfer failed\n");quake_exit(1);}}
-            else display_draw_indexed_viewport_delta(160,pixels,old,palette_test,true);
+            else display_draw_indexed_viewport_delta(QV_X,pixels,old,palette_test,true);
             if(redraw||!animate||phase%60==0){
                 int bx,by;uint32_t bad=display_verify_viewport(pixels,palette_test,&bx,&by);char message[64];
                 ksnprintf(message,sizeof message,"MEM %s %u",bad?"FAIL":"PASS",bad);
-                display_fill_rect(1120,40,160,100,COLOR_BLACK);display_draw_text(1128,48,message,bad?RGB565(255,60,60):RGB565(80,255,100),COLOR_BLACK,1);
-                display_draw_text(1128,76,"MEMORY ONLY",COLOR_WHITE,COLOR_BLACK,1);
-                display_draw_text(1128,100,"CHECK SCREEN",COLOR_WHITE,COLOR_BLACK,1);
+                display_fill_rect(QV_X+QV_OUT_WIDTH,40,QV_X,100,COLOR_BLACK);display_draw_text(QV_X+QV_OUT_WIDTH+8,48,message,bad?RGB565(255,60,60):RGB565(80,255,100),COLOR_BLACK,1);
+                display_draw_text(QV_X+QV_OUT_WIDTH+8,76,"MEMORY ONLY",COLOR_WHITE,COLOR_BLACK,1);
+                display_draw_text(QV_X+QV_OUT_WIDTH+8,100,"CHECK SCREEN",COLOR_WHITE,COLOR_BLACK,1);
                 kprintf("quake visual: %s %s mismatches %u first %d,%d checksum %08x\n",use_dma?"dma":"cpu",animate?"moving":"static",bad,bx,by,display_viewport_checksum());
             }
             redraw=false;if(animate)phase++;
@@ -268,9 +269,9 @@ void quake_main(void *arg) {
     if(!keyboard_raw_claim(&quake_owner)){kputs("quake: native keyboard is busy\n");return;}
     kconsole_set_focus(task_current()->id);ime_bypass(true);fbcon_pause(true);screen=true;task_sleep(60);
     display_set_target(NULL);display_clear(COLOR_BLACK);
-    display_fill_rect(0,0,160,720,RGB565(15,22,30));display_fill_rect(1120,0,160,720,RGB565(15,22,30));
-    display_draw_text(48,284,"MOVE",COLOR_WHITE,RGB565(15,22,30),2);
-    display_draw_text(1168,188,"LOOK",COLOR_WHITE,RGB565(15,22,30),2);
+    display_fill_rect(0,0,QV_X,720,RGB565(15,22,30));display_fill_rect(QV_X+QV_OUT_WIDTH,0,QV_X,720,RGB565(15,22,30));
+    display_draw_text(QV_X/2-32,284,"MOVE",COLOR_WHITE,RGB565(15,22,30),2);
+    display_draw_text(QV_X+QV_OUT_WIDTH+QV_X/2-32,188,"LOOK",COLOR_WHITE,RGB565(15,22,30),2);
     paint_mask=0;paint_buttons(0,true);
     frames=0;began=hal_time_now_us();
     if(!setjmp(escape)) {
@@ -280,7 +281,7 @@ void quake_main(void *arg) {
         if(ppa_test||dma_test)quake_exit(0);
         if(visual_test)transfer_visual_test();
         if(blit_bench){transfer_benchmark();quake_exit(0);}
-        previous_frame=controls_only?NULL:quake_malloc(64000);palette_dirty=true;
+        previous_frame=controls_only?NULL:quake_malloc(QV_PIXELS);palette_dirty=true;
         if(controls_only) {
             display_draw_text(240,100,"QUAKE CONTROLS",COLOR_WHITE,COLOR_BLACK,3);
             display_draw_text(240,160,"WASD MOVE / ARROWS TURN",COLOR_WHITE,COLOR_BLACK,2);
@@ -308,7 +309,7 @@ void quake_main(void *arg) {
             }
         }
         quakeparms_t parms={0};parms.memsize=12*1024*1024;parms.membase=quake_malloc(parms.memsize);parms.basedir=quake_basedir;
-        char *args[9]={"quake","-basedir",quake_basedir,"-nocdaudio"};int ac=4;
+        char *args[11]={"quake","-basedir",quake_basedir,"-nocdaudio","-surfcachesize","600"};int ac=6;
         if(silent_requested)args[ac++]="-nosound";
         if(benchmark_start){args[ac++]="+map";args[ac++]=selected_map;}
         args[ac]=NULL;
@@ -317,7 +318,7 @@ void quake_main(void *arg) {
         Host_Init(&parms);
         Cbuf_AddText("bind w +forward\nbind s +back\nbind a +moveleft\nbind d +moveright\nbind f +attack\nbind e \"impulse 10\"\nbind / \"impulse 10\"\nbind UPARROW +forward\nbind DOWNARROW +back\nbind LEFTARROW +left\nbind RIGHTARROW +right\n+mlook\n");
         frames=0;profile_frames=0;began=profile_at=hal_time_now_us();
-        kputs("quake: Host_Init complete; interactive loop\n");
+        kprintf("quake: %ux%u -> %ux%u at %u,%u; Host_Init complete\n",QV_WIDTH,QV_HEIGHT,QV_OUT_WIDTH,QV_OUT_HEIGHT,QV_X,QV_Y);
         profile_reset();uint64_t last=hal_time_now_us();
         for(;;){
             uint64_t now=hal_time_now_us();unsigned before=frames;
@@ -362,6 +363,7 @@ int quake_command(int argc,char **argv) {
         if(!valid){kputs("usage: quake [dma|smooth|bench] [MAP] [--silent]; diagnostics: controls ppatest dmatest blitbench dmabench dmaview\n");return 1;}
         strcpy(selected_map,arg);map_set=true;benchmark_start=true;
     }
+    if(M5OS_QUAKE_HIGHRES&&smooth_requested){kputs("quake: smooth is only available at 320x200\n");return 1;}
     if(dma_requested&&smooth_requested){kputs("quake: choose dma or smooth\n");return 1;}
     ksnprintf(quake_basedir,sizeof quake_basedir,"%s",base);
     char path[128];ksnprintf(path,sizeof path,"%s/id1/pak0.pak",base);

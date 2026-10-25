@@ -13,6 +13,9 @@
 #include <unistd.h>
 #include <stdint.h>
 #include "profile.h"
+#include <m5os/quake_video.h>
+#define QUAKEGENERIC_RES_X QV_WIDTH
+#define QUAKEGENERIC_RES_Y QV_HEIGHT
 
 #ifndef QUAKE_COMPAT_DECLARATIONS_ONLY
 #undef stdin

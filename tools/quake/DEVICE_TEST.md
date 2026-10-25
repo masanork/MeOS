@@ -221,3 +221,45 @@ sampled stack guards remained intact. No constant-30-FPS claim is made. The
 measured image predates the final PR rebase onto newer network/storage commits;
 its identity, counters and explicit remaining physical gates are recorded in
 `dma-device-2026-10-25.json`. CPU remains the default path.
+
+## 512x300 baseline — 2026-10-26
+
+Source `f4e9ddb` was installed to OTA slot 0 only, preserving the factory image,
+other OTA slot and SD data. CPU 360 MHz, 128 KiB L2, 600 KiB surface cache and
+effect audio were held fixed. Full-view `timedemo demo1;toggleconsole` produced:
+
+| Mode | Run 1 | Run 2 | Frames per run |
+| --- | --- | --- | --- |
+| CPU | 90.4 s / 10.7 FPS | 90.3 s / 10.7 FPS | 969 |
+| Exact DMA | 168.7 s / 5.7 FPS | 168.7 s / 5.7 FPS | 969 |
+
+Static CPU/DMA references match `a4258a41`; moving DMA has zero pixel
+mismatches. Sampled stack guards pass; both measured-mode exits report zero
+audio underruns/errors and normal app relaunch succeeds. Human visual/audio
+and control acceptance at this resolution remains pending. The final app is
+CPU E1M1 at 512x300, expanded to 1024x600 at (128,60).
+
+The prior 320x200 DMA result was 32.0 FPS. This high-resolution adaptation
+exposes a transfer bottleneck: moving DMA intervals spend about 130 ms/frame
+in transfer, versus about 60 ms for CPU. Cache behavior of column traversal
+with a 150 KiB source and 128 KiB L2 is a follow-up hypothesis, not an isolated
+cause. See `hires-device-2026-10-26.json` for image identity and raw run values.
+
+## High-resolution tiled transfers — 2026-10-26
+
+The 16-column candidate (`2dff44f`) returned CPU 14.1 / 14.1 FPS and DMA
+16.0 / 16.0 FPS. The selected 64-column candidate (`926ffec`) returned CPU
+15.9 / 15.9 FPS (60.8 seconds each) and DMA 17.5 / 17.5 FPS (55.4 seconds each),
+all full-view 969-frame demo1 with effect audio and baseline clock/cache/math.
+Both candidate modes pass native static/moving pixel comparisons; the static
+reference remains `a4258a41`. The user confirmed normal display on 16 columns and normal display/controls
+on the final 64-column DMA game after relaunch.
+
+The selected candidate peaks at 30,896 / 49,152 sampled stack bytes, guard OK;
+normal CPU/DMA exits report zero audio underruns/errors. The internal-stack
+tile grows to 19,200 bytes but is never passed to DMA. Existing persistent
+SRAM transfer buffers and bounded DMA shutdown remain unchanged. A known
+post-diagnostic internal-heap fragmentation startup failure required a reset
+and early game start; normal measured game quit/relaunches then passed.
+Both resolution builds and ASan/UBSan checks pass; low-resolution transfer
+branches remain unchanged. See the two `hires-tile*-device-2026-10-26.json` files.

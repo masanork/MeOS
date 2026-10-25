@@ -169,3 +169,7 @@ if("$ENV{M5OS_QUAKE}" STREQUAL "1")
         ${M5OS_ROOT}/hal/common/gpio_basic.c
         PROPERTIES COMPILE_OPTIONS "-O2;-fno-builtin")
 endif()
+
+if("$ENV{M5OS_QUAKE}" STREQUAL "1" AND "$ENV{M5OS_QUAKE_RESOLUTION}" STREQUAL "512x300")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE M5OS_QUAKE_HIGHRES=1)
+endif()

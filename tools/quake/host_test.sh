@@ -31,3 +31,9 @@ cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined tools/quak
 
 cc -std=c11 -Wall -Wextra -Werror -O2 -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -DM5OS_QUAKE=1 -Ikernel/include tools/quake/profile_test.c apps/quake/profile.c -o "$OUT/profile-test"
 "$OUT/profile-test"
+
+cc -std=c11 -Wall -Wextra -Werror -O3 -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -DM5OS_QUAKE_HIGHRES=1 -Ikernel/include tools/quake/hires_test.c -o "$OUT/hires-test"
+"$OUT/hires-test"
+
+cc -std=c11 -Wall -Wextra -Werror -g -fsanitize=address,undefined -DM5OS_BOARD_TAB5=1 -DM5OS_QUAKE=1 -DM5OS_QUAKE_HIGHRES=1 -Ikernel/include tools/quake/input_test.c apps/quake/input.c kernel/dev/keyboard_raw.c drivers/usbkbd/hid_keys.c -o "$OUT/hires-input-test"
+"$OUT/hires-input-test"

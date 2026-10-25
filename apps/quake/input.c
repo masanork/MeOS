@@ -74,7 +74,7 @@ void quake_input_sample(int mode,const keyboard_raw_state *raw,const tab5_touch_
  for(unsigned j=0;j<count;j++){
   int i=quake_button_at(points[j].x,points[j].y);
   if(i>=0){touch_mask|=1u<<i;if(i==QB_EXIT)action=1;else{int key=quake_button_key((unsigned)i,mode==3);if(key>=0){wanted[key]=true;other[key]=true;}}}
-  else if(mode==0 && points[j].x>=160&&points[j].x<1120 && points[j].y>=0&&points[j].y<720){
+  else if(mode==0 && points[j].x>=QV_X&&points[j].x<QV_X+QV_OUT_WIDTH && points[j].y>=QV_Y&&points[j].y<QV_Y+QV_OUT_HEIGHT){
    if(look<0||look_id==points[j].id)look=(int)j;
   }
  }
