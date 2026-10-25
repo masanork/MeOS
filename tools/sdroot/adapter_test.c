@@ -6,11 +6,12 @@
 #include <m5os/kmalloc.h>
 #include <m5os/mutex.h>
 #include <m5os/sdcard.h>
+#include <m5os/task.h>
 #include <m5os/vfs.h>
 #define SECTORS 65536u
 static unsigned char *card;
 static unsigned probe_failures,probe_attempts,probe_delays,write_requests,max_read_blocks,max_write_blocks;
-static bool fail_reads;
+static bool fail_reads,fail_asset_alloc=true;
 static uint64_t fake_time;
 uint64_t hal_time_now_us(void){return fake_time+=1000;}
 void hal_delay_us(uint32_t us){assert(us==100000);probe_delays++;}
@@ -22,9 +23,11 @@ bool fat_is_mounted(void){return fat_busy;}
 blockdev_t *sdcard_probe(void){probe_attempts++;if(probe_failures){probe_failures--;return NULL;}return &device;}
 void sdcard_status(sdcard_status_t *s){*s=(sdcard_status_t){.probed=true,.ready=true,.sectors=SECTORS,.high_capacity=true,.detail="test probe"};}
 void *kmalloc(size_t n){return malloc(n);}
-void *kmalloc_psram(size_t n){return malloc(n);}
+void *kmalloc_psram(size_t n){return fail_asset_alloc&&n>1024u*1024u?NULL:malloc(n);}
 void *kcalloc(size_t n,size_t z){return calloc(n,z);}
 void kfree(void *p){free(p);}
+static task_t host_task;
+task_t *task_current(void){return &host_task;}
 void mutex_lock(mutex_t *m){assert(!m->owner);m->owner=(void *)1;}
 void mutex_unlock(mutex_t *m){assert(m->owner);m->owner=NULL;}
 void kprintf(const char *fmt,...){va_list ap;va_start(ap,fmt);vprintf(fmt,ap);va_end(ap);}
@@ -38,6 +41,24 @@ static void verify(const char *text){
     int fd=fs_open("/home/sd-boot.txt",FS_O_READ);assert(fd>=0);
     char b[80]={0};int n=fs_read(fd,b,sizeof b);
     assert(n==(int)strlen(text)&&!memcmp(b,text,(size_t)n));assert(!fs_close(fd));
+}
+static void verify_asset_read(bool cached){
+    enum { BYTES=128*1024 };unsigned char *src=malloc(BYTES),*dst=malloc(BYTES);assert(src&&dst);
+    for(size_t i=0;i<BYTES;i++)src[i]=(unsigned char)(i*29u+(i>>9));
+    void *file=NULL;assert(!asset_open(NULL,"/readahead.bin",VFS_O_WRITE|VFS_O_CREATE|VFS_O_TRUNC,&file));
+    assert(asset_write(file,src,BYTES)==BYTES);assert(!asset_close(file));
+    sdroot_io_reset();file=NULL;assert(!asset_open(NULL,"/readahead.bin",VFS_O_READ,&file));
+    assert(asset_read(file,dst,BYTES)==BYTES);assert(!memcmp(src,dst,BYTES));assert(!asset_close(file));
+    if(cached) {
+        assert(io_stats.cache_misses>0&&io_stats.cache_hits>io_stats.cache_misses);
+        assert(io_stats.sector_hits>0&&io_stats.sector_misses>0);
+        assert(io_stats.physical_calls<io_stats.calls&&max_read_blocks>=READ_AHEAD_BYTES/512u);
+    } else {
+        assert(!io_stats.cache_hits&&!io_stats.cache_misses);
+        assert(!io_stats.sector_hits&&!io_stats.sector_misses);
+        assert(io_stats.physical_calls==io_stats.calls);
+    }
+    assert(!asset_unlink(NULL,"/readahead.bin"));free(dst);free(src);
 }
 int main(void){
     card=malloc((size_t)SECTORS*512);assert(card);memset(card,0xff,(size_t)SECTORS*512);
@@ -58,6 +79,12 @@ int main(void){
     close_files();
     probe_failures=2;unsigned attempts=probe_attempts,delays=probe_delays;
     assert(!sdroot_mount());assert(probe_attempts-attempts==3&&probe_delays-delays==2);
+    assert(!asset_buffers);
+    assert(!sdroot_assets_mount());
+    verify_asset_read(false);
+    assert(!fs_unmount());close_files();fail_asset_alloc=false;
+    assert(!sdroot_mount()&&!asset_buffers);assert(!sdroot_assets_mount()&&asset_buffers);
+    verify_asset_read(true);
     unsigned before=write_requests,probed=probe_attempts;
     assert(sdroot_format(SECTORS)<0);assert(sdroot_mount()<0);
     assert(write_requests==before&&probe_attempts==probed);

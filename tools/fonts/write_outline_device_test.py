@@ -53,6 +53,15 @@ def main():
         link.reset_input_buffer()
         link.write(b"\x03\r")
         read_until(b"> ", 10)
+        # The shell becomes ready before the asynchronous 5 MiB IME dictionary
+        # finishes loading.  Do not count that intentional resident allocation
+        # as a Write leak on boards that reset when USB serial is opened.
+        for _ in range(60):
+            if "imedict" not in command("ps"):
+                break
+            time.sleep(0.5)
+        else:
+            raise TimeoutError("waiting for background IME dictionary load")
         before = free_psram(command("mem"))
         link.reset_input_buffer()
         link.write(f"write {args.file}\r".encode())

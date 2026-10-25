@@ -22,7 +22,7 @@
 
 #define SLOT                 0u
 #define BLOCK_BYTES          512u
-#define DMA_BLOCKS           16u
+#define DMA_BLOCKS           128u
 #define DMA_BYTES            (DMA_BLOCKS * BLOCK_BYTES)
 #define CACHE_LINE_BYTES     128u
 #define INIT_TIMEOUT_MS      1500u

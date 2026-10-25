@@ -58,6 +58,12 @@ def main():
         link.reset_input_buffer()
         link.write(b"\x03\r")
         read_until(b"> ", 10)
+        for _ in range(60):
+            if "imedict" not in command("ps"):
+                break
+            time.sleep(0.5)
+        else:
+            raise TimeoutError("waiting for background IME dictionary load")
         listing = command("ls /assets/fonts/BIZUDGothic-Regular.ttf")
         if "4667380" not in listing:
             raise RuntimeError(f"pinned TTF missing or wrong size: {listing!r}")

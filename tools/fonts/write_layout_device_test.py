@@ -72,6 +72,7 @@ def main():
             read_until(f"PUTACK {sent}\r\n".encode(), 30)
         read_until(f"PUTDONE {len(payload)} {checksum:08x}\r\n".encode(), 30)
         read_until(b"> ", 10)
+        command("sdroot io-reset")
 
         pending.clear()
         started = time.monotonic()
@@ -86,9 +87,27 @@ def main():
             raise RuntimeError(f"resident face receipt missing: {receipt[-800:]!r}")
         link.write(b"\x11")
         read_until(b"> ", 60)
+        io = command("sdroot")
+        match = re.search(rb"SDROOT IO reads=(\d+) sectors=(\d+) full4k=(\d+) "
+                          rb"adjacent=\+(\d+)/-(\d+) other=(\d+)", io)
+        if not match:
+            raise RuntimeError(f"SDROOT I/O receipt missing: {io[-800:]!r}")
+        reads, sectors, full4k, forward, backward, other = map(int, match.groups())
+        cache = re.search(rb"SDROOT CACHE hit=(\d+) miss=(\d+) physical=(\d+)/(\d+) sectors", io)
+        if not cache:
+            raise RuntimeError(f"SDROOT cache receipt missing: {io[-800:]!r}")
+        hits, misses, physical, physical_sectors = map(int, cache.groups())
+        sectors_cached = re.search(rb"SDROOT SECTOR hit=(\d+) miss=(\d+) slots=(\d+)", io)
+        if not sectors_cached:
+            raise RuntimeError(f"SDROOT sector-cache receipt missing: {io[-800:]!r}")
+        sector_hits, sector_misses, sector_slots = map(int, sectors_cached.groups())
         command(f"rm {args.file}")
         print(f"WRITE LAYOUT DEVICE PASS: {len(payload)} bytes, 900 distinct CJK; "
-              f"adaptive resident cold ready {ready_ms} ms; temporary file removed")
+              f"adaptive resident cold ready {ready_ms} ms; "
+              f"SD reads {reads}/{sectors} sectors, full4k {full4k}, "
+              f"adjacent +{forward}/-{backward}, other {other}; cache {hits}/{misses}, "
+              f"sector-cache {sector_hits}/{sector_misses}/{sector_slots}, "
+              f"physical {physical}/{physical_sectors} sectors; temporary file removed")
     finally:
         link.close()
 

@@ -1179,13 +1179,16 @@ static int cmd_sdroot(int argc, char **argv)
 {
     uint32_t sectors;
     if (argc == 1) { sdroot_status(); return 0; }
+    if (argc == 2 && sh_streq(argv[1], "io-reset")) {
+        sdroot_io_reset(); sh_puts("SDROOT IO reset\n"); return 0;
+    }
     if (argc == 3 && sh_streq(argv[1], "format") && parse_uint(argv[2], &sectors)) {
         int rc = sdroot_format(sectors); SH_PRINTF("sdroot format rc=%d\n", rc); return rc != 0;
     }
     if (argc == 3 && sh_streq(argv[1], "save")) {
         int rc = sdroot_save_probe(argv[2]); SH_PRINTF("SDROOT SAVE rc=%d\n", rc); return rc != 0;
     }
-    sh_puts("usage: sdroot [format EXPECTED_SECTORS | save TEXT]\n"); return 1;
+    sh_puts("usage: sdroot [io-reset | format EXPECTED_SECTORS | save TEXT]\n"); return 1;
 }
 static int cmd_devices(int argc, char **argv)
 {

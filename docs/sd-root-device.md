@@ -148,3 +148,26 @@ but this is not a controlled transport-only comparison: the cards and filesystem
 differ. The current littlefs adapter issues 512-byte sector operations, so this
 measurement is far below the native bus ceiling and identifies batching as the
 next performance target. No media writes were performed in this validation.
+
+## Bounded asset-read cache (2026-10-25)
+
+The `/assets` path now coalesces sequential littlefs reads into two 64 KiB
+read-ahead windows and retains 2,048 four-way 512-byte sectors for metadata and
+CTZ traversal. The native SDMMC driver accepts the resulting 128-sector request
+as one DMA command. Writes and erases invalidate both caches. Only the task
+performing an asset read enables this path, so COW recovery and unrelated
+littlefs operations retain their normal behavior.
+
+The cache is an optional 1,170 KiB PSRAM allocation, separate from buffers that
+are required to mount the root. If it cannot be allocated, `/assets` continues
+with direct I/O. `sdroot io-reset` clears the cache and counters; `sdroot` reports
+logical reads, adjacency, hits/misses and physical requests for diagnosis.
+
+On the same Tab5 and card, a cold Write layout of a temporary document containing
+900 distinct CJK characters fell from 9.947 s immediately before caching to
+3.487 s. The passing cached run made 12,406 logical littlefs reads but only 1,865
+physical SD reads; the 2,048-sector cache recorded 8,157 hits and 1,762 misses.
+The temporary document was removed. A 24 px FreeType run and Write's 24/28/32 px
+switching both reclaimed their application memory after exit. This qualifies one
+card and workload, not hot removal, concurrent network saturation, power-cut
+behavior or other cards.

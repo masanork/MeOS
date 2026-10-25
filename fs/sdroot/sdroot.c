@@ -3,6 +3,7 @@
 #include <m5os/sdroot.h>
 #include <m5os/vfs.h>
 #include <m5os/mutex.h>
+#include <m5os/task.h>
 #ifndef LFS_THREADSAFE
 #define LFS_THREADSAFE
 #endif
@@ -22,7 +23,14 @@
 #define BANK_BYTES (12u*1024u*1024u) /* full 8 MiB snapshot + transaction headroom */
 #define ERASE_BYTES 4096u
 #define CACHE_BYTES 4096u
+#define READ_AHEAD_BYTES (64u*1024u)
+#define READ_AHEAD_BLOCKS (READ_AHEAD_BYTES/ERASE_BYTES)
+#define READ_AHEAD_SLOTS 2u
+#define SECTOR_CACHE_SETS 512u
+#define SECTOR_CACHE_WAYS 4u
+#define SECTOR_CACHE_SLOTS (SECTOR_CACHE_SETS*SECTOR_CACHE_WAYS)
 static mutex_t lfs_mutex=MUTEX_INIT;
+static mutex_t asset_read_mutex=MUTEX_INIT;
 static int lock_lfs(const struct lfs_config *c){(void)c;mutex_lock(&lfs_mutex);return 0;}
 static int unlock_lfs(const struct lfs_config *c){(void)c;mutex_unlock(&lfs_mutex);return 0;}
 static blockdev_t *sd;
@@ -34,7 +42,15 @@ struct root_buffers {
     unsigned char bounce[ERASE_BYTES],base_cache[CACHE_BYTES];
     unsigned char bank_cache[2][CACHE_BYTES];
 };
+struct asset_cache_buffers {
+    unsigned char read_ahead[READ_AHEAD_SLOTS][READ_AHEAD_BYTES];
+    unsigned char sector_cache[SECTOR_CACHE_SLOTS][512];
+    uint32_t sector_cache_tag[SECTOR_CACHE_SLOTS];
+    uint32_t sector_cache_stamp[SECTOR_CACHE_SLOTS];
+    bool sector_cache_valid[SECTOR_CACHE_SLOTS];
+};
 static struct root_buffers *buffers;
+static struct asset_cache_buffers *asset_buffers;
 static lfs_file_t base_file;
 static struct lfs_file_config base_cfg;
 struct bank_file { lfs_file_t file; struct lfs_file_config cfg; };
@@ -44,19 +60,97 @@ static blockdev_t root_bd;
 static uint32_t *index_map;
 static uint64_t identity;
 static bool mounted,active,opened;
+static struct {
+    uint32_t calls,sectors,full_blocks,forward,backward,other,last_full;
+    uint32_t cache_hits,cache_misses,physical_calls,physical_sectors;
+    uint32_t sector_hits,sector_misses;
+    bool have_full;
+} io_stats;
+static task_t *asset_read_owner;
+static uint32_t read_ahead_base[READ_AHEAD_SLOTS],read_ahead_sectors[READ_AHEAD_SLOTS];
+static uint32_t read_ahead_stamp[READ_AHEAD_SLOTS],read_ahead_clock;
+static bool read_ahead_valid[READ_AHEAD_SLOTS];
+static uint32_t sector_cache_clock;
+static void invalidate_read_ahead(void){
+    memset(read_ahead_valid,0,sizeof read_ahead_valid);
+    if(asset_buffers)memset(asset_buffers->sector_cache_valid,0,sizeof asset_buffers->sector_cache_valid);
+}
+static void ensure_asset_cache(void){
+    if(asset_buffers)return;
+    asset_buffers=kmalloc_psram(sizeof *asset_buffers);
+    if(asset_buffers) {
+        memset(asset_buffers->sector_cache_valid,0,sizeof asset_buffers->sector_cache_valid);
+        kprintf("sdroot: asset read cache %u KiB\n",(uint32_t)(sizeof *asset_buffers/1024u));
+    } else kputs("sdroot: asset read cache unavailable; using direct I/O\n");
+}
 static void mount_mark(const char *stage,uint64_t start,uint64_t *last) {
     uint64_t now=hal_time_now_us();
     kprintf("SDROOT +%u ms (%u ms) %s\n",(uint32_t)((now-start)/1000u),(uint32_t)((now-*last)/1000u),stage);
     *last=now;
 }
 static int disk_read(const struct lfs_config *c,lfs_block_t b,lfs_off_t off,void *p,lfs_size_t n) {
-    (void)c;return sd->read(sd,b*8+off/512,n/512,p)?LFS_ERR_IO:0;
+    (void)c;io_stats.calls++;io_stats.sectors+=n/512;
+    if(off==0&&n==ERASE_BYTES) {
+        io_stats.full_blocks++;
+        if(io_stats.have_full) {
+            if(b==io_stats.last_full+1)io_stats.forward++;
+            else if(b+1==io_stats.last_full)io_stats.backward++;
+            else io_stats.other++;
+        }
+        io_stats.last_full=b;io_stats.have_full=true;
+    }
+    uint32_t sector=b*8+off/512,sectors=n/512;
+    if(asset_read_owner==task_current()&&asset_buffers) {
+        uint32_t region=b&~(READ_AHEAD_BLOCKS-1u),region_sector=region*8u;
+        unsigned slot=READ_AHEAD_SLOTS;
+        for(unsigned i=0;i<READ_AHEAD_SLOTS;i++)if(read_ahead_valid[i]&&read_ahead_base[i]==region){slot=i;break;}
+        if(slot==READ_AHEAD_SLOTS&&off==0&&n==ERASE_BYTES) {
+            uint32_t oldest=UINT32_MAX;slot=0;
+            for(unsigned i=0;i<READ_AHEAD_SLOTS;i++) {
+                if(!read_ahead_valid[i]){slot=i;oldest=0;break;}
+                if(read_ahead_stamp[i]<oldest){oldest=read_ahead_stamp[i];slot=i;}
+            }
+            uint32_t available=sd->block_count-region_sector;
+            uint32_t fill=available>READ_AHEAD_BYTES/512u?READ_AHEAD_BYTES/512u:available;
+            io_stats.cache_misses++;io_stats.physical_calls++;io_stats.physical_sectors+=fill;
+            if(sd->read(sd,region_sector,fill,asset_buffers->read_ahead[slot]))return LFS_ERR_IO;
+            read_ahead_base[slot]=region;read_ahead_sectors[slot]=fill;
+            read_ahead_valid[slot]=true;
+        } else if(slot<READ_AHEAD_SLOTS) io_stats.cache_hits++;
+        if(slot<READ_AHEAD_SLOTS) {
+            read_ahead_stamp[slot]=++read_ahead_clock;
+            uint32_t in_region=sector-region_sector;
+            if(in_region>read_ahead_sectors[slot]||sectors>read_ahead_sectors[slot]-in_region)return LFS_ERR_IO;
+            memcpy(p,asset_buffers->read_ahead[slot]+in_region*512u,n);return 0;
+        }
+        if(sectors==1&&n==512) {
+            unsigned set=(sector*2654435761u)&(SECTOR_CACHE_SETS-1u);
+            unsigned first=set*SECTOR_CACHE_WAYS,small=first;uint32_t oldest=UINT32_MAX;
+            for(unsigned i=0;i<SECTOR_CACHE_WAYS;i++) {
+                unsigned at=first+i;
+                if(asset_buffers->sector_cache_valid[at]&&asset_buffers->sector_cache_tag[at]==sector) {
+                    asset_buffers->sector_cache_stamp[at]=++sector_cache_clock;io_stats.sector_hits++;
+                    memcpy(p,asset_buffers->sector_cache[at],512);return 0;
+                }
+                if(!asset_buffers->sector_cache_valid[at]){small=at;oldest=0;break;}
+                if(asset_buffers->sector_cache_stamp[at]<oldest){oldest=asset_buffers->sector_cache_stamp[at];small=at;}
+            }
+            io_stats.sector_misses++;io_stats.physical_calls++;io_stats.physical_sectors++;
+            if(sd->read(sd,sector,1,asset_buffers->sector_cache[small]))return LFS_ERR_IO;
+            asset_buffers->sector_cache_tag[small]=sector;
+            asset_buffers->sector_cache_stamp[small]=++sector_cache_clock;
+            asset_buffers->sector_cache_valid[small]=true;
+            memcpy(p,asset_buffers->sector_cache[small],512);return 0;
+        }
+    }
+    io_stats.physical_calls++;io_stats.physical_sectors+=sectors;
+    return sd->read(sd,sector,sectors,p)?LFS_ERR_IO:0;
 }
 static int disk_prog(const struct lfs_config *c,lfs_block_t b,lfs_off_t off,const void *p,lfs_size_t n) {
-    (void)c;return sd->write(sd,b*8+off/512,n/512,p)?LFS_ERR_IO:0;
+    (void)c;invalidate_read_ahead();return sd->write(sd,b*8+off/512,n/512,p)?LFS_ERR_IO:0;
 }
 static int disk_erase(const struct lfs_config *c,lfs_block_t b) {
-    (void)c;memset(buffers->bounce,0xff,sizeof buffers->bounce);
+    (void)c;invalidate_read_ahead();memset(buffers->bounce,0xff,sizeof buffers->bounce);
     return sd->write(sd,b*8,ERASE_BYTES/512,buffers->bounce)?LFS_ERR_IO:0;
 }
 static int disk_sync(const struct lfs_config *c) {
@@ -73,6 +167,7 @@ static int prepare(void) {
     }
     if(!sd)return ERR_NODEV;
     if(!buffers){buffers=kmalloc_psram(sizeof *buffers);if(!buffers)return ERR_NOMEM;}
+    invalidate_read_ahead();
     cfg=(struct lfs_config){.lock=lock_lfs,.unlock=unlock_lfs,.read=disk_read,.prog=disk_prog,.erase=disk_erase,.sync=disk_sync,
         .read_size=512,.prog_size=512,.block_size=ERASE_BYTES,.block_count=sd->block_count/8,
         .block_cycles=500,.cache_size=CACHE_BYTES,.lookahead_size=sizeof lookahead,
@@ -185,7 +280,18 @@ void sdroot_status(void){
     sdcard_status_t st;sdcard_status(&st);
     kprintf("SDROOT active=%u card_sectors=%u high_capacity=%u littlefs=%u\n",active,st.sectors,st.high_capacity,mounted);
     if(active)kprintf("SDROOT epoch=%u bank=%u committed=%u logical_KiB=%u index_KiB=64\n",(uint32_t)store.epoch,store.selected,store.view.committed,ROOT_SECTORS/2);
+    mutex_lock(&lfs_mutex);
+    kprintf("SDROOT IO reads=%u sectors=%u full4k=%u adjacent=+%u/-%u other=%u\n",
+            io_stats.calls,io_stats.sectors,io_stats.full_blocks,
+            io_stats.forward,io_stats.backward,io_stats.other);
+    kprintf("SDROOT CACHE hit=%u miss=%u physical=%u/%u sectors\n",
+            io_stats.cache_hits,io_stats.cache_misses,
+            io_stats.physical_calls,io_stats.physical_sectors);
+    kprintf("SDROOT SECTOR hit=%u miss=%u slots=%u\n",
+            io_stats.sector_hits,io_stats.sector_misses,SECTOR_CACHE_SLOTS);
+    mutex_unlock(&lfs_mutex);
 }
+void sdroot_io_reset(void){mutex_lock(&lfs_mutex);memset(&io_stats,0,sizeof io_stats);invalidate_read_ahead();mutex_unlock(&lfs_mutex);}
 static int save(const fs_tx_ops_t *ops,void *ctx){
     const char *text=ctx;int fd=ops->open("/home/sd-boot.txt",FS_O_WRITE|FS_O_CREATE|FS_O_TRUNC);
     if(fd<0)return fd;
@@ -227,7 +333,11 @@ static int asset_open(void *ctx,const char *rel,uint32_t flags,void **out){
     if(rc){kfree(f);return asset_error(rc);}*out=f;return 0;
 }
 static int asset_close(void *file){struct asset_file *f=file;int rc=lfs_file_close(&lfs,&f->file);kfree(f);return asset_error(rc);}
-static int asset_read(void *file,void *buf,size_t n){return asset_error(lfs_file_read(&lfs,&((struct asset_file *)file)->file,buf,n));}
+static int asset_read(void *file,void *buf,size_t n){
+    mutex_lock(&asset_read_mutex);asset_read_owner=task_current();
+    int rc=lfs_file_read(&lfs,&((struct asset_file *)file)->file,buf,n);
+    asset_read_owner=NULL;mutex_unlock(&asset_read_mutex);return asset_error(rc);
+}
 static int asset_write(void *file,const void *buf,size_t n){return asset_error(lfs_file_write(&lfs,&((struct asset_file *)file)->file,buf,n));}
 static int asset_seek(void *file,int32_t offset,int whence){return asset_error(lfs_file_seek(&lfs,&((struct asset_file *)file)->file,offset,whence));}
 static int asset_stat(void *ctx,const char *rel,vfs_info_t *out){
@@ -256,6 +366,8 @@ static const vfs_fs_t assets_vfs={.name="sd-assets",.open=asset_open,.close=asse
 int sdroot_assets_mount(void){
     if(!active)return ERR_NODEV;
     int rc=lfs_mkdir(&lfs,"/assets");if(rc&&rc!=LFS_ERR_EXIST)return asset_error(rc);
-    return vfs_mount("/assets",&assets_vfs,NULL);
+    rc=vfs_mount("/assets",&assets_vfs,NULL);
+    if(!rc)ensure_asset_cache();
+    return rc;
 }
 #endif

@@ -41,7 +41,10 @@ VFS stream cache. Documents of at least 8 KiB with 256 distinct non-ASCII
 characters open the face from a 4.67 MiB PSRAM copy; allocation or I/O failure
 falls back to the stream face. This avoids a nine-second full
 font read for ordinary notes while eliminating repeated random microSD reads
-for diverse long-form text. The bounded 384-glyph 4-bit cache and font source
+for diverse long-form text. The SD-root asset path can satisfy sequential font
+reads from two 64 KiB windows and repeated littlefs traversal from a 1 MiB
+four-way sector cache; it falls back to direct I/O if PSRAM is unavailable.
+The bounded 384-glyph 4-bit cache and font source
 are released on exit. A separate four-way metrics cache lets full
 document layout obtain advances without rasterizing off-screen glyphs. The
 pinned `vrt2` codepoint-to-glyph map is
