@@ -12,6 +12,10 @@ typedef struct {
     int y;
 } bizime_vpoint;
 
+/* Select the already-open outline renderer for the active editor.  False is
+ * the fixed BIZ UD atlas used by Scheme and by the Write fallback path. */
+void bizime_set_font(bool outline, unsigned pixel_size);
+
 /* Return the insertion point after the preedit, including proportional wrap,
  * without drawing. Editors use this to reflow committed text behind it. */
 bizime_point bizime_measure(const ime_view *view, int x, int baseline,

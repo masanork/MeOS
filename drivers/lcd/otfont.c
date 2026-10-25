@@ -24,10 +24,13 @@
 
 typedef struct {
     uint32_t glyph,stamp;
-    uint16_t pixel_size,advance;
+    uint16_t pixel_size,advance,vadvance;
     int16_t left,top;
     uint8_t width,height,valid;
 } cache_entry;
+
+typedef struct {uint32_t cp;uint16_t glyph;} vertical_map_entry;
+#include "otfont_bizud_vertical.inc"
 
 typedef struct {
     struct FT_MemoryRec_ memory;
@@ -165,10 +168,18 @@ void otfont_end(void) {
     if(s_font.users&&!--s_font.users)release_all();
 }
 
+bool otfont_set_pixel_size(unsigned pixel_size) {
+    if(!s_font.users||pixel_size<12||pixel_size>48)return false;
+    if(pixel_size==s_font.pixel_size)return true;
+    if(FT_Set_Pixel_Sizes(s_font.face,0,pixel_size))return false;
+    memset(s_font.entries,0,sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
+    s_font.pixel_size=pixel_size;return true;
+}
+
 static uint8_t *cell(unsigned slot) {return s_font.cells+slot*OTFONT_CELL_BYTES;}
 
-static cache_entry *glyph(uint32_t cp,unsigned *slot_out) {
-    FT_UInt index=FT_Get_Char_Index(s_font.face,cp);if(!index)return 0;
+static cache_entry *glyph_index(FT_UInt index,unsigned *slot_out) {
+    if(!index)return 0;
     unsigned victim=0;uint32_t oldest=UINT32_MAX;
     for(unsigned i=0;i<OTFONT_CACHE_SLOTS;i++) {
         cache_entry *e=&s_font.entries[i];
@@ -194,8 +205,22 @@ static cache_entry *glyph(uint32_t cp,unsigned *slot_out) {
     }
     e->glyph=index;e->pixel_size=(uint16_t)s_font.pixel_size;
     e->advance=(uint16_t)((g->advance.x+32)>>6);e->left=(int16_t)g->bitmap_left;e->top=(int16_t)g->bitmap_top;
+    e->vadvance=(uint16_t)((g->metrics.vertAdvance+32)>>6);
+    if(!e->vadvance)e->vadvance=(uint16_t)s_font.pixel_size;
     e->width=(uint8_t)b->width;e->height=(uint8_t)b->rows;e->stamp=++s_font.stamp;e->valid=1;
     s_font.misses++;s_font.raster_us+=hal_time_now_us()-started;*slot_out=victim;return e;
+}
+
+static cache_entry *glyph(uint32_t cp,unsigned *slot_out) {
+    return glyph_index(FT_Get_Char_Index(s_font.face,cp),slot_out);
+}
+
+static FT_UInt vertical_glyph_index(uint32_t cp) {
+    unsigned lo=0,hi=(unsigned)(sizeof bizud_vertical_map/sizeof bizud_vertical_map[0]);
+    while(lo<hi){unsigned mid=(lo+hi)/2;if(bizud_vertical_map[mid].cp<cp)lo=mid+1;else hi=mid;}
+    if(lo<(unsigned)(sizeof bizud_vertical_map/sizeof bizud_vertical_map[0])&&
+       bizud_vertical_map[lo].cp==cp)return bizud_vertical_map[lo].glyph;
+    return FT_Get_Char_Index(s_font.face,cp);
 }
 
 int otfont_width(uint32_t cp) {
@@ -219,6 +244,23 @@ int otfont_draw(int x,int baseline,uint32_t cp,uint16_t fg,uint16_t bg) {
     for(unsigned p=0;p<pixels;p++){unsigned byte=packed[p/2],a=(p&1)?byte&15:byte>>4;s_font.scratch[p]=blend(fg,bg,a);}
     if(pixels)display_draw_bitmap(x+e->left,baseline-e->top,e->width,e->height,s_font.scratch);
     return e->advance;
+}
+
+int otfont_vertical_advance(uint32_t cp) {
+    if(!s_font.users)return 0;
+    unsigned slot=0;cache_entry *e=glyph_index(vertical_glyph_index(cp),&slot);
+    return e?e->vadvance:(int)s_font.pixel_size;
+}
+
+int otfont_draw_vertical(int x,int top,uint32_t cp,uint16_t fg,uint16_t bg) {
+    if(!s_font.users)return 0;
+    unsigned slot=0;cache_entry *e=glyph_index(vertical_glyph_index(cp),&slot);
+    if(!e){display_draw_rect(x+3,top+3,(int)s_font.pixel_size-5,(int)s_font.pixel_size-3,fg);return (int)s_font.pixel_size;}
+    unsigned pixels=(unsigned)e->width*e->height;uint8_t *packed=cell(slot);
+    for(unsigned p=0;p<pixels;p++){unsigned byte=packed[p/2],a=(p&1)?byte&15:byte>>4;s_font.scratch[p]=blend(fg,bg,a);}
+    int baseline=top+(int)(s_font.pixel_size*21u+12u)/24;
+    if(pixels)display_draw_bitmap(x+e->left,baseline-e->top,e->width,e->height,s_font.scratch);
+    return e->vadvance;
 }
 
 int otfont_text(int x,int baseline,const char *text,int right,uint16_t fg,uint16_t bg) {

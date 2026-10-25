@@ -17,11 +17,19 @@
 #define GUIDE RGB565(205,215,218)
 #define LEFT 48
 #define RIGHT (DISPLAY_WIDTH-48)
+#define TEXT_RIGHT 850
 
 static const char *sample1="日本語と English を、無理なく読める大きさで。";
 static const char *sample2="文章を書く道具として、文字の形と間隔を比較します。0123456789";
 
-static void atlas_line(int y,const char *text) {bizud_text(LEFT,y,text,RIGHT,FG,BG);}
+static void atlas_line(int y,const char *text) {bizud_text(LEFT,y,text,TEXT_RIGHT,FG,BG);}
+static void vertical_column(int x,int y,const char *text,bool outline) {
+    while(*text) {
+        uint32_t cp=bizud_decode(&text);
+        int advance=outline?otfont_draw_vertical(x,y,cp,FG,BG):bizud_draw_vertical(x,y,cp,FG,BG);
+        y+=advance+5;
+    }
+}
 
 bool fontbench_run(unsigned pixel_size) {
     static uint8_t owner;if(!display_try_claim(&owner))return false;
@@ -39,12 +47,12 @@ bool fontbench_run(unsigned pixel_size) {
     display_fill_rect(LEFT,162,RIGHT-LEFT,1,GUIDE);atlas_line(162,sample2);
     bizud_text(LEFT,232,"FreeType（ヒンティングあり）",RIGHT,ACCENT,BG);
     uint64_t first=hal_time_now_us();
-    display_fill_rect(LEFT,270,RIGHT-LEFT,1,GUIDE);otfont_text(LEFT,270,sample1,RIGHT,FG,BG);
-    display_fill_rect(LEFT,320,RIGHT-LEFT,1,GUIDE);otfont_text(LEFT,320,sample2,RIGHT,FG,BG);
+    display_fill_rect(LEFT,270,TEXT_RIGHT-LEFT,1,GUIDE);otfont_text(LEFT,270,sample1,TEXT_RIGHT,FG,BG);
+    display_fill_rect(LEFT,320,TEXT_RIGHT-LEFT,1,GUIDE);otfont_text(LEFT,320,sample2,TEXT_RIGHT,FG,BG);
     uint32_t first_us=(uint32_t)(hal_time_now_us()-first);
     uint64_t warm=hal_time_now_us();
-    display_fill_rect(LEFT,400,RIGHT-LEFT,1,GUIDE);otfont_text(LEFT,400,sample1,RIGHT,FG,BG);
-    display_fill_rect(LEFT,450,RIGHT-LEFT,1,GUIDE);otfont_text(LEFT,450,sample2,RIGHT,FG,BG);
+    display_fill_rect(LEFT,400,TEXT_RIGHT-LEFT,1,GUIDE);otfont_text(LEFT,400,sample1,TEXT_RIGHT,FG,BG);
+    display_fill_rect(LEFT,450,TEXT_RIGHT-LEFT,1,GUIDE);otfont_text(LEFT,450,sample2,TEXT_RIGHT,FG,BG);
     uint32_t warm_us=(uint32_t)(hal_time_now_us()-warm);
     otfont_stats st;otfont_get_stats(&st);char line[192];
     ksnprintf(line,sizeof line,"%upx  初回描画 %u ms / 温間描画 %u ms / miss %u hit %u",
@@ -52,11 +60,17 @@ bool fontbench_run(unsigned pixel_size) {
     bizud_text(LEFT,536,line,RIGHT,ACCENT,BG);
     ksnprintf(line,sizeof line,"TTF %u KiB / read %u KiB (%u ms) / cache %u KiB / Qで戻る",
               st.font_bytes/1024u,st.io_bytes/1024u,st.load_ms,(unsigned)(st.cache_bytes/1024u));
-    bizud_text(LEFT,578,line,RIGHT,FG,BG);
+    bizud_text(LEFT,578,line,TEXT_RIGHT,FG,BG);
+    bizud_text(900,82,"固定",1000,ACCENT,BG);bizud_text(1040,82,"FT",RIGHT,ACCENT,BG);
+    uint64_t vertical=hal_time_now_us();
+    vertical_column(920,110,"日本語を書く。「括弧」、長音ー。",false);
+    vertical_column(1050,110,"日本語を書く。「括弧」、長音ー。",true);
+    uint32_t vertical_us=(uint32_t)(hal_time_now_us()-vertical);
     display_present(0,0,DISPLAY_WIDTH,DISPLAY_HEIGHT);display_set_target(0);
     kprintf("FONTBENCH %u px: load=%u ms first=%u us warm=%u us misses=%u hits=%u raster=%u us font=%u cache=%u io=%u reads=%u\n",
             pixel_size,st.load_ms,first_us,warm_us,st.glyph_misses,st.glyph_hits,
             (uint32_t)st.raster_us,st.font_bytes,(uint32_t)st.cache_bytes,st.io_bytes,st.io_reads);
+    kprintf("VERTBENCH %u px: draw=%u us\n",pixel_size,vertical_us);
     for(;;){int key=dq_pollkey();if(key=='q'||key=='Q'||key==DQK_ESC||key==3)break;task_sleep(10);}
 done:
     display_set_target(0);if(outline)otfont_end();if(atlas)bizud_end();
