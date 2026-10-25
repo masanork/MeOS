@@ -33,6 +33,7 @@
 
 task_t g_tasks[TASK_MAX];
 static task_t *s_current;
+static uint64_t s_accounted_at;
 
 task_t *task_current(void) { return s_current; }
 bool    sched_started(void) { return s_current != NULL; }
@@ -110,6 +111,9 @@ static void sched_switch(void)
         return;
     }
     task_stack_check_switch(next, true);
+    uint64_t switched_at=hal_time_now_us();
+    prev->runtime_us+=switched_at-s_accounted_at;
+    s_accounted_at=switched_at;
     next->state = TASK_RUNNING;
     s_current = next;
     arch_context_switch(&prev->sp, next->sp);
@@ -184,6 +188,8 @@ void sched_init(void)
     idle->state = TASK_RUNNING;
     idle->priority = TASK_PRIO_IDLE;
     s_current = idle;
+    idle->runtime_us=0;
+    s_accounted_at=hal_time_now_us();
 }
 
 /* ---- inspection & control ------------------------------------------------- */
@@ -218,6 +224,24 @@ int task_snapshot(task_info_t *out, int max)
     }
     arch_irq_restore(irq);
     return n;
+}
+uint64_t task_current_runtime_us(void)
+{
+    uint32_t irq=arch_irq_disable();
+    uint64_t total=s_current?s_current->runtime_us+hal_time_now_us()-s_accounted_at:0;
+    arch_irq_restore(irq);return total;
+}
+int task_runtime_snapshot(task_runtime_info_t *out,int max)
+{
+    if(!out||max<=0)return 0;
+    uint32_t irq=arch_irq_disable();uint64_t at=hal_time_now_us();int n=0;
+    for(int i=0;i<TASK_MAX&&n<max;i++){
+        const task_t *t=&g_tasks[i];if(t->state==TASK_UNUSED)continue;
+        out[n].id=t->id;
+        for(int j=0;j<TASK_NAME_MAX;j++)out[n].name[j]=t->name[j];
+        out[n].runtime_us=t->runtime_us+(t==s_current?at-s_accounted_at:0);n++;
+    }
+    arch_irq_restore(irq);return n;
 }
 
 int task_kill(uint32_t pid)

@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include "../../drivers/lcd/bitmap_resize.h"
 #include "../../drivers/lcd/ppa_stage.h"
+#include "../../drivers/lcd/dma_column.h"
 static uint16_t stage[320*720] __attribute__((aligned(4)));
 static uint16_t actual[DISPLAY_WIDTH*DISPLAY_HEIGHT],expected[DISPLAY_WIDTH*DISPLAY_HEIGHT];
 static uint8_t pixels[64000] __attribute__((aligned(16))),previous[64000] __attribute__((aligned(16)));
@@ -55,5 +56,15 @@ int main(void){
  assert(unaligned[0]==0x5a&&unaligned[64001]==0x5a&&old_unaligned[0]==0x5a&&old_unaligned[64001]==0x5a);
  tab5_ppa_stage(stage,pixels,palette);
  for(unsigned y=0;y<720;y++)for(unsigned x=0;x<320;x++)assert(stage[y*320+x]==palette[pixels[(y*200/720)*320+x]]);
+ uint16_t dma_column[768] __attribute__((aligned(128)));
+ for(unsigned x=0;x<320;x++){
+  memset(dma_column,0x5a,sizeof dma_column);tab5_dma_column(dma_column,pixels,palette,x);
+  for(unsigned y=0;y<720;y++)assert(dma_column[y]==palette[pixels[(y*200/720)*320+x]]);
+  for(unsigned y=720;y<768;y++)assert(dma_column[y]==0x5a5a);
+ }
+ for(unsigned first_row=0;first_row<200;first_row++)for(unsigned last_row=first_row;last_row<200;last_row++){
+  unsigned start=((first_row*18+4)/5)&~1u,end=(((last_row+1)*18+4)/5+1)&~1u;
+  assert(!(start&1)&&!(end&1)&&end<=720&&start<=((first_row*18+4)/5)&&end>=(((last_row+1)*18+4)/5));
+ }
  puts("Quake delta display: copy lengths 0..720/all halfword alignments, 100 independent RGB reference matches, odd-start motion, sparse edits, palette and guards PASS");
 }

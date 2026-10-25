@@ -116,12 +116,11 @@ static inline void tab5_indexed_viewport(uint16_t *fb,int x,const uint8_t *indic
 /* Exact damage tracking: palette changes repaint everything; unchanged indices
  * retain the previous framebuffer pixels. Source row bounds map to the same
  * floor(dest_y*200/720) sampling as the full blitter, including partial rows. */
-static inline bool tab5_indexed_viewport_delta(uint16_t *fb,int x,const uint8_t *pixels,
-    uint8_t *previous,const uint16_t palette[256],bool force,int *first_col,int *last_col)
+static inline bool tab5_indexed_damage(const uint8_t *pixels,uint8_t *previous,bool force,
+    uint8_t first[320],uint8_t last[320],unsigned *left,unsigned *right)
 {
-    if(!fb||!pixels||!previous||!palette||x<0||x>DISPLAY_WIDTH-960)return false;
-    uint8_t first[320],last[320];memset(first,200,sizeof first);memset(last,0,sizeof last);
-    if(force){memset(first,0,sizeof first);memset(last,199,sizeof last);memcpy(previous,pixels,64000);}
+    memset(first,200,320);memset(last,0,320);
+    if(force){memset(first,0,320);memset(last,199,320);memcpy(previous,pixels,64000);}
     else
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     if (!(((uintptr_t)pixels | (uintptr_t)previous) & 3u)) {
@@ -143,9 +142,16 @@ static inline bool tab5_indexed_viewport_delta(uint16_t *fb,int x,const uint8_t 
         unsigned at=y*320+col;uint8_t p=pixels[at];
         if(previous[at]!=p){if(first[col]==200)first[col]=(uint8_t)y;last[col]=(uint8_t)y;previous[at]=p;}
     }
-    unsigned left=320,right=0;
-    for(unsigned col=0;col<320;col++)if(first[col]<200){if(left==320)left=col;right=col;}
-    if(left==320)return false;
+    *left=320;*right=0;
+    for(unsigned col=0;col<320;col++)if(first[col]<200){if(*left==320)*left=col;*right=col;}
+    return *left!=320;
+}
+static inline bool tab5_indexed_viewport_delta(uint16_t *fb,int x,const uint8_t *pixels,
+    uint8_t *previous,const uint16_t palette[256],bool force,int *first_col,int *last_col)
+{
+    if(!fb||!pixels||!previous||!palette||x<0||x>DISPLAY_WIDTH-960)return false;
+    uint8_t first[320],last[320];unsigned left,right;
+    if(!tab5_indexed_damage(pixels,previous,force,first,last,&left,&right))return false;
     tab5_indexed_viewport_spans(fb,x,pixels,palette,720,first,last);
     *first_col=x+(int)left*3;*last_col=x+(int)right*3+2;return true;
 }
