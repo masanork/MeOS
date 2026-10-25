@@ -142,6 +142,8 @@ python3 tools/push_file.py --port /dev/cu.usbmodemXXXX \
   /assets/fonts/BIZUDGothic-Regular.ttf
 python3 tools/fonts/outline_device_test.py /dev/cu.usbmodemXXXX \
   --size 24 --leave-open
+python3 tools/fonts/write_outline_device_test.py /dev/cu.usbmodemXXXX \
+  --file /home/note.txt --leave-open
 ```
 
 The first device measurement used an in-memory face to qualify rendering and

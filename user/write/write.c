@@ -252,6 +252,7 @@ static void resize_font(writer *w,int direction) {
     if(!otfont_set_pixel_size(next)){ksnprintf(w->status,sizeof w->status,"%upxへ変更できません",next);return;}
     w->font_px=next;w->top=0;bizime_set_font(true,next);
     ksnprintf(w->status,sizeof w->status,"%upxに変更しました",next);
+    kprintf("write: outline %upx\n",next);
 }
 
 static bool save(writer *w,const char *path) {
@@ -276,6 +277,7 @@ bool write_file(const char *path) {
     w->outline=otfont_begin(OTFONT_DEFAULT_PATH,w->font_px);
     if(!w->outline&&!bizud_begin()){kfree(w->frame);display_release_claim(w);kfree(w);return false;}
     bizime_set_font(w->outline,w->font_px);
+    kprintf("write: BIZ UD %upx %s\n",w->font_px,w->outline?"outline":"atlas fallback");
     fbcon_pause(true);ime_set_app_view(true);bool run=true,ok=true,redraw=true;uint32_t revision=~0u;
     ime_view *view=editor_alloc(sizeof *view);
     if(!view){ime_set_app_view(false);fbcon_pause(false);display_release_claim(w);bizime_set_font(false,24);
@@ -288,7 +290,7 @@ bool write_file(const char *path) {
         switch(k) {
         case CTRL('s'):save(w,path);break;
         case CTRL('z'):scheme_buffer_undo(&w->b);break;
-        case CTRL('t'):w->vertical=!w->vertical;w->top=0;ksnprintf(w->status,sizeof w->status,w->vertical?"縦書きに切り替えました":"横書きに切り替えました");break;
+        case CTRL('t'):w->vertical=!w->vertical;w->top=0;ksnprintf(w->status,sizeof w->status,w->vertical?"縦書きに切り替えました":"横書きに切り替えました");kprintf("write: layout %s\n",w->vertical?"vertical":"horizontal");break;
         case DQK_F3:resize_font(w,-1);break;
         case DQK_F4:resize_font(w,1);break;
         case DQK_LEFT:if(w->vertical)move_across_lines(w,1);else w->b.cursor=scheme_buffer_prev(&w->b,w->b.cursor);break;
