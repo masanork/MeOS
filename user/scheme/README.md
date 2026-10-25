@@ -65,14 +65,16 @@ to Scheme.
 ## Japanese input
 
 `Ctrl-Space` and `Alt-backtick` retain their existing IME meanings. The editor and
-minibuffer consume an immutable `ime_view`: preedit is drawn in BIZ UD at the
-insertion point and a second Space opens the same nearby two-column candidate
-popup as the writing editor. Uncommitted text stays outside the source and
+minibuffer consume an immutable `ime_view`: preedit is inserted into the BIZ UD
+visual layout at the cursor, reflowing following text without entering the source.
+A second Space opens the same nearby two-column candidate popup as the writing
+editor. Uncommitted text stays outside the source and
 evaluator. Confirmed text arrives through the normal console as UTF-8.
 Comments, strings, identifiers, source paths, command names and plot titles can
 contain Japanese. Movement, backspace and delete preserve UTF-8 codepoint
 boundaries, including four-byte UTF-8; display glyph coverage remains that of the
 BIZ UD asset. Combining sequences are not treated as grapheme clusters.
+Up/Down follows proportional soft-wrapped screen rows as well as explicit lines.
 
 The console API supplies committed bytes without an IME commit boundary, so
 keyboard/IME insertion currently records one undo step per codepoint, not per

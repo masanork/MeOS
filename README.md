@@ -309,7 +309,7 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
   (SKK okuri-ari entries, checked against the conjugation form the okurigana spells), followed by particles / endings
   that stay kana. Choices are remembered for the session (`ime_dict_learn`).
 * **Screen**: console programs get an overlay at the text cursor (`fbcon_overlay_*`). Write and Scheme consume an
-  immutable IME view and draw BIZ UD preedit plus candidates beside their proportional cursor; other full-screen
+  immutable IME view and insert BIZ UD preedit into their proportional layout, reflowing following text; other full-screen
   programs (`fbcon_pause`: filer, ssh, web) use a two-line bar at the bottom, restored afterwards.
 * **Dictionary**: a small one is built in (`tools/ime/mini.skk`). For real use put an SKK dictionary on the SD card:
   `tools/ime_flash_dict.sh -p /dev/cu.usbmodemXXXX` (downloads SKK-JISYO.L, GPL-2.0+, and uploads

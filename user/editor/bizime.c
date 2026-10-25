@@ -54,6 +54,22 @@ static void draw_popup(const ime_view *view, int anchor_x, int baseline,
     }
 }
 
+bizime_point bizime_measure(const ime_view *view, int x, int baseline,
+                            int left, int right, int pitch)
+{
+    bizime_point end = {x, baseline};
+    if (!view) return end;
+    for (int n = 0; n < view->count; n++) {
+        int advance = bizud_width(view->text[n]);
+        if (end.x + advance > right) {
+            end.x = left;
+            end.baseline += pitch;
+        }
+        end.x += advance;
+    }
+    return end;
+}
+
 bizime_point bizime_draw(const ime_view *view, int x, int baseline,
                          int left, int right, int top, int bottom, int pitch,
                          uint16_t fg, uint16_t bg, uint16_t accent)

@@ -9,7 +9,7 @@
 
 static const unsigned char *keys;
 static bool paused, claimed, confirm = true, fail_close, fail_read, fail_write;
-static int allocations, anchors, releases, graph_lines;
+static int allocations, anchors, releases, graph_lines, last_z_x = -1;
 static unsigned idle;
 static char file_data[SCHEME_SOURCE_CAP + 2];
 static size_t file_len, file_pos;
@@ -141,6 +141,7 @@ int bizud_width(uint32_t cp) { return cp < 128 ? 14 : 24; }
 int bizud_draw(int x, int baseline, uint32_t cp, uint16_t fg, uint16_t bg)
 {
     (void)baseline; (void)fg; (void)bg;
+    if (cp == 'Z') last_z_x = x;
     return x + bizud_width(cp) <= 1280 ? bizud_width(cp) : 0;
 }
 int bizud_text(int x, int baseline, const char *text, int right, uint16_t fg, uint16_t bg)
@@ -160,6 +161,17 @@ bizime_point bizime_draw(const ime_view *view, int x, int baseline,
 {
     (void)view; (void)left; (void)right; (void)top; (void)bottom;
     (void)pitch; (void)fg; (void)bg; (void)accent;
+    return (bizime_point){x, baseline};
+}
+bizime_point bizime_measure(const ime_view *view, int x, int baseline,
+                            int left, int right, int pitch)
+{
+    (void)left;
+    for (int n = 0; view && n < view->count; n++) {
+        int advance = bizud_width(view->text[n]);
+        if (x + advance > right) { x = left; baseline += pitch; }
+        x += advance;
+    }
     return (bizime_point){x, baseline};
 }
 int vfs_stat(const char *p, vfs_info_t *info)
@@ -233,6 +245,25 @@ int main(void)
     assert(!strcmp(i->plot_title, "減衰振動"));
     draw(i, NULL);
     assert(graph_lines > 100);
+    /* Up/down follows proportional soft-wrapped screen rows, not only
+     * newline-delimited logical lines. */
+    char wrapped[121];
+    memset(wrapped, 'm', sizeof wrapped - 1);
+    wrapped[sizeof wrapped - 1] = 0;
+    assert(scheme_buffer_set(&i->buffer, wrapped, sizeof wrapped - 1));
+    source_layout(i, 735);
+    assert(i->visual_rows >= 3);
+    vertical(i, 1);
+    size_t second_row = i->buffer.cursor;
+    assert(second_row > 0 && second_row < i->buffer.length);
+    vertical(i, -1);
+    assert(i->buffer.cursor == 0);
+    assert(scheme_buffer_set(&i->buffer, "ZZ", 2));
+    ime_view composing = {.count = 1, .text = {0x65e5}};
+    last_z_x = -1;
+    draw(i, &composing);
+    assert(last_z_x == UI_LEFT + 24 + 14); /* preedit pushes both suffix glyphs */
+    assert(scheme_buffer_set(&i->buffer, demo, sizeof demo - 1));
     /* Scheme procedures can become M-x commands and modify the editor. */
     evaluate(i, "(define (挨拶) (insert-text! \"こんにちは\"))", false);
     script("挨\t\r");

@@ -154,31 +154,6 @@ static size_t end(const scheme_buffer *b, size_t p)
         p++;
     return p;
 }
-static size_t column(const scheme_buffer *b, size_t p)
-{
-    size_t n = 0;
-    for (size_t k = start(b, p); k < p; k = scheme_buffer_next(b, k))
-        n++;
-    return n;
-}
-static void vertical(ide *i, int delta)
-{
-    scheme_buffer *b = &i->buffer;
-    size_t col = column(b, b->cursor), p = start(b, b->cursor);
-    if (delta < 0) {
-        if (!p)
-            return;
-        p = start(b, p - 1);
-    } else {
-        p = end(b, p);
-        if (p == b->length)
-            return;
-        p++;
-    }
-    while (col-- && p < b->length && b->text[p] != '\n')
-        p = scheme_buffer_next(b, p);
-    b->cursor = p;
-}
 static uint32_t source_cp(const scheme_buffer *b, size_t p)
 {
     const char *text = b->text + p;
@@ -229,6 +204,26 @@ static int source_cursor_x(ide *i, int row)
     return x;
 }
 
+static void vertical(ide *i, int delta)
+{
+    scheme_buffer *b = &i->buffer;
+    source_layout(i, i->split ? 735 : UI_RIGHT);
+    int row = source_cursor_row(i), target = row + delta;
+    if (target < 0) target = 0;
+    if (target >= i->visual_rows) target = i->visual_rows - 1;
+    int wanted = source_cursor_x(i, row), x = UI_LEFT;
+    size_t p = i->starts[target];
+    while (p < i->starts[target + 1] && source_cp(b, p) != '\n') {
+        int advance = source_advance(b, p);
+        if (x + advance / 2 >= wanted) break;
+        x += advance;
+        p = scheme_buffer_next(b, p);
+    }
+    if (target + 1 < i->visual_rows && p == i->starts[target + 1] && p > i->starts[target])
+        p = scheme_buffer_prev(b, p);
+    b->cursor = p;
+}
+
 static void syntax_state(const scheme_buffer *b, size_t at, bool *string, bool *escape, bool *comment)
 {
     *string = *escape = *comment = false;
@@ -260,6 +255,39 @@ static void draw_source_row(ide *i, int row, int baseline, int right)
         }
         if (x + advance > right) break;
         bizud_draw(x, baseline, cp, color, UI_BG);
+        x += advance;
+        if (!comment) {
+            if (escape) escape = false;
+            else if (string && cp == '\\') escape = true;
+            else if (cp == '"') string = !string;
+            else if (!string && cp == ';') comment = true;
+        }
+    }
+}
+
+static void draw_reflowed_tail(ide *i, bizime_point point, int right)
+{
+    scheme_buffer *b = &i->buffer;
+    int x = point.x, baseline = point.baseline;
+    bool string, escape, comment;
+    syntax_state(b, b->cursor, &string, &escape, &comment);
+    for (size_t p = b->cursor; p < b->length; p = scheme_buffer_next(b, p)) {
+        uint32_t cp = source_cp(b, p);
+        if (cp == '\n') {
+            x = UI_LEFT;
+            baseline += UI_PITCH;
+            string = escape = comment = false;
+            continue;
+        }
+        int advance = source_advance(b, p);
+        if (x + advance > right) {
+            x = UI_LEFT;
+            baseline += UI_PITCH;
+        }
+        if (baseline >= UI_REPL_TOP - 8) break;
+        uint16_t color = comment ? UI_COMMENT : string ? UI_STRING : UI_FG;
+        if (!comment && !string && (cp == '(' || cp == ')' || cp == '\'')) color = UI_ACCENT;
+        if (cp != '\t' && cp != '\r') bizud_draw(x, baseline, cp, color, UI_BG);
         x += advance;
         if (!comment) {
             if (escape) escape = false;
@@ -336,10 +364,17 @@ static void draw(ide *i, const ime_view *view)
     if (visible_row >= 0 && visible_row < UI_BODY_ROWS) {
         int cx = source_cursor_x(i, cursor_row);
         int cy = UI_BODY_BASE + visible_row * UI_PITCH;
-        if (view && view->count)
+        if (view && view->count) {
+            int next = cy + UI_PITCH - 27;
+            display_fill_rect(cx, cy - 27, editor_right - cx, 32, UI_BG);
+            if (next < UI_REPL_TOP - 8)
+                display_fill_rect(UI_LEFT, next, editor_right - UI_LEFT,
+                                  UI_REPL_TOP - 8 - next, UI_BG);
+            bizime_point after = bizime_measure(view, cx, cy, UI_LEFT, editor_right, UI_PITCH);
+            draw_reflowed_tail(i, after, editor_right);
             bizime_draw(view, cx, cy, UI_LEFT, editor_right, 53, UI_REPL_TOP - 8,
                         UI_PITCH, UI_FG, UI_BG, UI_ACCENT);
-        else
+        } else
             display_fill_rect(cx, cy - 27, 2, 32, UI_ACCENT);
     }
     if (i->split) {

@@ -53,6 +53,18 @@ static void move_vertical(writer *w,int delta) {
     if(target+1<w->rows && p==w->starts[target+1] && p>w->starts[target])p=scheme_buffer_prev(&w->b,p);
     w->b.cursor=p;
 }
+static void draw_reflowed_tail(writer *w,bizime_point point) {
+    int bottom=92+(ROWS-1)*PITCH+6,x=point.x,y=point.baseline;
+    for(size_t p=w->b.cursor;p<w->b.length;p=scheme_buffer_next(&w->b,p)) {
+        uint32_t cp=at(w,p);
+        if(cp=='\n') {x=LEFT;y+=PITCH;continue;}
+        int advance=width(w,p);
+        if(x+advance>RIGHT) {x=LEFT;y+=PITCH;}
+        if(y>bottom)break;
+        if(cp!='\t' && cp!='\r')bizud_draw(x,y,cp,FG,BG);
+        x+=advance;
+    }
+}
 static void paint(writer *w,const char *path,const ime_view *view) {
     int cr=cursor_row(w);
     if(cr<w->top)w->top=cr;
@@ -71,8 +83,14 @@ static void paint(writer *w,const char *path,const ime_view *view) {
         }
     }
     int cx=cursor_x(w,cr),cy=92+(cr-w->top)*PITCH;
-    if(view->count)bizime_draw(view,cx,cy,LEFT,RIGHT,55,DISPLAY_HEIGHT-165,PITCH,FG,BG,ACCENT);
-    else display_fill_rect(cx,cy-26,2,31,ACCENT);
+    if(view->count) {
+        int bottom=92+(ROWS-1)*PITCH+6,next=cy+PITCH-27;
+        display_fill_rect(cx,cy-27,RIGHT-cx,32,BG);
+        if(next<bottom)display_fill_rect(LEFT,next,RIGHT-LEFT,bottom-next,BG);
+        bizime_point after=bizime_measure(view,cx,cy,LEFT,RIGHT,PITCH);
+        draw_reflowed_tail(w,after);
+        bizime_draw(view,cx,cy,LEFT,RIGHT,55,DISPLAY_HEIGHT-165,PITCH,FG,BG,ACCENT);
+    } else display_fill_rect(cx,cy-26,2,31,ACCENT);
     int y=DISPLAY_HEIGHT-155;
     display_fill_rect(LEFT,y-12,RIGHT-LEFT,1,ACCENT);
     char ime_line[96];

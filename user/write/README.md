@@ -7,8 +7,9 @@ when `--screenshots DIR` is provided.
 
 BIZ UD Gothic Regular at 24 native pixels, 36px line pitch, Latin/Japanese widths,
 soft wrap without inserted newlines and a warm light background. MeOS IME preedit
-is drawn at the document insertion point; a second Space opens a bounded two-column
-candidate popup beside it. Ctrl-Space toggles the IME; Space converts and Enter
+is inserted into the proportional visual layout at the document cursor: following
+text moves right and soft-wraps while composition is active. A second Space opens
+a bounded two-column candidate popup beside it. Ctrl-Space toggles the IME; Space converts and Enter
 commits. Ctrl-S saves, Ctrl-Q exits (repeat to discard
 unsaved edits), Ctrl-Z undoes the last edit. Arrows, Home/End, PgUp/PgDn navigate.
 Buffer limit 16 KiB, one undo snapshot. UTF-8 files and MeOS VFS are used.
