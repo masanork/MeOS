@@ -3026,6 +3026,7 @@ static void wifi_daemon_task(void *arg)
                                !s_manual_disconnect &&
                                !auth_failed &&
                                (tick > 0 && (tick % 300u) == 0));
+        bool connected = s_status.state == WIFI_STATE_CONNECTED;
         mutex_unlock(&s_wifi_lock);
 
         if (need_reconnect) {
@@ -3033,7 +3034,9 @@ static void wifi_daemon_task(void *arg)
         }
 
         tick++;
-        task_sleep(100);
+        /* The C6 FIFO must be drained between foreground SD/rendering slices.
+         * Keep the slower reconnect cadence while disconnected. */
+        task_sleep(connected ? 10 : 100);
     }
 }
 
@@ -3042,5 +3045,6 @@ void wifi_boot_start(void)
     ensure_lock();
     if (s_daemon_started) return;
     s_daemon_started = true;
-    task_create_stack("wifid", wifi_daemon_task, NULL, TASK_PRIO_DEFAULT, 16384);
+    /* Equal priority gives RX a slice even while the shell paints or reads. */
+    task_create_stack("wifid", wifi_daemon_task, NULL, TASK_PRIO_DEFAULT + 1, 16384);
 }
