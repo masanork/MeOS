@@ -15,7 +15,7 @@ static jmp_buf cancelled;
 task_t *task_current(void){return current;}
 uint32_t arch_irq_disable(void){return depth++;}
 void arch_irq_restore(uint32_t old){assert(depth==old+1);depth=old;}
-uint64_t hal_time_now_us(void){reads++;return now;}
+uint64_t hal_time_now_us(void){assert(depth);reads++;return now;}
 void kernel_panic(const char *s){fprintf(stderr,"unexpected panic %s\n",s);abort();}
 void task_yield(void){}
 void sched_reschedule(void){
@@ -29,7 +29,10 @@ void sched_reschedule(void){
     /* Model the owner running, granting at 110, then the recipient only
      * resuming at 170. Keep the real mutex handoff and donation code. */
     depth=0;current=owner;now=110;
-    if(mode==1){owner->state=TASK_TERMINATED;mutex_release_all(owner);}
+    if(mode==1){
+        uint32_t irq=arch_irq_disable();owner->state=TASK_TERMINATED;
+        mutex_release_all(owner);arch_irq_restore(irq);
+    }
     else mutex_unlock(waiting);
     assert(waiting->owner==waiter&&waiter->state==TASK_RUNNABLE);
     assert(waiter->mutex_granted_us==110&&owner->priority==owner->base_priority);
