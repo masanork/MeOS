@@ -116,6 +116,8 @@ static int disk_read(const struct lfs_config *c,lfs_block_t b,lfs_off_t off,void
             uint32_t available=sd->block_count-region_sector;
             uint32_t fill=available>READ_AHEAD_BYTES/512u?READ_AHEAD_BYTES/512u:available;
             io_stats.cache_misses++;io_stats.physical_calls++;io_stats.physical_sectors+=fill;
+            /* A failed DMA read may already have overwritten the old window. */
+            read_ahead_valid[slot]=false;
             if(sd->read(sd,region_sector,fill,asset_buffers->read_ahead[slot]))return LFS_ERR_IO;
             read_ahead_base[slot]=region;read_ahead_sectors[slot]=fill;
             read_ahead_valid[slot]=true;
@@ -139,6 +141,7 @@ static int disk_read(const struct lfs_config *c,lfs_block_t b,lfs_off_t off,void
                 if(asset_buffers->sector_cache_stamp[at]<oldest){oldest=asset_buffers->sector_cache_stamp[at];small=at;}
             }
             io_stats.sector_misses++;io_stats.physical_calls++;io_stats.physical_sectors++;
+            asset_buffers->sector_cache_valid[small]=false;
             if(sd->read(sd,sector,1,asset_buffers->sector_cache[small]))return LFS_ERR_IO;
             asset_buffers->sector_cache_tag[small]=sector;
             asset_buffers->sector_cache_stamp[small]=++sector_cache_clock;

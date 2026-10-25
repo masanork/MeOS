@@ -11,19 +11,32 @@
 #define SECTORS 65536u
 static unsigned char *card;
 static unsigned probe_failures,probe_attempts,probe_delays,write_requests,max_read_blocks,max_write_blocks;
+static unsigned asset_alloc_attempts;
 static bool fail_reads,fail_asset_alloc=true;
+static unsigned fail_partial_bytes;
 static uint64_t fake_time;
 uint64_t hal_time_now_us(void){return fake_time+=1000;}
 void hal_delay_us(uint32_t us){assert(us==100000);probe_delays++;}
 static blockdev_t device;
-static int read_sd(blockdev_t *d,uint32_t l,uint32_t n,void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);if(n>max_read_blocks)max_read_blocks=n;if(fail_reads)return -1;memcpy(p,card+(size_t)l*512,n*512);return 0;}
+static int read_sd(blockdev_t *d,uint32_t l,uint32_t n,void *p){
+    (void)d;assert(l<SECTORS&&n<=SECTORS-l);if(n>max_read_blocks)max_read_blocks=n;
+    if(fail_reads)return -1;
+    if(fail_partial_bytes){
+        size_t take=fail_partial_bytes;if(take>(size_t)n*512)take=(size_t)n*512;
+        memset(p,0x5a,take);fail_partial_bytes=0;return -1;
+    }
+    memcpy(p,card+(size_t)l*512,n*512);return 0;
+}
 static int write_sd(blockdev_t *d,uint32_t l,uint32_t n,const void *p){(void)d;assert(l<SECTORS&&n<=SECTORS-l);if(n>max_write_blocks)max_write_blocks=n;write_requests++;memcpy(card+(size_t)l*512,p,n*512);return 0;}
 static bool fat_busy;
 bool fat_is_mounted(void){return fat_busy;}
 blockdev_t *sdcard_probe(void){probe_attempts++;if(probe_failures){probe_failures--;return NULL;}return &device;}
 void sdcard_status(sdcard_status_t *s){*s=(sdcard_status_t){.probed=true,.ready=true,.sectors=SECTORS,.high_capacity=true,.detail="test probe"};}
 void *kmalloc(size_t n){return malloc(n);}
-void *kmalloc_psram(size_t n){return fail_asset_alloc&&n>1024u*1024u?NULL:malloc(n);}
+void *kmalloc_psram(size_t n){
+    if(n>1024u*1024u){asset_alloc_attempts++;if(fail_asset_alloc)return NULL;}
+    return malloc(n);
+}
 void *kcalloc(size_t n,size_t z){return calloc(n,z);}
 void kfree(void *p){free(p);}
 static task_t host_task;
@@ -60,6 +73,78 @@ static void verify_asset_read(bool cached){
     }
     assert(!asset_unlink(NULL,"/readahead.bin"));free(dst);free(src);
 }
+static void verify_asset_lifecycle(void){
+    enum { BYTES=128*1024, CHUNK=16*1024, CYCLES=64 };
+    unsigned char *src=malloc(BYTES),*dst=malloc(CHUNK);assert(src&&dst);
+    for(size_t i=0;i<BYTES;i++)src[i]=(unsigned char)(i*73u+(i>>9)*11u);
+    void *file=NULL;
+    assert(!asset_open(NULL,"/lifecycle.bin",VFS_O_WRITE|VFS_O_CREATE|VFS_O_TRUNC,&file));
+    assert(asset_write(file,src,BYTES)==BYTES);assert(!asset_close(file));
+    assert(!asset_open(NULL,"/lifecycle.bin",VFS_O_READ,&file));
+    for(unsigned cycle=0;cycle<CYCLES;cycle++){
+        size_t cache_bytes=sdroot_asset_cache_bytes();assert(cache_bytes==sizeof *asset_buffers);
+        assert(sdroot_asset_cache_trim()==cache_bytes&&!sdroot_asset_cache_bytes());
+        /* The same open handle must survive release, failed recreation and
+         * direct reads; an empty trim explicitly rearms the next attempt. */
+        fail_asset_alloc=(cycle%2)==0;
+        unsigned attempts=asset_alloc_attempts;
+        uint32_t offset=((cycle*5u)%(BYTES/CHUNK))*CHUNK;
+        assert(asset_seek(file,(int32_t)offset,FS_SEEK_SET)==(int)offset);
+        assert(asset_read(file,dst,CHUNK)==CHUNK&&!memcmp(dst,src+offset,CHUNK));
+        assert(asset_alloc_attempts==attempts+1);
+        if(fail_asset_alloc){
+            assert(!sdroot_asset_cache_bytes());fail_asset_alloc=false;
+            assert(asset_seek(file,0,FS_SEEK_SET)==0);
+            assert(asset_read(file,dst,CHUNK)==CHUNK&&!memcmp(dst,src,CHUNK));
+            assert(asset_alloc_attempts==attempts+1&&!sdroot_asset_cache_bytes());
+            assert(!sdroot_asset_cache_trim());
+            assert(asset_read(file,dst,CHUNK)==CHUNK&&!memcmp(dst,src+CHUNK,CHUNK));
+            assert(asset_alloc_attempts==attempts+2);
+        }
+        assert(sdroot_asset_cache_bytes()==cache_bytes);
+    }
+    assert(!asset_close(file));
+    /* Reuse the cached file's blocks for changed content. Writes must invalidate
+     * the cache before a later reopen/seek can return the new bytes. */
+    for(unsigned pass=0;pass<8;pass++){
+        uint32_t offset=pass*CHUNK;
+        memset(src+offset,0x80u+pass,CHUNK);
+        assert(!asset_open(NULL,"/lifecycle.bin",VFS_O_READ|VFS_O_WRITE,&file));
+        assert(asset_seek(file,(int32_t)offset,FS_SEEK_SET)==(int)offset);
+        assert(asset_write(file,src+offset,CHUNK)==CHUNK);assert(!asset_close(file));
+        assert(!asset_open(NULL,"/lifecycle.bin",VFS_O_READ,&file));
+        for(unsigned block=0;block<BYTES/CHUNK;block++){
+            assert(asset_read(file,dst,CHUNK)==CHUNK&&!memcmp(dst,src+block*CHUNK,CHUNK));
+        }
+        assert(!asset_close(file));
+    }
+    assert(!asset_unlink(NULL,"/lifecycle.bin"));free(dst);free(src);
+    printf("SDROOT asset lifecycle PASS: %u trim/recreate cycles, %u allocation failures, open-handle continuity, bounded retries, write invalidation\n",CYCLES,CYCLES/2);
+}
+static void verify_partial_refill_errors(void){
+    unsigned char dst[ERASE_BYTES];
+    sdroot_io_reset();mutex_lock(&asset_read_mutex);asset_read_owner=task_current();
+    /* Fill both windows, then fail a third-region replacement after DMA has
+     * already changed part of the evicted slot. Its old tag must not survive. */
+    assert(!disk_read(&cfg,1024,0,dst,sizeof dst));
+    assert(!disk_read(&cfg,1040,0,dst,sizeof dst));
+    fail_partial_bytes=512;
+    assert(disk_read(&cfg,1056,0,dst,sizeof dst)==LFS_ERR_IO);
+    assert(!disk_read(&cfg,1024,0,dst,sizeof dst));
+    assert(!memcmp(dst,card+(size_t)1024*ERASE_BYTES,sizeof dst));
+    asset_read_owner=NULL;mutex_unlock(&asset_read_mutex);
+
+    sdroot_io_reset();mutex_lock(&asset_read_mutex);asset_read_owner=task_current();
+    /* Sectors separated by 512 hash to the same four-way set. */
+    for(unsigned way=0;way<SECTOR_CACHE_WAYS;way++)
+        assert(!disk_read(&cfg,1024+way*64,512,dst,512));
+    fail_partial_bytes=256;
+    assert(disk_read(&cfg,1024+SECTOR_CACHE_WAYS*64,512,dst,512)==LFS_ERR_IO);
+    assert(!disk_read(&cfg,1024,512,dst,512));
+    assert(!memcmp(dst,card+(size_t)1024*ERASE_BYTES+512,512));
+    asset_read_owner=NULL;mutex_unlock(&asset_read_mutex);
+    puts("SDROOT partial-refill error PASS: read-ahead and sector slots discard overwritten tags");
+}
 int main(void){
     card=malloc((size_t)SECTORS*512);assert(card);memset(card,0xff,(size_t)SECTORS*512);
     device=(blockdev_t){.name="test-sd",.block_size=512,.block_count=SECTORS,.read=read_sd,.write=write_sd};
@@ -82,12 +167,16 @@ int main(void){
     assert(!asset_buffers);
     assert(!sdroot_assets_mount());
     verify_asset_read(false);
+    unsigned failed_attempts=asset_alloc_attempts;fail_asset_alloc=false;
+    verify_asset_read(false);assert(asset_alloc_attempts==failed_attempts);
     assert(!fs_unmount());close_files();fail_asset_alloc=false;
     assert(!sdroot_mount()&&!asset_buffers);assert(!sdroot_assets_mount()&&asset_buffers);
     verify_asset_read(true);
     size_t cache_bytes=sdroot_asset_cache_bytes();assert(cache_bytes==sizeof *asset_buffers);
     assert(sdroot_asset_cache_trim()==cache_bytes&&!sdroot_asset_cache_bytes()&&!asset_buffers);
     verify_asset_read(true);assert(sdroot_asset_cache_bytes()==cache_bytes);
+    verify_asset_lifecycle();
+    verify_partial_refill_errors();
     unsigned before=write_requests,probed=probe_attempts;
     assert(sdroot_format(SECTORS)<0);assert(sdroot_mount()<0);
     assert(write_requests==before&&probe_attempts==probed);

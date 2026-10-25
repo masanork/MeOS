@@ -157,6 +157,9 @@ CTZ traversal. The native SDMMC driver accepts the resulting 128-sector request
 as one DMA command. Writes and erases invalidate both caches. Only the task
 performing an asset read enables this path, so COW recovery and unrelated
 littlefs operations retain their normal behavior.
+Replacement slots are invalidated before issuing a physical read. If a failed
+DMA transfer has already changed part of the buffer, the old block/sector tag
+cannot expose those bytes as a cache hit; a later read must fetch the data again.
 
 The cache is an optional 1,170 KiB PSRAM allocation, separate from buffers that
 are required to mount the root. If it cannot be allocated, `/assets` continues
@@ -177,3 +180,25 @@ The temporary document was removed. A 24 px FreeType run and Write's 24/28/32 px
 switching both reclaimed their application memory after exit. This qualifies one
 card and workload, not hot removal, concurrent network saturation, power-cut
 behavior or other cards.
+
+`sh tools/sdroot/host_test.sh` also checks 64 trim/recreate cycles, 32 injected
+allocation failures with an open asset handle, the one-attempt retry policy,
+write invalidation, and partial failed refills of both cache types. These use
+the real littlefs/COW/M5FS adapter on a simulated card under ASan/UBSan.
+
+For an idle MeOS Tab5 with both font assets provisioned, the following read-only
+device harness repeatedly releases the SD cache, renders 20/24/28/32 px samples,
+opens Write, switches size/layout, and checks PSRAM after every exit. The log
+path must not already exist. The final state has both optional caches released.
+
+```sh
+python3 tools/sdroot/cache_lifecycle_device.py /dev/cu.usbmodemXXXX \
+  --cycles 20 --log /tmp/meos-cache-lifecycle.log
+```
+
+Adding `--boot-contention` explicitly resets the board and additionally requires
+at least one cache release while the background IME reader is alive, followed
+by a successful dictionary-load receipt. It rejects a non-MeOS boot before
+sending shell commands. Dictionary-load overlap is not a network-throughput or
+power-loss test. This harness still requires physical qualification on its
+target firmware.
