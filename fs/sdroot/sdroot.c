@@ -26,7 +26,8 @@
 #define READ_AHEAD_BYTES (64u*1024u)
 #define READ_AHEAD_BLOCKS (READ_AHEAD_BYTES/ERASE_BYTES)
 #define READ_AHEAD_SLOTS 2u
-#define SECTOR_CACHE_SETS 512u
+#define SECTOR_CACHE_SET_BITS 9u
+#define SECTOR_CACHE_SETS (1u<<SECTOR_CACHE_SET_BITS)
 #define SECTOR_CACHE_WAYS 4u
 #define SECTOR_CACHE_SLOTS (SECTOR_CACHE_SETS*SECTOR_CACHE_WAYS)
 static mutex_t lfs_mutex=MUTEX_INIT;
@@ -72,6 +73,12 @@ static uint32_t read_ahead_stamp[READ_AHEAD_SLOTS],read_ahead_clock;
 static bool read_ahead_valid[READ_AHEAD_SLOTS];
 static uint32_t sector_cache_clock;
 static bool asset_cache_retry=true;
+static unsigned sector_cache_set(uint32_t sector){
+    /* CTZ pointers are read at the start of 4 KiB blocks. Low sector bits
+     * would map those headers to only 1/8 of the sets. Take the high bits
+     * of the wrapped 32-bit product so aligned LBAs use the full cache. */
+    return (sector*2654435761u)>>(32u-SECTOR_CACHE_SET_BITS);
+}
 static void invalidate_read_ahead(void){
     memset(read_ahead_valid,0,sizeof read_ahead_valid);
     if(asset_buffers)memset(asset_buffers->sector_cache_valid,0,sizeof asset_buffers->sector_cache_valid);
@@ -129,7 +136,7 @@ static int disk_read(const struct lfs_config *c,lfs_block_t b,lfs_off_t off,void
             memcpy(p,asset_buffers->read_ahead[slot]+in_region*512u,n);return 0;
         }
         if(sectors==1&&n==512) {
-            unsigned set=(sector*2654435761u)&(SECTOR_CACHE_SETS-1u);
+            unsigned set=sector_cache_set(sector);
             unsigned first=set*SECTOR_CACHE_WAYS,small=first;uint32_t oldest=UINT32_MAX;
             for(unsigned i=0;i<SECTOR_CACHE_WAYS;i++) {
                 unsigned at=first+i;

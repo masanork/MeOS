@@ -10,7 +10,7 @@
 #include <m5os/vfs.h>
 #define SECTORS 65536u
 static unsigned char *card;
-static unsigned probe_failures,probe_attempts,probe_delays,write_requests,max_read_blocks,max_write_blocks;
+static unsigned probe_failures,probe_attempts,probe_delays,read_requests,write_requests,max_read_blocks,max_write_blocks;
 static unsigned asset_alloc_attempts;
 static bool fail_reads,fail_asset_alloc=true;
 static unsigned fail_partial_bytes;
@@ -20,6 +20,7 @@ void hal_delay_us(uint32_t us){assert(us==100000);probe_delays++;}
 static blockdev_t device;
 static int read_sd(blockdev_t *d,uint32_t l,uint32_t n,void *p){
     (void)d;assert(l<SECTORS&&n<=SECTORS-l);if(n>max_read_blocks)max_read_blocks=n;
+    read_requests++;
     if(fail_reads)return -1;
     if(fail_partial_bytes){
         size_t take=fail_partial_bytes;if(take>(size_t)n*512)take=(size_t)n*512;
@@ -135,15 +136,43 @@ static void verify_partial_refill_errors(void){
     asset_read_owner=NULL;mutex_unlock(&asset_read_mutex);
 
     sdroot_io_reset();mutex_lock(&asset_read_mutex);asset_read_owner=task_current();
-    /* Sectors separated by 512 hash to the same four-way set. */
+    /* Find enough collisions to replace a four-way set, independently of
+     * the index function's treatment of aligned sectors. */
+    uint32_t colliding[SECTOR_CACHE_WAYS+1];unsigned count=0;
+    unsigned set=sector_cache_set(1024*8+1);
+    for(uint32_t b=1024;b<SECTORS/8&&count<SECTOR_CACHE_WAYS+1;b++)
+        if(sector_cache_set(b*8+1)==set)colliding[count++]=b;
+    assert(count==SECTOR_CACHE_WAYS+1);
     for(unsigned way=0;way<SECTOR_CACHE_WAYS;way++)
-        assert(!disk_read(&cfg,1024+way*64,512,dst,512));
+        assert(!disk_read(&cfg,colliding[way],512,dst,512));
     fail_partial_bytes=256;
-    assert(disk_read(&cfg,1024+SECTOR_CACHE_WAYS*64,512,dst,512)==LFS_ERR_IO);
-    assert(!disk_read(&cfg,1024,512,dst,512));
-    assert(!memcmp(dst,card+(size_t)1024*ERASE_BYTES+512,512));
+    assert(disk_read(&cfg,colliding[SECTOR_CACHE_WAYS],512,dst,512)==LFS_ERR_IO);
+    unsigned before=read_requests;
+    assert(!disk_read(&cfg,colliding[0],512,dst,512));
+    assert(read_requests==before+1);
+    assert(!memcmp(dst,card+(size_t)colliding[0]*ERASE_BYTES+512,512));
     asset_read_owner=NULL;mutex_unlock(&asset_read_mutex);
     puts("SDROOT partial-refill error PASS: read-ahead and sector slots discard overwritten tags");
+}
+static void verify_aligned_sector_working_set(void){
+    enum { HEADERS=1024 };
+    unsigned char dst[512];
+    sdroot_io_reset();mutex_lock(&asset_read_mutex);asset_read_owner=task_current();
+    unsigned before=read_requests;
+    /* A 512 KiB working set of 4 KiB-aligned headers fits in the 1 MiB
+     * sector cache. Indexing only low sector bits collapses it into 64 sets
+     * and rereads every header on the second pass. */
+    for(unsigned pass=0;pass<2;pass++){
+        for(unsigned i=0;i<HEADERS;i++){
+            uint32_t block=1024+i;
+            assert(!disk_read(&cfg,block,0,dst,sizeof dst));
+            assert(!memcmp(dst,card+(size_t)block*ERASE_BYTES,sizeof dst));
+        }
+        assert(read_requests-before==HEADERS);
+    }
+    assert(io_stats.sector_hits==HEADERS&&io_stats.sector_misses==HEADERS);
+    asset_read_owner=NULL;mutex_unlock(&asset_read_mutex);
+    puts("SDROOT aligned sector working set PASS: 1024 headers, no second-pass physical reads");
 }
 int main(void){
     card=malloc((size_t)SECTORS*512);assert(card);memset(card,0xff,(size_t)SECTORS*512);
@@ -177,6 +206,7 @@ int main(void){
     verify_asset_read(true);assert(sdroot_asset_cache_bytes()==cache_bytes);
     verify_asset_lifecycle();
     verify_partial_refill_errors();
+    verify_aligned_sector_working_set();
     unsigned before=write_requests,probed=probe_attempts;
     assert(sdroot_format(SECTORS)<0);assert(sdroot_mount()<0);
     assert(write_requests==before&&probe_attempts==probed);
