@@ -66,11 +66,13 @@ def main():
     parser.add_argument("port")
     parser.add_argument("--cycles", type=int, default=20)
     parser.add_argument("--boot-contention", action="store_true")
+    parser.add_argument("--settle-seconds", type=int, default=0,
+                        help="hold serial open after IME overlap before sampling the memory baseline")
     parser.add_argument("--log", type=Path, required=True,
                         help="new serial transcript path; existing files are refused")
     args = parser.parse_args()
-    if not 1 <= args.cycles <= 1000:
-        parser.error("--cycles must be 1..1000")
+    if not 1 <= args.cycles <= 1000 or not 0 <= args.settle_seconds <= 120:
+        parser.error("--cycles must be 1..1000 and --settle-seconds 0..120")
     link = serial.Serial(port=None, baudrate=115200, timeout=0.05,
                          write_timeout=10, exclusive=True)
     link.dtr = link.rts = False
@@ -111,6 +113,12 @@ def main():
             if args.boot_contention and (not overlap or not session.dictionary_loaded):
                 raise RuntimeError("no verified trim/IME-reader overlap and successful dictionary load")
 
+            # Faster asset reads can finish IME overlap while Tailscale still
+            # changes its startup allocations. Keep the verified overlap, then
+            # settle with this same connection open, as in the network harness.
+            if args.settle_seconds:
+                print(f"Settling background services for {args.settle_seconds} s after IME overlap", flush=True)
+                time.sleep(args.settle_seconds)
             if "active=1" not in session.command("sdroot"):
                 raise RuntimeError("persistent SD root is not active")
             listing = session.command("ls /assets/fonts/BIZUDGothic-Regular.ttf")
@@ -170,6 +178,7 @@ def main():
             if cache or atlas or abs(free_final - free_trimmed) > 32:
                 raise RuntimeError("final trim did not restore baseline memory")
             report = {"result": "PASS", "boot_contention": args.boot_contention,
+                      "settle_seconds": args.settle_seconds,
                       "ime_overlap_trims": overlap, "trimmed_baseline_kib": free_trimmed,
                       "trimmed_final_kib": free_final, "cycles": results}
             print("SD CACHE LIFECYCLE DEVICE PASS: " + json.dumps(report))
