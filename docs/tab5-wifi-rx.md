@@ -90,3 +90,23 @@ full phase counters are in `tools/wifi/burst-device-20261025.json`.
 This paired experiment reproduces and fixes a framing failure under queued bursts.
 It does not identify every possible source of radio loss or establish maximum
 bandwidth, power-loss/hot-removal behavior or recovery from failed SDIO transfers.
+
+## Host clock integrity
+
+A supplemental one-packet run recorded a 38,715 ms device CRC operation as
+10.397 host-monotonic seconds and incorrectly derived 1,755.5 KiB/s. macOS
+sleep/wake was observed in the local power log. That run remains preserved as
+`tools/wifi/uniform-invalid-20261025.json` with an invalid-measurement classification;
+its timing and network-loss result are not a qualification pass.
+
+The harness now records wall and monotonic elapsed time, checks them during the
+traffic worker and at trial checkpoints, and rejects differences over 1 second.
+It also compares the device CRC duration with host elapsed time and labels such
+failures `INVALID`, separately from a measured loss/transport `FAIL`. PAK throughput
+uses the device's CRC duration; host and wall durations remain in the report.
+These are CRC-stream timings, including computation and scheduling, rather than
+raw controller bandwidth. Offline tests cover normal timing, suspend/clock jumps,
+host/device discrepancies and invalid device durations.
+
+On macOS, `caffeinate -i python3 ...` can prevent idle system sleep for the
+duration of a test command. It does not change persistent power settings.

@@ -21,6 +21,21 @@ import threading
 import time
 
 
+class MeasurementInvalid(RuntimeError):
+    """The host timebase stopped or jumped during a hardware measurement."""
+
+
+def validate_clock(monotonic_seconds, wall_seconds, device_ms=None):
+    # macOS monotonic time can exclude system sleep while the board continues.
+    # A large wall-clock adjustment is also unsuitable for a paced measurement.
+    if abs(wall_seconds - monotonic_seconds) > 1:
+        raise MeasurementInvalid(f"host clock discontinuity: monotonic={monotonic_seconds:.3f}s "
+                                 f"wall={wall_seconds:.3f}s")
+    if device_ms is not None and (device_ms <= 0 or monotonic_seconds + 1 < device_ms / 1000):
+        raise MeasurementInvalid(f"host/device duration mismatch: host={monotonic_seconds:.3f}s "
+                                 f"device={device_ms}ms")
+
+
 def checksum(data):
     if len(data) % 2:
         data += b"\0"
@@ -90,9 +105,11 @@ class PingLoad:
     def run(self):
         index = 0
         next_send = time.monotonic()
+        started_mono, started_wall = time.monotonic(), time.time()
         try:
             while not self.stop_event.is_set():
                 now = time.monotonic()
+                validate_clock(now - started_mono, time.time() - started_wall)
                 if not self.pause_event.is_set() and now >= next_send:
                     index = self.send_burst(index)
                     # Pace groups at the requested average rate, without
@@ -171,6 +188,13 @@ def main():
         parser.error("report must be a new path distinct from the serial log")
     report = {"result": "INCOMPLETE", "baseline": [], "loads": [],
               "settle_seconds": args.settle_seconds}
+    started_mono, started_wall = time.monotonic(), time.time()
+
+    def check_host_clock():
+        mono, wall = time.monotonic() - started_mono, time.time() - started_wall
+        report["host_clock"] = {"monotonic_seconds": round(mono, 3),
+                                "wall_seconds": round(wall, 3)}
+        validate_clock(mono, wall)
     link = serial.Serial(port=None, baudrate=115200, timeout=.05,
                          write_timeout=10, exclusive=True)
     link.dtr = link.rts = False
@@ -205,6 +229,7 @@ def main():
             if args.settle_seconds:
                 print(f"Settling background services for {args.settle_seconds} s with serial held open", flush=True)
                 time.sleep(args.settle_seconds)
+            check_host_clock()
             if "active=1" not in session.command("sdroot"):
                 raise RuntimeError("SD root is not active")
             wifi = session.command("wifi status")
@@ -219,13 +244,21 @@ def main():
             def verify_pak():
                 session.command("sdroot io-reset")
                 started = time.monotonic()
+                wall_started = time.time()
                 link.write(b"crc32 /assets/quake/id1/pak0.pak\r")
                 receipt = session.until(b"> ", 180)
                 elapsed = time.monotonic() - started
-                if not re.search(rb"CRC32 74e3b084 18689235 bytes\b", receipt):
+                metric = re.search(rb"CRC32 74e3b084 18689235 bytes (\d+) ms\b", receipt)
+                if not metric:
                     raise RuntimeError(f"PAK CRC mismatch or read failure: {receipt[-800:]!r}")
-                result = {"seconds": round(elapsed, 3), "bytes": 18689235, "crc32": "74e3b084",
-                          "kib_per_second": round(18689235 / 1024 / elapsed, 1)}
+                wall_elapsed = time.time() - wall_started
+                device_ms = int(metric[1])
+                result = {"seconds": device_ms / 1000, "host_seconds": round(elapsed, 3),
+                          "wall_seconds": round(wall_elapsed, 3), "device_ms": device_ms,
+                          "bytes": 18689235, "crc32": "74e3b084"}
+                report["last_read_timing"] = result
+                validate_clock(elapsed, wall_elapsed, device_ms)
+                result["kib_per_second"] = round(18689235 / 1024 / result["seconds"], 1)
                 print("PAK " + json.dumps(result), flush=True)
                 return result
 
@@ -271,6 +304,7 @@ def main():
                 session.until(b"> ")
                 summary = load.finish()
                 load = None
+                check_host_clock()
                 if args.diagnostics:
                     receipt = session.command("wifi stats")
                     diag = {}
@@ -287,6 +321,7 @@ def main():
             session.command("mem trim")
             free_after, cache, atlas = memory(session.command("mem"))
             report["trimmed_psram_after_kib"] = free_after
+            check_host_clock()
             if cache or atlas or abs(free_after - free_before) > 32:
                 raise RuntimeError("PSRAM cleanup drift after concurrent I/O")
             failures = []
@@ -305,6 +340,10 @@ def main():
                 raise RuntimeError("; ".join(failures))
             report["result"] = "PASS"
             print("SD/WIFI COEXISTENCE DEVICE PASS", flush=True)
+        except MeasurementInvalid as exc:
+            report["result"] = "INVALID"
+            report["error"] = str(exc)
+            raise
         except Exception as exc:
             report["result"] = "FAIL"
             report["error"] = str(exc)

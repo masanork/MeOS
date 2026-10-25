@@ -3,7 +3,7 @@
 import struct
 import unittest
 
-from wifi_coexistence_device import PingLoad, checksum
+from wifi_coexistence_device import PingLoad, checksum, MeasurementInvalid, validate_clock
 
 
 def reply(load, index):
@@ -78,6 +78,14 @@ class IntegrityTests(unittest.TestCase):
         for invalid in (0, 17):
             with self.assertRaises(ValueError):
                 PingLoad("127.0.0.1", 100, burst_packets=invalid)
+
+    def test_clock_discontinuities_invalidate_measurements(self):
+        validate_clock(38.8, 38.9, 38715)
+        validate_clock(100, 100.1)
+        for args in ((10.4, 800, 38715), (10.4, 10.4, 38715),
+                     (38, 30, 38000), (38, 38, 0)):
+            with self.assertRaises(MeasurementInvalid):
+                validate_clock(*args)
 
 
 if __name__ == "__main__":
