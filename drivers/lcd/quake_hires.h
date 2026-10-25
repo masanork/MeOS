@@ -2,9 +2,9 @@
 #include "bitmap_resize.h"
 /* Read adjacent PSRAM pixels together before expanding columns. A full indexed
  * frame is larger than L2; walking all 300 rows separately for each column
- * repeatedly evicts adjacent pixels. The 4,800-byte tile lives on the internal
+ * repeatedly evicts adjacent pixels. The 19,200-byte tile lives on the internal
  * task stack and is never passed to DMA. */
-#define TAB5_HIRES_TILE_COLS 16
+#define TAB5_HIRES_TILE_COLS 64
 static inline void tab5_hires_stage(uint8_t tile[TAB5_HIRES_TILE_COLS][300],
     const uint8_t *pixels,unsigned x,unsigned count){
  for(unsigned y=0;y<300;y++)for(unsigned i=0;i<count;i++)tile[i][y]=pixels[y*512+x+i];
