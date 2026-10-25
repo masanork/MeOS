@@ -22,6 +22,9 @@
 #include "../home/home.h"
 #endif
 #include "../../drivers/lcd/fbcon.h"
+#if M5OS_BOARD_TAB5
+#include "../../drivers/lcd/bizud.h"
+#endif
 
 #define FILER_PAUSE_SETTLE_MS 100u
 #include "shell.h"
@@ -424,12 +427,31 @@ static void print_heap(const char *name, const kmem_stats_t *st)
 
 static int cmd_mem(int argc, char **argv)
 {
-    (void)argc; (void)argv;
+#if M5OS_BOARD_TAB5
+    if (argc == 2 && sh_streq(argv[1], "trim")) {
+        size_t bytes = bizud_trim();
+        SH_PRINTF("BIZ UD cache: %s (%u KB released)\n",
+                  bytes ? "trimmed" : bizud_cache_users() ? "busy" : "empty",
+                  (uint32_t)(bytes / 1024u));
+    } else
+#endif
+    if (argc != 1) {
+#if M5OS_BOARD_TAB5
+        SH_PRINTF("usage: mem [trim]\n");
+#else
+        SH_PRINTF("usage: mem\n");
+#endif
+        return 1;
+    }
     kmem_stats_t mi, mp;
     kmem_internal_stats(&mi);
     kmem_psram_stats(&mp);
     print_heap("internal", &mi);
     print_heap("psram", &mp);
+#if M5OS_BOARD_TAB5
+    SH_PRINTF("BIZ UD   %u KB cached   %u active user(s)\n",
+              (uint32_t)(bizud_cache_bytes() / 1024u), bizud_cache_users());
+#endif
     return 0;
 }
 
@@ -1018,6 +1040,8 @@ static int cmd_home(int argc, char **argv)
         dq_clear();
         fbcon_pause(false);
 
+        if (action != HOME_WRITE && action != HOME_SCHEME) bizud_trim();
+
         char *one[1];
         switch (action) {
         case HOME_WRITE:     one[0] = "write";     cmd_write(1, one);     break;
@@ -1258,7 +1282,7 @@ static const command_t s_commands[] = {
     { "ls",      cmd_ls,      "ls [PATH]       list a directory (/dev lists devices)" },
     { "cat",     cmd_cat,     "cat FILE...     print files" },
     { "echo",    cmd_echo,    "echo TEXT [> FILE | >> FILE]" },
-    { "mem",     cmd_mem,     "heap usage" },
+    { "mem",     cmd_mem,     "mem [trim]     heap usage / release idle font cache" },
     { "uptime",  cmd_uptime,  "time since boot" },
     { "run",     cmd_run,     "run [APP]       start an application (no argument: list them)" },
     { "put",     cmd_put,     "put PATH        receive a file as base64 (see tools/m5ex_push.py)" },

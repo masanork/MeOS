@@ -23,6 +23,11 @@
 #define ROWS ((DISPLAY_HEIGHT-250)/PITCH)
 #define CTRL(c) ((c)-'a'+1)
 typedef struct { scheme_buffer b; size_t starts[SCHEME_SOURCE_CAP+2]; int rows,top; bool confirm; uint16_t *frame; char status[120]; } writer;
+static void *editor_alloc(size_t bytes) {
+    void *p=kmalloc_psram(bytes);
+    if(!p && bizud_trim())p=kmalloc_psram(bytes);
+    return p;
+}
 static uint32_t at(writer *w,size_t p) { const char *s=w->b.text+p; return bizud_decode(&s); }
 static int width(writer *w,size_t p) { uint32_t cp=at(w,p); return cp=='\t'?56:cp=='\r'?0:bizud_width(cp); }
 static void layout(writer *w) {
@@ -85,7 +90,7 @@ static bool save(writer *w,const char *path) {
     return rc>=0;
 }
 bool write_file(const char *path) {
-    writer *w=kmalloc_psram(sizeof *w);if(!w)return false;
+    writer *w=editor_alloc(sizeof *w);if(!w)return false;
     memset(w,0,sizeof *w);vfs_info_t st;
     int stat=vfs_stat(path,&st);
     if(stat==ERR_OK) {
@@ -98,11 +103,11 @@ bool write_file(const char *path) {
         w->b.length=n;
     } else if(stat!=ERR_NOENT){kfree(w);return false;}
     if(!display_try_claim(w)){kfree(w);return false;}
-    w->frame=kmalloc_psram(DISPLAY_BUFFER_BYTES);
+    w->frame=editor_alloc(DISPLAY_BUFFER_BYTES);
     if(!w->frame || !bizud_begin()){kfree(w->frame);display_release_claim(w);kfree(w);return false;}
     fbcon_pause(true);ime_set_app_view(true);
     bool run=true,ok=true,redraw=true;uint32_t revision=~0u;
-    ime_view *view=kmalloc_psram(sizeof *view);
+    ime_view *view=editor_alloc(sizeof *view);
     if(!view){ime_set_app_view(false);fbcon_pause(false);display_release_claim(w);bizud_end();kfree(w->frame);kfree(w);return false;}
     while(run) {
         ime_read_view(view);

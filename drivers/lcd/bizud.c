@@ -21,6 +21,7 @@ static biz_glyph *glyphs;
 static uint8_t *coverage;
 static unsigned glyph_count;
 static void *atlas;
+static size_t atlas_bytes;
 static uint32_t get32(const uint8_t *p) {
     return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;
 }
@@ -51,31 +52,54 @@ static bool load_atlas(void) {
         biz_glyph *g=&glyphs[i];uint32_t length=g->length&32767u;
         if((i&&glyphs[i-1].cp>=g->cp)||g->offset>data_bytes||length>data_bytes-g->offset)goto fail;
     }
-    vfs_close(fd);
+    atlas_bytes=index_bytes+data_bytes;vfs_close(fd);
     kprintf("bizud: loaded %u glyphs, %u bytes from SD in %u ms\n",count,index_bytes+data_bytes,
             (uint32_t)((hal_time_now_us()-started)/1000u));
     return true;
 fail:
-    vfs_close(fd);kfree(atlas);atlas=0;glyphs=0;coverage=0;glyph_count=0;return false;
+    vfs_close(fd);kfree(atlas);atlas=0;atlas_bytes=0;glyphs=0;coverage=0;glyph_count=0;return false;
 }
 #endif
+#define BIZUD_SCRATCH_BYTES 10240u
 static uint8_t *scratch;
+static unsigned users;
 bool bizud_begin(void) {
 #ifndef M5OS_BIZUD_EMBEDDED
+    bool hit=atlas!=0;
     if(!atlas&&!load_atlas())return false;
 #endif
-    if(!scratch)scratch=kmalloc_psram(10240);
-    if(scratch)return true;
+    if(!scratch)scratch=kmalloc_psram(BIZUD_SCRATCH_BYTES);
+    if(scratch) {
+        users++;
 #ifndef M5OS_BIZUD_EMBEDDED
-    kfree(atlas);atlas=0;glyphs=0;coverage=0;glyph_count=0;
+        if(hit&&users==1)kprintf("bizud: cache hit, %u bytes retained in PSRAM\n",(uint32_t)atlas_bytes);
+#endif
+        return true;
+    }
+#ifndef M5OS_BIZUD_EMBEDDED
+    kfree(atlas);atlas=0;atlas_bytes=0;glyphs=0;coverage=0;glyph_count=0;
 #endif
     return false;
 }
 void bizud_end(void) {
+    if(users)users--;
+}
+size_t bizud_cache_bytes(void) {
+    size_t bytes=scratch?BIZUD_SCRATCH_BYTES:0;
+#ifndef M5OS_BIZUD_EMBEDDED
+    bytes+=atlas_bytes;
+#endif
+    return bytes;
+}
+unsigned bizud_cache_users(void) { return users; }
+size_t bizud_trim(void) {
+    if(users)return 0;
+    size_t bytes=bizud_cache_bytes();
     kfree(scratch);scratch=0;
 #ifndef M5OS_BIZUD_EMBEDDED
-    kfree(atlas);atlas=0;glyphs=0;coverage=0;glyph_count=0;
+    kfree(atlas);atlas=0;atlas_bytes=0;glyphs=0;coverage=0;glyph_count=0;
 #endif
+    return bytes;
 }
 static const biz_glyph *find(uint32_t cp) {
     unsigned lo=0, hi=glyph_count;

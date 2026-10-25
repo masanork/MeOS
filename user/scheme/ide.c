@@ -57,6 +57,12 @@ typedef struct {
     int visual_rows;
     uint16_t *frame;
 } ide;
+static void *editor_alloc(size_t bytes)
+{
+    void *p = kmalloc_psram(bytes);
+    if (!p && bizud_trim()) p = kmalloc_psram(bytes);
+    return p;
+}
 static const char demo[] = "; Scheme workspace / 日本語入力: Ctrl-Space\n"
                            "; C-x C-b: evaluate buffer    F2: REPL\n"
                            "(define (wave x)\n"
@@ -732,13 +738,13 @@ bool scheme_ide(const char *path)
         kprintf("scheme: display unavailable or busy\n");
         return false;
     }
-    ide *i = kmalloc_psram(sizeof *i);
+    ide *i = editor_alloc(sizeof *i);
     if (!i) {
         kprintf("scheme: out of PSRAM\n");
         return false;
     }
     memset(i, 0, sizeof *i);
-    i->workspace = kmalloc_psram(scheme_workspace_size());
+    i->workspace = editor_alloc(scheme_workspace_size());
     if (!i->workspace || !display_try_claim(i)) {
         kprintf("scheme: memory or display unavailable\n");
         kfree(i->workspace);
@@ -763,7 +769,7 @@ bool scheme_ide(const char *path)
     if (i->running) {
         fbcon_pause(true);
         task_sleep(100);
-        i->frame = kmalloc_psram(DISPLAY_BUFFER_BYTES);
+        i->frame = editor_alloc(DISPLAY_BUFFER_BYTES);
         if (!i->frame || !bizud_begin()) {
             kprintf("scheme: BIZ UD display memory unavailable\n");
             kfree(i->frame);

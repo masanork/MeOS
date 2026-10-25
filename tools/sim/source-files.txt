@@ -19,9 +19,11 @@ drivers/usbkbd/hid_keys.h
 kernel/include/m5os/arch.h
 kernel/include/m5os/blockdev.h
 kernel/include/m5os/board_config.h
+kernel/include/m5os/crc32.h
 kernel/include/m5os/display.h
 kernel/include/m5os/errno.h
 kernel/include/m5os/fs.h
+kernel/include/m5os/hal_time.h
 kernel/include/m5os/ime.h
 kernel/include/m5os/kmalloc.h
 kernel/include/m5os/kprintf.h
@@ -30,6 +32,7 @@ kernel/include/m5os/task.h
 kernel/include/m5os/types.h
 kernel/include/m5os/vfs.h
 kernel/lib/number.c
+kernel/lib/crc32.c
 tools/ime/mini.skk
 tools/ime_mkdict.py
 tools/scheme/host_test.c
@@ -73,6 +76,8 @@ user/editor/bizime.c
 user/editor/bizime.h
 tools/fonts/licenses/BIZ-UD-OFL.txt
 tools/fonts/build_bizud.py
+tools/fonts/cache_test.c
+tools/fonts/cache_test.sh
 tools/sim/write_test.sh
 user/write/README.md
 tools/fonts/README.md

@@ -95,7 +95,11 @@ Bunsen Ext and Jigmo's three files are unions, not a single-font glyph count.
 FreeType or TTF runtime). `assets/fonts/bizud24.m5f` contains the identical atlas
 for Tab5; copy it to that absolute path on the persistent SD root before opening
 the writing editor. The firmware loads and CRC-checks the atlas into PSRAM only
-while the editor is active, rather than consuming the internal app partition.
+on first use, rather than consuming the internal app partition. The atlas then
+stays in an idle PSRAM cache, so switching between Write and Scheme does not
+reread roughly 2.4 MiB from microSD. `mem` reports the cache and `mem trim`
+releases it. Leaving Home for a non-editor application also trims it
+automatically; a failed large editor allocation trims and retries once.
 With a Tab5 shell connected, provision it with:
 
 ```sh

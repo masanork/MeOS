@@ -122,6 +122,9 @@ void ime_set_anchor(int x, int y)
 const char *ime_status(void) { return "hiragana"; }
 bool bizud_begin(void) { return true; }
 void bizud_end(void) {}
+size_t bizud_cache_bytes(void) { return 0; }
+unsigned bizud_cache_users(void) { return 0; }
+size_t bizud_trim(void) { return 0; }
 uint32_t bizud_decode(const char **text)
 {
     const unsigned char *p = (const unsigned char *)*text;

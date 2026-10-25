@@ -140,3 +140,7 @@ command completion, and display/memory cleanup. Physical keyboard, IME overlay p
 rendering and concurrent floating-point execution still require Tab5 qualification.
 `sh tools/sim/scheme_ui_test.sh` additionally replays the BIZ UD minibuffer,
 evaluates `(sqrt 81)`, and checks the REPL result frame.
+
+Write and Scheme share an idle BIZ UD atlas cache. The first editor reads it
+from microSD; subsequent editor launches reuse it. `mem trim` explicitly
+reclaims the cache, and Home does so before starting a non-editor application.

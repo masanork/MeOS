@@ -19,8 +19,10 @@ the byte-identical generated atlas directly. Missing glyphs show a box.
 Combining marks and IVS are not shaped as sequences yet. Soft wrapping is by
 glyph width without Japanese kinsoku rules. The font asset is about 2.32 MiB;
 a full offscreen RGB565 frame (about 1.76 MiB) is also allocated in PSRAM to
-avoid clear/redraw flicker. Both allocations are released on exit. It is
-The same BIZ UD IME presentation is shared with the Scheme workspace.
+avoid clear/redraw flicker. The framebuffer is released on exit; the shared
+BIZ UD atlas remains warm for Scheme. `mem trim` or opening a non-editor from
+Home returns that idle cache to PSRAM. The same BIZ UD IME presentation is
+shared with the Scheme workspace.
 
 `sh tools/sim/write_test.sh` replays the real MeOS IME through HID input, saves
 Japanese text, verifies exact UTF-8 file contents, and checks that the inline

@@ -175,6 +175,10 @@ Files, Camera, Web, Wi-Fi, SSH, Tailscale, installed WebAssembly apps and BASIC
 are always available; Doom and Quake appear only in builds that enable them.
 Sending a command as soon as the first serial prompt appears suppresses automatic
 Home startup, so recovery and test scripts retain a deterministic shell path.
+Write and Scheme share the 24px BIZ UD atlas in an idle PSRAM cache, making the
+second editor launch immediate instead of rereading the font from microSD.
+Opening a non-editor tile releases the cache; `mem` reports it and `mem trim`
+reclaims it explicitly.
 
 ---
 
@@ -304,8 +308,9 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
 * **Conversion** (`conv.c`) cuts the reading into phrases by dynamic programming: a dictionary word, plain or conjugating
   (SKK okuri-ari entries, checked against the conjugation form the okurigana spells), followed by particles / endings
   that stay kana. Choices are remembered for the session (`ime_dict_learn`).
-* **Screen**: console programs get an overlay at the text cursor (`fbcon_overlay_*`); programs that own the display
-  (`fbcon_pause`: filer, ssh, web) get the same UI as a two-line bar at the bottom, restored afterwards.
+* **Screen**: console programs get an overlay at the text cursor (`fbcon_overlay_*`). Write and Scheme consume an
+  immutable IME view and draw BIZ UD preedit plus candidates beside their proportional cursor; other full-screen
+  programs (`fbcon_pause`: filer, ssh, web) use a two-line bar at the bottom, restored afterwards.
 * **Dictionary**: a small one is built in (`tools/ime/mini.skk`). For real use put an SKK dictionary on the SD card:
   `tools/ime_flash_dict.sh -p /dev/cu.usbmodemXXXX` (downloads SKK-JISYO.L, GPL-2.0+, and uploads
   `/assets/ime-dict.bin`; it is loaded into PSRAM in the background after the persistent root has mounted).
