@@ -9,6 +9,8 @@
 #include "../../drivers/lcd/dma_copy_tab5.c"
 dma2d_dev_t mock_hw;
 static bool active;
+static bool fail_internal;
+static unsigned internal_allocations;
 static unsigned submitted,links;
 static dma2d_descriptor_t *live_tx[8],*live_rx[8],saved_tx[8],saved_rx[8];
 static uint8_t saved_source[8][1536];
@@ -44,7 +46,7 @@ uint64_t hal_time_now_us(void){
 uint32_t arch_irq_disable(void){return 0;}
 void arch_irq_restore(uint32_t flags){(void)flags;}
 void *kmalloc_psram(size_t n){return malloc(n);}
-void *kmalloc_internal(size_t n){return malloc(n);}
+void *kmalloc_internal(size_t n){if(fail_internal)return NULL;internal_allocations++;return malloc(n);}
 void kputs(const char *s){(void)s;}
 void kprintf(const char *fmt,...){(void)fmt;assert(!"Unexpected DMA fault");}
 int esp_cache_msync(void *p,size_t n,int flags){(void)flags;assert(!((uintptr_t)p&127u)&&!(n&127u));return 0;}
@@ -54,6 +56,10 @@ int main(void){
  uint16_t palette[256];for(unsigned i=0;i<256;i++)palette[i]=(uint16_t)(i*239);
  memset(actual,0x5a,sizeof actual);memcpy(expected,actual,sizeof actual);
  for(unsigned i=0;i<QV_PIXELS;i++)pixels[i]=(uint8_t)(i*11);
+#if M5OS_QUAKE_HIGHRES
+ fail_internal=true;assert(!tab5_dma_copy_begin(7,actual+64));assert(!owner&&!mock_hw.clock&&!active);
+ fail_internal=false;
+#endif
  assert(tab5_dma_copy_begin(7,actual+64));assert(!active&&!tab5_dma_copy_begin(9,actual+64));
  for(unsigned f=0;f<32;f++){
   bool force=f==0||f==20;unsigned changed=0;
@@ -81,5 +87,8 @@ int main(void){
  }
  tab5_dma_copy_end(9);assert(owner==7);tab5_dma_copy_end(7);assert(!active&&!mock_hw.clock&&!owner);
  assert(tab5_dma_copy_begin(9,actual+64));tab5_dma_copy_end(9);
+#if M5OS_QUAKE_HIGHRES
+ assert(internal_allocations==1);
+#endif
  puts("DMA production driver: delayed chains/bank lifetime, sparse partial batches, >255 rows, palette, independent framebuffer and guards PASS");
 }
