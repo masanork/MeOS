@@ -117,6 +117,8 @@
     }
   ],
   "firmware_boot_version": "69077d5",
+  "app_sha256": "322ce95107ac85680169dd9ee347d813ccfe0aef195287e1879fad0b480df00a",
+  "private_serial_log_sha256": "e65e84e2cb99476900baa7e3e095635a4c7d9cf1d5a22be7c042c80aea2be498",
   "trimmed_psram_before_kib": 23135,
   "trimmed_psram_after_kib": 23119,
   "error": "25 pps font: 46.575% loss; 25 pps write: 34.884% loss; 100 pps idle: 33.594% loss; 100 pps pak: 51.256% loss; 100 pps font: 51.331% loss; 100 pps write: 69.677% loss"
