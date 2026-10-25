@@ -24,7 +24,8 @@ static void *test_raw;
 #define DMA_BATCH_COLS 4
 #define DMA_DESC_MAX (DMA_BATCH_COLS*QV_REPEAT)
 /* Each 600-pixel expanded column is padded to cache-line boundaries. */
-static uint16_t source[2][DMA_BATCH_COLS][640] __attribute__((aligned(128)));
+static uint16_t (*source)[DMA_BATCH_COLS][640];
+static void *source_raw;
 #else
 #define DMA_DESC_MAX 3
 static uint16_t source[2][768] __attribute__((aligned(128)));
@@ -100,6 +101,13 @@ static bool transfer_batch(unsigned bank,const column_span *spans,unsigned count
 bool tab5_dma_copy_begin(uint32_t who,uint16_t *framebuffer){
  if(!who||owner||disabled||!framebuffer||((uintptr_t)framebuffer&127u)||!clocks(true))return false;
  owner=who;fb=framebuffer;dma2d_ll_hw_enable(hw,true);
+#if M5OS_QUAKE_HIGHRES
+ /* Linked internal DRAM is tight. Allocate once from the kernel's internal
+  * heap, with no app owner, so buffers remain alive even after a forced exit. */
+ if(!source_raw)source_raw=kmalloc_internal(2*sizeof *source+127);
+ if(!source_raw){tab5_dma_copy_end(who);return false;}
+ source=(void *)(((uintptr_t)source_raw+127)&~(uintptr_t)127);
+#endif
  if(!test_raw)test_raw=kmalloc_psram(4608+127);
  if(!test_raw){tab5_dma_copy_end(who);return false;}
  test=(uint16_t *)(((uintptr_t)test_raw+127)&~(uintptr_t)127);

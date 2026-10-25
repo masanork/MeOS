@@ -44,6 +44,7 @@ uint64_t hal_time_now_us(void){
 uint32_t arch_irq_disable(void){return 0;}
 void arch_irq_restore(uint32_t flags){(void)flags;}
 void *kmalloc_psram(size_t n){return malloc(n);}
+void *kmalloc_internal(size_t n){return malloc(n);}
 void kputs(const char *s){(void)s;}
 void kprintf(const char *fmt,...){(void)fmt;assert(!"Unexpected DMA fault");}
 int esp_cache_msync(void *p,size_t n,int flags){(void)flags;assert(!((uintptr_t)p&127u)&&!(n&127u));return 0;}
