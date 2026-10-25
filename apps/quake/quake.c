@@ -329,7 +329,7 @@ void quake_main(void *arg) {
         uint64_t load_at=hal_time_now_us();bool playable_reported=false;
 #ifdef MEOS_QUAKE_DETAIL_PROFILE
         uint64_t clock_at=hal_time_now_us();for(unsigned i=0;i<1024;i++)(void)quake_profile_clock();
-        kprintf("quake detail: enabled (inclusive wall time), clock read <=%u ns incl loop\n",
+        kprintf("quake detail: enabled (inclusive wall time), clock read %u ns avg incl loop/IRQs\n",
             (unsigned)((hal_time_now_us()-clock_at)*1000/1024));
 #endif
         Host_Init(&parms);
