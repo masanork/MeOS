@@ -32,7 +32,7 @@ def main():
 
     def command(text, timeout=45):
         link.write(text.encode() + b"\r")
-        return read_until(b"\n> ", timeout)
+        return read_until(b"> ", timeout)
 
     def free_psram(text):
         match = re.search(r"psram\s+total \d+ KB\s+used \d+ KB\s+free (\d+) KB", text)
@@ -65,7 +65,7 @@ def main():
             raise RuntimeError(f"invalid benchmark counters: {values}")
         time.sleep(2)
         link.write(b"q")
-        read_until(b"\n> ", 20)
+        read_until(b"> ", 20)
         after = free_psram(command("mem"))
         if abs(after - before) > 32:
             raise RuntimeError(f"PSRAM not reclaimed: before={before} KiB after={after} KiB")
