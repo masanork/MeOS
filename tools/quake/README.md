@@ -557,3 +557,45 @@ Host ASan/UBSan tests run the actual driver with delayed DMA completion. They
 check descriptor/source bank lifetime, variable span lengths, sparse/partial
 chains, rows above 255, full framebuffer/margin guards, palette repaint,
 allocation failure fallback and once-only buffer reuse at both resolutions.
+
+## Optional renderer scope profiling
+
+Build a separate diagnostic image without changing the normal build/config:
+
+```sh
+M5OS_QUAKE_RESOLUTION=512x300 M5OS_QUAKE_DETAIL_PROFILE=1 sh tools/quake/build.sh
+```
+
+This produces `build-quake-512x300-profile` and ignored
+`sdkconfig.quake-512x300-profile` (copied from the ordinary config on first use
+when available). Normal builds omit the timer macros entirely; native archive
+checks confirm no renderer references to `quake_profile_detail` in that build.
+CI builds both normal resolutions plus the 512x300 diagnostic variant.
+
+Every 100 presented frames, `quake detail outer` reports frame setup/visibility,
+world edge processing, entities, view model, particles and water-warp times.
+`quake detail nested` reports surface-cache lookup/rebuild, surface generation,
+lightmap generation, perspective spans, depth spans, sky and water spans.
+
+These are inclusive **wall** times, including preemption/interrupts. World edge
+processing contains surface-cache and span work; cache time contains surface
+generation, which contains lightmaps. Do not add overlapping timers together.
+The timer-pair count is per report interval, and each time is divided by the
+completed-frame count used by the existing phase report. The startup clock
+calibration is an observed average including loop/IRQ overhead, not a guaranteed
+latency bound. It does not account for all bookkeeping overhead.
+
+Compare complete 969-frame `timedemo demo1;toggleconsole` runs with the console
+closed and effect audio actually initialized. Record diagnostic FPS separately
+from normal FPS to estimate measurement disturbance. Keep clocks, cache size,
+renderer math, surface-cache budget and transfer mode fixed. Subtracting nested
+timings can guide investigation, but these measurements are not a proof of
+exclusive CPU time. Do not claim an optimization from host timing.
+
+The host harness accepts `--profile-render`. Enabled/disabled 120-step runs
+produce the same 101-frame gameplay hash `de60dcf25da70b2b` and frame-20 image
+SHA-256 `1d628a0abd6ee31e11620efa3c91d6358a6b62026cbc7cfd75eaf82c521b7ac9`.
+The diagnostic 1,200-step run also matches the previous 1,181-frame gameplay
+hash `bfc101a42954ef9a`. Device timing is pending coordinated access: the first
+flash attempt could not lock USB while a Wi-Fi/SD coexistence test was running;
+it stopped before reading/writing the partition.
