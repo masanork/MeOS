@@ -896,6 +896,18 @@ static void print_wifi_status(void)
 
 static int cmd_wifi(int argc, char **argv)
 {
+    if (argc >= 2 && sh_streq(argv[1], "stats")) {
+        if (argc >= 3 && sh_streq(argv[2], "reset")) wifi_reset_diagnostics();
+        wifi_diagnostics_t d; wifi_get_diagnostics(&d);
+        SH_PRINTF("WIFI RX frames=%u partials=%u bad=%u max_pending=%u reg_errors=%u io_errors=%u plan_errors=%u\n",
+                  d.rx_frames,d.rx_partials,d.rx_bad_headers,d.rx_max_pending,d.rx_reg_errors,d.rx_io_errors,d.rx_plan_errors);
+        SH_PRINTF("WIFI TX no_credit=%u io_errors=%u\n", d.tx_no_credit,d.tx_io_errors);
+        SH_PRINTF("WIFI ICMP requests=%u replies=%u failures=%u\n",
+                  d.icmp_requests,d.icmp_replies,d.icmp_reply_failures);
+        SH_PRINTF("WIFI TIME poll_gap_us=%u poll_duration_us=%u bus_wait_us=%u\n",
+                  d.poll_max_gap_us,d.poll_max_duration_us,d.bus_max_wait_us);
+        return 0;
+    }
 #if M5OS_HAS_KEYBOARD
     if (argc < 2 || sh_streq(argv[1], "gui")) {
         fbcon_pause(true);
@@ -1001,6 +1013,7 @@ static int cmd_wifi(int argc, char **argv)
             "  wifi                       launch graphical Wi-Fi configuration app\n"
             "  wifi gui                   launch graphical Wi-Fi configuration app\n"
             "  wifi status                show Wi-Fi connection & IPv4 status\n"
+            "  wifi stats [reset]         show/reset transport diagnostic counters\n"
             "  wifi scan                  scan nearby Wi-Fi networks\n"
             "  wifi connect <SSID> [PASS] connect & save credentials for auto-connect\n"
             "  wifi disconnect [gui]      disconnect Wi-Fi (or open GUI disconnect modal)\n"
