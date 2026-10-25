@@ -187,10 +187,12 @@ a published or license-cleared release.
 ### Prose writing mode
 
 `sh tools/sim/run.sh --write --workspace DIR --source /home/note.txt` opens the
-24px BIZ UD editor (create DIR first). Ctrl-Space uses MeOS Japanese input,
-Ctrl-S saves, Ctrl-Q exits, Ctrl-Z undoes the last edit. Missing characters are
-boxed. See `user/write/README.md`. Run `sh tools/sim/write_test.sh` for a real
-HID/IME/save replay. The default simulator target remains the Scheme workspace.
+24px BIZ UD editor in right-to-left vertical prose mode (create DIR first).
+Ctrl-T toggles the proportional horizontal view. Ctrl-Space uses MeOS Japanese
+input, Ctrl-S saves, Ctrl-Q exits, Ctrl-Z undoes the last edit. Missing characters
+are boxed. See `user/write/README.md`. Run `sh tools/sim/write_test.sh` for a real
+vertical/horizontal HID, IME and save replay. The default simulator target remains
+the Scheme workspace.
 
 ### Tab5 Home mode
 

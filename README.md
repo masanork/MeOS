@@ -175,7 +175,8 @@ Files, Camera, Web, Wi-Fi, SSH, Tailscale, installed WebAssembly apps and BASIC
 are always available; Doom and Quake appear only in builds that enable them.
 Sending a command as soon as the first serial prompt appears suppresses automatic
 Home startup, so recovery and test scripts retain a deterministic shell path.
-Write and Scheme share the 24px BIZ UD atlas in an idle PSRAM cache, making the
+Write opens as a 24px BIZ UD vertical Japanese page (Ctrl-T toggles horizontal).
+Write and Scheme share the font atlas in an idle PSRAM cache, making the
 second editor launch immediate instead of rereading the font from microSD.
 Opening a non-editor tile releases the cache; `mem` reports it and `mem trim`
 reclaims it explicitly.
@@ -309,7 +310,7 @@ Every keyboard key goes through `drivers/ime` before it reaches the console, so 
   (SKK okuri-ari entries, checked against the conjugation form the okurigana spells), followed by particles / endings
   that stay kana. Choices are remembered for the session (`ime_dict_learn`).
 * **Screen**: console programs get an overlay at the text cursor (`fbcon_overlay_*`). Write and Scheme consume an
-  immutable IME view and insert BIZ UD preedit into their proportional layout, reflowing following text; other full-screen
+  immutable IME view and insert BIZ UD preedit into their horizontal or vertical layout, reflowing following text; other full-screen
   programs (`fbcon_pause`: filer, ssh, web) use a two-line bar at the bottom, restored afterwards.
 * **Dictionary**: a small one is built in (`tools/ime/mini.skk`). For real use put an SKK dictionary on the SD card:
   `tools/ime_flash_dict.sh -p /dev/cu.usbmodemXXXX` (downloads SKK-JISYO.L, GPL-2.0+, and uploads

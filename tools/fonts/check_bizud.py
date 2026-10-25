@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the entire decoded BIZ UD atlas against its pre-integration pixels."""
+"""Check ordinary and OpenType-vertical BIZ UD atlas pixels."""
 import argparse
 import hashlib
 from pathlib import Path
@@ -9,6 +9,7 @@ import zlib
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPECTED = "c7d570a208bb4ad4115c58f2ea63013c350431ee75e841c42044dcde1e5dd5c4"
+EXPECTED_VERTICAL = "2ace1258c215fa83df45af8310bfa6d2ebd9afda96e13e36f50f01f19762de34"
 
 
 def read_atlas(path):
@@ -16,18 +17,26 @@ def read_atlas(path):
         raw = path.read_bytes()
         magic, version, count, index_size, data_size, index_crc, data_crc = struct.unpack("<8sIIIIII", raw[:32])
         assert magic == b"M5BIZ24\0" and version == 1 and index_size == count * 16
-        index, data = raw[32:32 + index_size], raw[32 + index_size:]
-        assert len(data) == data_size and zlib.crc32(index) & 0xffffffff == index_crc
-        assert zlib.crc32(data) & 0xffffffff == data_crc
-        return [struct.unpack("<IIHbbBBBx", index[n:n + 16]) for n in range(0, len(index), 16)], data
+        index, payload = raw[32:32 + index_size], raw[32 + index_size:]
+        assert len(payload) == data_size and zlib.crc32(index) & 0xffffffff == index_crc
+        assert zlib.crc32(payload) & 0xffffffff == data_crc
+        magic2, vertical_count, vertical_offset = struct.unpack("<8sII", payload[-16:])
+        assert magic2 == b"M5VRT2\0\0" and vertical_offset % 4 == 0
+        assert vertical_offset + vertical_count * 16 == len(payload) - 16
+        vertical_index = payload[vertical_offset:-16]
+        ordinary = [struct.unpack("<IIHbbBBBx", index[n:n + 16]) for n in range(0, len(index), 16)]
+        vertical = [struct.unpack("<IIHbbBBBx", vertical_index[n:n + 16])
+                    for n in range(0, len(vertical_index), 16)]
+        return ordinary, vertical, payload[:vertical_offset]
     index, encoded = path.read_text().split("static const uint8_t coverage[] = {")
     data = bytes(map(int, re.findall(r"\d+", encoded)))
-    entries = [tuple(map(int, row.split(","))) for row in re.findall(r"\{([^{}]+)\}", index)]
-    return entries, data
+    ordinary, vertical = index.split("static const biz_glyph vertical_glyphs[] = {")
+    ordinary = ordinary.split("static const biz_glyph glyphs[] = {", 1)[1]
+    parse = lambda text: [tuple(map(int, row.split(","))) for row in re.findall(r"\{([^{}]+)\}", text)]
+    return parse(ordinary), parse(vertical), data
 
 
-def decoded_digest(path):
-    entries, data = read_atlas(path)
+def decoded_digest(entries, data):
     digest = hashlib.sha256()
     previous = -1
     count = 0
@@ -64,8 +73,18 @@ def decoded_digest(path):
         digest.update(struct.pack("<IbbBBB", cp, x, y, width, height, advance))
         digest.update(packed)
         count += 1
-    assert count == 11741
-    return digest.hexdigest(), count, len(data)
+    return digest.hexdigest(), count
+
+
+def checked_atlas(path):
+    ordinary, vertical, data = read_atlas(path)
+    normal_digest, normal_count = decoded_digest(ordinary, data)
+    vertical_digest, vertical_count = decoded_digest(vertical, data)
+    assert normal_count == 11741 and normal_digest == EXPECTED, \
+        f"{path}: ordinary glyph metrics or pixels changed: {normal_digest}"
+    assert vertical_count == 350 and vertical_digest == EXPECTED_VERTICAL, \
+        f"{path}: vertical glyph metrics or pixels changed: {vertical_digest}"
+    return normal_digest, vertical_digest, normal_count, vertical_count, len(data)
 
 
 if __name__ == "__main__":
@@ -73,8 +92,8 @@ if __name__ == "__main__":
     parser.add_argument("--atlas", type=Path)
     args = parser.parse_args()
     paths = [args.atlas] if args.atlas else [ROOT / "drivers/lcd/bizud24_data.inc", ROOT / "assets/fonts/bizud24.m5f"]
-    results = [decoded_digest(path) for path in paths]
-    for path, (checksum, count, size) in zip(paths, results):
-        assert checksum == EXPECTED, f"{path}: glyph metrics or decoded pixels changed: {checksum}"
-        print(f"BIZ UD {path.name}: {count} glyphs, all metrics/pixels unchanged; {size} encoded bytes PASS")
+    results = [checked_atlas(path) for path in paths]
+    for path, (_, _, count, vertical_count, size) in zip(paths, results):
+        print(f"BIZ UD {path.name}: {count} ordinary + {vertical_count} vertical glyphs; "
+              f"all metrics/pixels unchanged; {size} encoded bytes PASS")
     assert len(set(results)) == 1, "embedded and SD atlases differ"

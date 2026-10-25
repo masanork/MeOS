@@ -14,12 +14,15 @@ typedef struct { uint32_t cp, offset; uint16_t length; int8_t x,y; uint8_t w,h,a
 #ifdef M5OS_BIZUD_EMBEDDED
 #include "bizud24_data.inc"
 #define glyph_count ((unsigned)(sizeof glyphs/sizeof glyphs[0]))
+#define vertical_glyph_count ((unsigned)(sizeof vertical_glyphs/sizeof vertical_glyphs[0]))
 #else
 #define BIZUD_PATH "/assets/fonts/bizud24.m5f"
 #define BIZUD_HEADER 32u
 static biz_glyph *glyphs;
+static biz_glyph *vertical_glyphs;
 static uint8_t *coverage;
 static unsigned glyph_count;
+static unsigned vertical_glyph_count;
 static void *atlas;
 static size_t atlas_bytes;
 static uint32_t get32(const uint8_t *p) {
@@ -40,24 +43,41 @@ static bool load_atlas(void) {
     uint8_t h[BIZUD_HEADER]={0};uint32_t ignored=0,index_crc=0,data_crc=0;
     int fd=vfs_open(BIZUD_PATH,VFS_O_READ);if(fd<0)return false;
     bool ok=read_all(fd,h,sizeof h,&ignored);
-    uint32_t count=get32(h+12),index_bytes=get32(h+16),data_bytes=get32(h+20);
-    if(!ok||memcmp(h,"M5BIZ24\0",8)||get32(h+8)!=1||sizeof(biz_glyph)!=16||
+    uint32_t version=get32(h+8),count=get32(h+12),index_bytes=get32(h+16),data_bytes=get32(h+20);
+    if(!ok||memcmp(h,"M5BIZ24\0",8)||version!=1||sizeof(biz_glyph)!=16||
        !count||count>65535||index_bytes!=count*sizeof(biz_glyph)||data_bytes>8u*1024u*1024u)goto fail;
     vfs_info_t st;if(vfs_stat(BIZUD_PATH,&st)<0||st.size!=BIZUD_HEADER+index_bytes+data_bytes)goto fail;
     atlas=kmalloc_psram(index_bytes+data_bytes);if(!atlas)goto fail;
     if(!read_all(fd,atlas,index_bytes,&index_crc)||index_crc!=get32(h+24)||
        !read_all(fd,(uint8_t *)atlas+index_bytes,data_bytes,&data_crc)||data_crc!=get32(h+28))goto fail;
     glyphs=atlas;coverage=(uint8_t *)atlas+index_bytes;glyph_count=count;
-    for(unsigned i=0;i<count;i++) {
-        biz_glyph *g=&glyphs[i];uint32_t length=g->length&32767u;
-        if((i&&glyphs[i-1].cp>=g->cp)||g->offset>data_bytes||length>data_bytes-g->offset)goto fail;
+    vertical_glyphs=0;vertical_glyph_count=0;uint32_t coverage_bytes=data_bytes;
+    if(data_bytes>=16) {
+        uint8_t *footer=coverage+data_bytes-16;
+        if(!memcmp(footer,"M5VRT2\0\0",8)) {
+            uint32_t entries=get32(footer+8),offset=get32(footer+12);
+            if(!entries||entries>65535||offset>data_bytes-16||
+               entries*sizeof(biz_glyph)!=data_bytes-16-offset||offset%4)goto fail;
+            vertical_glyphs=(biz_glyph *)(coverage+offset);
+            vertical_glyph_count=entries;coverage_bytes=offset;
+        }
+    }
+    for(unsigned bank=0;bank<2;bank++) {
+        biz_glyph *list=bank?vertical_glyphs:glyphs;
+        unsigned entries=bank?vertical_glyph_count:glyph_count;
+        for(unsigned i=0;i<entries;i++) {
+            biz_glyph *g=&list[i];uint32_t length=g->length&32767u;
+            if((i&&list[i-1].cp>=g->cp)||g->offset>coverage_bytes||length>coverage_bytes-g->offset)goto fail;
+        }
     }
     atlas_bytes=index_bytes+data_bytes;vfs_close(fd);
-    kprintf("bizud: loaded %u glyphs, %u bytes from SD in %u ms\n",count,index_bytes+data_bytes,
+    kprintf("bizud: loaded %u glyphs + %u vertical, %u bytes from SD in %u ms\n",
+            count,vertical_glyph_count,index_bytes+data_bytes,
             (uint32_t)((hal_time_now_us()-started)/1000u));
     return true;
 fail:
-    vfs_close(fd);kfree(atlas);atlas=0;atlas_bytes=0;glyphs=0;coverage=0;glyph_count=0;return false;
+    vfs_close(fd);kfree(atlas);atlas=0;atlas_bytes=0;glyphs=0;vertical_glyphs=0;
+    coverage=0;glyph_count=vertical_glyph_count=0;return false;
 }
 #endif
 #define BIZUD_SCRATCH_BYTES 10240u
@@ -77,7 +97,8 @@ bool bizud_begin(void) {
         return true;
     }
 #ifndef M5OS_BIZUD_EMBEDDED
-    kfree(atlas);atlas=0;atlas_bytes=0;glyphs=0;coverage=0;glyph_count=0;
+    kfree(atlas);atlas=0;atlas_bytes=0;glyphs=0;vertical_glyphs=0;
+    coverage=0;glyph_count=vertical_glyph_count=0;
 #endif
     return false;
 }
@@ -97,14 +118,19 @@ size_t bizud_trim(void) {
     size_t bytes=bizud_cache_bytes();
     kfree(scratch);scratch=0;
 #ifndef M5OS_BIZUD_EMBEDDED
-    kfree(atlas);atlas=0;atlas_bytes=0;glyphs=0;coverage=0;glyph_count=0;
+    kfree(atlas);atlas=0;atlas_bytes=0;glyphs=0;vertical_glyphs=0;
+    coverage=0;glyph_count=vertical_glyph_count=0;
 #endif
     return bytes;
 }
-static const biz_glyph *find(uint32_t cp) {
-    unsigned lo=0, hi=glyph_count;
-    while(lo<hi) { unsigned m=(lo+hi)/2; if(glyphs[m].cp<cp) lo=m+1; else hi=m; }
-    return lo<glyph_count && glyphs[lo].cp==cp ? &glyphs[lo] : 0;
+static const biz_glyph *find_in(const biz_glyph *list,unsigned count,uint32_t cp) {
+    unsigned lo=0,hi=count;
+    while(lo<hi) {unsigned m=(lo+hi)/2;if(list[m].cp<cp)lo=m+1;else hi=m;}
+    return lo<count&&list[lo].cp==cp?&list[lo]:0;
+}
+static const biz_glyph *find(uint32_t cp) {return find_in(glyphs,glyph_count,cp);}
+static const biz_glyph *find_vertical(uint32_t cp) {
+    return find_in(vertical_glyphs,vertical_glyph_count,cp);
 }
 int bizud_width(uint32_t cp) { const biz_glyph *g=find(cp); return g?g->advance:24; }
 static uint16_t blend(uint16_t f,uint16_t b,unsigned a) {
@@ -113,9 +139,9 @@ static uint16_t blend(uint16_t f,uint16_t b,unsigned a) {
     unsigned bl=(((f&31)*a+(b&31)*(15-a)+7)/15);
     return (uint16_t)((r<<11)|(g<<5)|bl);
 }
-int bizud_draw(int x,int baseline,uint32_t cp,uint16_t fg,uint16_t bg) {
-    const biz_glyph *g=find(cp);
-    if(!g) { display_draw_rect(x+3,baseline-21,20,22,fg); return 24; }
+static int draw_glyph(int x,int baseline,const biz_glyph *g,int missing_advance,
+                      uint16_t fg,uint16_t bg) {
+    if(!g) {display_draw_rect(x+3,baseline-21,20,22,fg);return missing_advance;}
     if(!scratch)return g->advance;
     uint16_t *pixels=(uint16_t *)scratch;
     if(g->w>64 || g->h>64) return g->advance;
@@ -143,6 +169,21 @@ int bizud_draw(int x,int baseline,uint32_t cp,uint16_t fg,uint16_t bg) {
     while(pos<total) {unsigned b=packed[pos/2];pixels[pos]=blend(fg,bg,(pos&1)?b&15:b>>4);pos++;}
     if(pos==total && total) display_draw_bitmap(x+g->x,baseline+g->y,g->w,g->h,pixels);
     return g->advance;
+}
+int bizud_draw(int x,int baseline,uint32_t cp,uint16_t fg,uint16_t bg) {
+    return draw_glyph(x,baseline,find(cp),24,fg,bg);
+}
+int bizud_vertical_advance(uint32_t cp) {
+    const biz_glyph *g=find_vertical(cp);return g?g->advance:24;
+}
+int bizud_draw_vertical(int x,int top,uint32_t cp,uint16_t fg,uint16_t bg) {
+    const biz_glyph *vertical=find_vertical(cp);
+    if(vertical)return draw_glyph(x,top+21,vertical,24,fg,bg);
+    const biz_glyph *ordinary=find(cp);
+    int width=ordinary?ordinary->advance:24;
+    int inset=width<24?(24-width)/2:0;
+    draw_glyph(x+inset,top+21,ordinary,24,fg,bg);
+    return 24;
 }
 uint32_t bizud_decode(const char **text) {
     const unsigned char *p=(const unsigned char *)*text;

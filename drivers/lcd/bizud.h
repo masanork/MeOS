@@ -4,6 +4,10 @@
 int bizud_width(uint32_t cp);
 int bizud_draw(int x, int baseline, uint32_t cp, uint16_t fg, uint16_t bg);
 int bizud_text(int x, int baseline, const char *text, int right, uint16_t fg, uint16_t bg);
+/* OpenType vrt2/vertical-metric result baked into the atlas.  `top` is the
+ * top of a 24px em cell; the returned advance is along the vertical axis. */
+int bizud_vertical_advance(uint32_t cp);
+int bizud_draw_vertical(int x, int top, uint32_t cp, uint16_t fg, uint16_t bg);
 uint32_t bizud_decode(const char **text);
 bool bizud_begin(void);
 void bizud_end(void);

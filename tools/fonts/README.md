@@ -108,18 +108,23 @@ python3 tools/push_file.py --port /dev/cu.usbmodemXXXX \
   assets/fonts/bizud24.m5f /assets/fonts/bizud24.m5f
 ```
 
-Both files contain the BIZ UD cmap glyphs rasterized
-at 24px, with original advances/baseline offsets. Coverage is quantized to 4 bits
-and stored as either packed nibbles or independently LZ-compressed glyphs, whichever is smaller.
+Both files contain the BIZ UD cmap glyphs rasterized at 24px, with original
+advances/baseline offsets. A CRC-covered trailer additionally resolves the
+font's OpenType `vrt2` feature during generation and stores 350 addressable
+vertical alternates with their `vmtx` advances. The ordinary index and version-1
+header remain readable by the previous OTA image, which ignores the trailer.
+The Tab5 does not run an outline or shaping engine.
+Coverage is quantized to 4 bits and stored as either packed nibbles or
+independently LZ-compressed glyphs, whichever is smaller.
 The source TTF is checksum-pinned by `fetch24.py`; run that script and then
 `build_bizud.py` to regenerate (Pillow 11.3.0 / fontTools 4.60.2 used here; rendering
 can vary across FreeType versions). Keep `licenses/BIZ-UD-OFL.txt` with distributions.
-The generated coverage is about 2.38 MB plus the glyph index; no other typeface is
+The generated coverage is about 2.28 MB plus the glyph indexes; no other typeface is
 merged or used for fallback. Unknown characters display a box. Full JIS combining
 sequence and IVS shaping is not implemented by this first simple renderer.
 
-The encoder searches up to 32 recent matches for each three-byte prefix, keeping
-exactly the existing runtime format. This saves 135,138 bytes versus the initial
-atlas. `python3 tools/fonts/check_bizud.py` independently decodes all 11,741 glyphs
-and checks a digest of their metrics and pixels against the original atlas. No
-characters, coverage levels, sizes or fallback behavior changed.
+The encoder searches up to 32 recent matches for each three-byte prefix.
+`python3 tools/fonts/check_bizud.py` independently decodes all 11,741 ordinary
+glyphs and 350 vertical alternates and checks separate digests of their metrics
+and pixels. The ordinary bank remains byte-for-byte visually compatible with
+the version-1 atlas.

@@ -7,6 +7,11 @@ typedef struct {
     int baseline;
 } bizime_point;
 
+typedef struct {
+    int x;
+    int y;
+} bizime_vpoint;
+
 /* Return the insertion point after the preedit, including proportional wrap,
  * without drawing. Editors use this to reflow committed text behind it. */
 bizime_point bizime_measure(const ime_view *view, int x, int baseline,
@@ -18,3 +23,13 @@ bizime_point bizime_measure(const ime_view *view, int x, int baseline,
 bizime_point bizime_draw(const ime_view *view, int x, int baseline,
                          int left, int right, int top, int bottom, int pitch,
                          uint16_t fg, uint16_t bg, uint16_t accent);
+
+/* Vertical prose flows down, then into the column at x-column_pitch.  Tracking
+ * is added to the font's vertical advance so the editor and IME reflow agree. */
+bizime_vpoint bizime_measure_vertical(const ime_view *view, int x, int y,
+                                      int top, int bottom, int column_pitch,
+                                      int tracking);
+bizime_vpoint bizime_draw_vertical(const ime_view *view, int x, int y,
+                                   int left, int right, int top, int bottom,
+                                   int column_pitch, int tracking,
+                                   uint16_t fg, uint16_t bg, uint16_t accent);

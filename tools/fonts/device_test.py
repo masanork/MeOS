@@ -39,7 +39,7 @@ def main():
         link.write(b"\x03\r")
         read_until(b"> ")
         listing = command("ls /assets/fonts/bizud24.m5f")
-        if "2432659" not in listing:
+        if "2468676" not in listing:
             raise RuntimeError(f"font asset missing or wrong size: {listing!r}")
         before = command("mem")
         match = re.search(r"psram\s+total .* free (\d+) KB", before)
@@ -52,7 +52,7 @@ def main():
         result = read_until(b"\n> ", 30)
         if "write:" in result:
             raise RuntimeError(f"writing editor failed: {result!r}")
-        loaded = re.search(r"bizud: loaded 11741 glyphs, 2432627 bytes from SD in (\d+) ms", result)
+        loaded = re.search(r"bizud: loaded 11741 glyphs \+ 350 vertical, 2468644 bytes from SD in (\d+) ms", result)
         if not loaded:
             raise RuntimeError(f"font load evidence missing: {result!r}")
         warm = command("mem")

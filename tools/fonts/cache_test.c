@@ -6,7 +6,7 @@
 
 #include "../../drivers/lcd/bizud.c"
 
-static uint8_t image[32 + sizeof(biz_glyph) + 1];
+static uint8_t image[32 + sizeof(biz_glyph) + 4 + sizeof(biz_glyph) + 16];
 static size_t position;
 static unsigned opens, allocations, frees;
 static bool fail_scratch;
@@ -25,13 +25,20 @@ static void make_image(void)
     put32(image + 8, 1);
     put32(image + 12, 1);
     put32(image + 16, sizeof(biz_glyph));
-    put32(image + 20, 1);
-    biz_glyph glyph = {.cp = 'A', .offset = 0, .length = 1,
-                       .x = 0, .y = -1, .w = 1, .h = 1, .advance = 7};
-    memcpy(image + 32, &glyph, sizeof glyph);
-    image[32 + sizeof glyph] = 0xf0;
-    put32(image + 24, crc32(image + 32, sizeof glyph));
-    put32(image + 28, crc32(image + 32 + sizeof glyph, 1));
+    put32(image + 20, 4 + sizeof(biz_glyph) + 16);
+    biz_glyph ordinary = {.cp = 'A', .offset = 0, .length = 1,
+                          .x = 0, .y = -1, .w = 1, .h = 1, .advance = 7};
+    biz_glyph vertical = {.cp = 'A', .offset = 1, .length = 1,
+                          .x = 0, .y = -1, .w = 1, .h = 1, .advance = 9};
+    memcpy(image + 32, &ordinary, sizeof ordinary);
+    uint8_t *data = image + 32 + sizeof ordinary;
+    data[0] = 0xf0; data[1] = 0xe0;
+    memcpy(data + 4, &vertical, sizeof vertical);
+    memcpy(data + 4 + sizeof vertical, "M5VRT2\0\0", 8);
+    put32(data + 4 + sizeof vertical + 8, 1);
+    put32(data + 4 + sizeof vertical + 12, 4);
+    put32(image + 24, crc32(image + 32, sizeof ordinary));
+    put32(image + 28, crc32(data, 4 + sizeof vertical + 16));
 }
 
 void *kmalloc_psram(size_t size)
@@ -104,12 +111,14 @@ void display_draw_bitmap(int x, int y, int w, int h, const uint16_t *pixels)
 int main(void)
 {
     make_image();
-    const size_t expected = sizeof(biz_glyph) + 1 + BIZUD_SCRATCH_BYTES;
+    const size_t expected = 2 * sizeof(biz_glyph) + 4 + 16 + BIZUD_SCRATCH_BYTES;
 
     assert(bizud_begin());
     assert(opens == 1 && allocations == 2 && frees == 0);
     assert(bizud_cache_users() == 1 && bizud_cache_bytes() == expected);
     assert(bizud_width('A') == 7);
+    assert(bizud_vertical_advance('A') == 9);
+    assert(bizud_vertical_advance('B') == 24);
 
     assert(bizud_begin());
     assert(bizud_cache_users() == 2 && opens == 1 && allocations == 2);
