@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Check the ICMP load generator's integrity and reply attribution offline."""
+import struct
+import unittest
+
+from wifi_coexistence_device import PingLoad, checksum
+
+
+def reply(load, index):
+    packet = struct.pack("!BBHHH", 0, 0, 0, 7, index & 65535) + load.body(index)
+    return packet[:2] + struct.pack("!H", checksum(packet)) + packet[4:]
+
+
+class IntegrityTests(unittest.TestCase):
+    def setUp(self):
+        self.load = PingLoad("127.0.0.1", 25)
+        self.load.phases["pak"] = {"sent": 1, "rtt_ms": []}
+        self.load.pending[123] = (1.0, "pak")
+
+    def test_generated_requests(self):
+        for payload in (12, 13, 1400):
+            load = PingLoad("127.0.0.1", 25, payload)
+            packet = load.packet(70000)
+            self.assertEqual(len(packet), payload + 8)
+            self.assertEqual(checksum(packet), 0)
+            self.assertEqual(packet[8:20], load.nonce + struct.pack("!I", 70000))
+
+    def test_ipv4_reply_and_duplicate(self):
+        packet = b"\x45" + bytes(19) + reply(self.load, 123)
+        self.load.accept(packet, 1.025)
+        self.load.accept(packet, 1.030)
+        self.assertNotIn(123, self.load.pending)
+        self.assertEqual(len(self.load.phases["pak"]["rtt_ms"]), 1)
+        self.assertAlmostEqual(self.load.phases["pak"]["rtt_ms"][0], 25)
+
+    def test_corrupt_reply_does_not_count(self):
+        packet = bytearray(reply(self.load, 123))
+        packet[-1] ^= 1
+        self.load.accept(bytes(packet), 1.025)
+        self.assertEqual(self.load.invalid, 1)
+        self.assertIn(123, self.load.pending)
+
+    def test_changed_body_with_valid_checksum_does_not_count(self):
+        packet = bytearray(reply(self.load, 123))
+        packet[-1] ^= 1
+        packet[2:4] = b"\0\0"
+        packet[2:4] = struct.pack("!H", checksum(bytes(packet)))
+        self.load.accept(bytes(packet), 1.025)
+        self.assertEqual(self.load.invalid, 1)
+        self.assertIn(123, self.load.pending)
+
+    def test_unrelated_or_truncated_reply_is_ignored(self):
+        other = PingLoad("127.0.0.1", 25)
+        for packet in (b"", b"\x45\0", reply(self.load, 123)[:10], reply(other, 123)):
+            self.load.accept(packet, 1.025)
+        self.assertEqual(self.load.invalid, 0)
+        self.assertIn(123, self.load.pending)
+
+
+if __name__ == "__main__":
+    unittest.main()

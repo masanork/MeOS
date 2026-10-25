@@ -212,3 +212,58 @@ warm draws 5.5–10.8 ms across 20/24/28/32 px. The 900-CJK long-Write workload
 also passed at 4.245 s. See `tools/sdroot/cache-lifecycle-device-20261025.json`.
 Partial-transfer errors are still injected on the host rather than forced on
 the physical card; removal, power cuts and network saturation remain untested.
+
+## Read-only SD and Wi-Fi coexistence
+
+`crc32 FILE` streams a regular file through VFS with a fixed 4 KiB buffer and
+prints its IEEE CRC32, observed byte count and elapsed milliseconds. It opens
+only for reading and emits the digest only after successful reads and close.
+Every 64 KiB it sleeps for one scheduling interval so lower-priority network
+services can make progress. The digest is of bytes observed during the read;
+it does not promise a snapshot of a file being modified concurrently.
+
+With the existing 18,689,235-byte PAK asset (CRC32 `74e3b084`) and both BIZ UD
+assets present, this host tool compares two quiet reads with reads, font
+rendering and unsaved Write sessions under 25/100 pps ICMP traffic:
+
+```sh
+python3 tools/sdroot/wifi_coexistence_device.py /dev/cu.usbmodemXXXX --reset \
+  --pps 25 100 --reads 2 --log /tmp/meos-sd-wifi.log \
+  --report /tmp/meos-sd-wifi.json
+```
+
+`--reset` discards unsaved RAM. Only the IPv4 address reported by the attached
+Tab5 receives traffic; the tool checks ICMP payloads and checksums, PAK CRC32,
+packet loss by workload and final PSRAM. The default loss limit is 5%. The new
+log/report paths must not exist. No asset is uploaded or changed. The tool
+requires datagram ICMP socket support and LAN reachability to the board.
+These bounded rates test coexistence, not maximum network throughput.
+
+The physical comparison exposed RX starvation: the Wi-Fi daemon previously
+ran below the foreground shell/renderer and polled every 100 ms. It now runs at
+the same priority as the shell, sharing the existing 10 ms round-robin slices,
+and polls every 10 ms while connected. Disconnected polling remains 100 ms.
+
+On the same Tab5/card/AP, firmware `69077d5` versus `373285b` gave these results
+for the requested 100 pps rate with 1,400-byte echo payloads:
+
+| Workload | Packet loss before / after | RTT p95 before / after |
+| --- | --- | --- |
+| SD asset CRC read | 51.256% / 0% | 7,674 / 33 ms |
+| Font load/render | 51.331% / 0% | 5,485 / 59 ms |
+| Write size/layout changes | 69.677% / 1.667% | 2,935 / 94 ms |
+
+At the requested 25 pps rate, all four phases (idle, SD, font and Write) had
+zero packet loss after the fix. ICMP checksum/payload checks and all six
+18,689,235-byte PAK CRC reads passed after the fix. The 100 pps SD reads took
+40.705/40.732 s versus 38.571/38.440 s without added traffic; 24 px face open
+took 682 ms versus 638 ms at 25 pps. Final trimmed PSRAM was 23,119 KiB versus
+23,135 KiB initially, within the 32 KiB tolerance. Requested rates are pacing
+limits; the evidence retains actual sent/received counts rather than claiming
+that the host or link sustained the exact requested rate.
+
+The before/after reports are `tools/sdroot/wifi-coexistence-{before,after}-20261025.json`.
+They contain app and private serial-log digests. No media writes, power cuts,
+hot removal or full Tailscale throughput were tested. The faster connected
+polling and fair RX scheduling trade a little foreground execution time for
+network responsiveness; this is not a maximum-SD-bandwidth benchmark.

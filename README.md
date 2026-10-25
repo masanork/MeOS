@@ -21,7 +21,7 @@ MeOS implements its own **preemptive/cooperative scheduler, task management, tim
 | 5 | Device abstraction (`device_open/read/write/ioctl`), blocking mutex, `uart`/`display`/`buttons` | ✅ Verified on hardware |
 | 6 | M5FS custom filesystem + SD block device | ✅ M5FS verified on hardware over RAM disk |
 | 7 | VFS (`/dev` = devfs, `/` = M5FS), mount table | ✅ Verified on hardware (`VFSTEST ALL PASS`) |
-| 8 | Interactive Shell (`help history ps kill ls cat echo mem uptime run` + cursor-key history & line editing) | ✅ Verified on hardware |
+| 8 | Interactive Shell (`help history ps kill ls cat crc32 echo mem uptime run` + cursor-key history & line editing) | ✅ Verified on hardware |
 | 9 | App lifecycle (`app_start/stop/list`, permissions, automatic resource reclamation) | ✅ Verified on hardware (`APPTEST ALL PASS`) |
 | 10 | App loader (`M5EX` relocatable binary format, dynamic loading over serial/FS) | ✅ Verified on hardware (`M5EXTEST ALL PASS` + host push & run) |
 | 11 | IPC (fixed-size per-task mailboxes, blocking/timeout send & receive) | ✅ Verified on hardware (`MSGTEST ALL PASS`) |

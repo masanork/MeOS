@@ -14,6 +14,10 @@ ${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
 ${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
     -DM5OS_BOARD_TAB5=1 -Ikernel/include tools/sdroot/cache_test.c kernel/app/wasm_cache.c -o "$OUT/cache"
 "$OUT/cache"
+${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
+    -DM5OS_BOARD_TAB5=1 -Ikernel/include tools/sdroot/checksum_test.c user/shell/checksum.c kernel/lib/crc32.c -o "$OUT/checksum"
+"$OUT/checksum"
+python3 tools/sdroot/wifi_load_test.py
 for BOARD in TAB5 CORES3; do
     ${CC:-cc} -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined -g \
         -DM5OS_BOARD_$BOARD=1 -Ikernel/include tools/sdroot/boot_test.c kernel/boot/rootfs.c -o "$OUT/boot_$BOARD"

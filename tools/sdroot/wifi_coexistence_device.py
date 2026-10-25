@@ -1,0 +1,279 @@
+#!/usr/bin/env python3
+"""Read-only SD/graphics coexistence test with bounded ICMP traffic to Tab5.
+
+Requires a reachable Wi-Fi-connected MeOS Tab5 with the existing Quake PAK and
+BIZ UD assets. Serial open may reset the board; no firmware or media is written.
+Only the IPv4 address reported by the attached board receives test packets.
+"""
+import argparse
+import ipaddress
+import json
+import math
+import os
+from pathlib import Path
+import re
+import select
+import socket
+import statistics
+import struct
+import threading
+import time
+
+
+def checksum(data):
+    if len(data) % 2:
+        data += b"\0"
+    total = sum(struct.unpack(f"!{len(data) // 2}H", data))
+    while total >> 16:
+        total = (total & 65535) + (total >> 16)
+    return total ^ 65535
+
+
+class PingLoad:
+    def __init__(self, target, pps, payload_bytes=1400):
+        self.target = str(ipaddress.IPv4Address(target))
+        if not 1 <= pps <= 200 or not 12 <= payload_bytes <= 1400:
+            raise ValueError("rate must be 1..200 pps and payload 12..1400 bytes")
+        self.pps = pps
+        self.payload_bytes = payload_bytes
+        self.nonce = os.urandom(8)
+        self.pattern = bytes((i * 29 + 7) & 255 for i in range(payload_bytes - 12))
+        self.identifier = int.from_bytes(os.urandom(2), "big")
+        self.pending = {}
+        self.phases = {}
+        self.phase = "idle"
+        self.invalid = 0
+        self.error = None
+        self.stop_event = threading.Event()
+        self.pause_event = threading.Event()
+        self.thread = None
+        self.sock = None
+
+    def body(self, index):
+        return self.nonce + struct.pack("!I", index) + self.pattern
+
+    def packet(self, index):
+        header = struct.pack("!BBHHH", 8, 0, 0, self.identifier, index & 65535)
+        body = self.body(index)
+        return struct.pack("!BBHHH", 8, 0, checksum(header + body),
+                           self.identifier, index & 65535) + body
+
+    def accept(self, packet, now):
+        # macOS datagram ICMP sockets include the IPv4 header; Linux may not.
+        if packet and packet[0] >> 4 == 4:
+            ihl = (packet[0] & 15) * 4
+            if ihl < 20 or len(packet) < ihl + 8:
+                return
+            packet = packet[ihl:]
+        if len(packet) < 20 or packet[:2] != b"\0\0" or packet[8:16] != self.nonce:
+            return
+        index = struct.unpack("!I", packet[16:20])[0]
+        if index not in self.pending:
+            return
+        if checksum(packet) or packet[8:] != self.body(index):
+            self.invalid += 1
+            return
+        sent_at, phase = self.pending.pop(index)
+        self.phases[phase]["rtt_ms"].append((now - sent_at) * 1000)
+
+    def start(self):
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_ICMP)
+        self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 256 * 1024)
+        self.sock.connect((self.target, 0))
+        self.sock.setblocking(False)
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
+    def run(self):
+        index = 0
+        next_send = time.monotonic()
+        try:
+            while not self.stop_event.is_set():
+                now = time.monotonic()
+                if not self.pause_event.is_set() and now >= next_send:
+                    phase = self.phase
+                    stats = self.phases.setdefault(phase, {"sent": 0, "rtt_ms": []})
+                    packet = self.packet(index)
+                    if self.sock.send(packet) != len(packet):
+                        raise OSError("short ICMP datagram send")
+                    self.pending[index] = (now, phase)
+                    stats["sent"] += 1
+                    index += 1
+                    next_send = now + 1 / self.pps
+                delay = 0.05 if self.pause_event.is_set() else min(0.05, max(0, next_send - now))
+                if select.select([self.sock], [], [], delay)[0]:
+                    self.accept(self.sock.recv(4096), time.monotonic())
+        except Exception as exc:
+            self.error = exc
+
+    def finish(self):
+        self.pause_event.set()
+        # Keep receiving after the final send so trailing replies are counted.
+        time.sleep(2)
+        self.stop_event.set()
+        self.thread.join(3)
+        self.sock.close()
+        if self.thread.is_alive():
+            raise RuntimeError("ICMP worker failed to stop")
+        if self.error:
+            raise self.error
+        report = {"pps": self.pps, "payload_bytes": self.payload_bytes,
+                  "invalid_replies": self.invalid, "phases": {}}
+        for phase, stats in self.phases.items():
+            rtt = sorted(stats["rtt_ms"])
+            received = len(rtt)
+            report["phases"][phase] = {
+                "sent": stats["sent"], "received": received,
+                "loss_percent": round(100 * (stats["sent"] - received) / stats["sent"], 3),
+                "rtt_median_ms": round(statistics.median(rtt), 3) if rtt else None,
+                "rtt_p95_ms": round(rtt[math.ceil(len(rtt) * .95) - 1], 3) if rtt else None,
+            }
+        return report
+
+
+def main():
+    import serial
+    from cache_lifecycle_device import Session, memory
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("port")
+    parser.add_argument("--pps", type=int, nargs="+", default=[25, 100])
+    parser.add_argument("--reads", type=int, default=2)
+    parser.add_argument("--reset", action="store_true", help="reset the board, discarding unsaved RAM")
+    parser.add_argument("--max-loss-percent", type=float, default=5)
+    parser.add_argument("--log", type=Path, required=True)
+    parser.add_argument("--report", type=Path, required=True)
+    args = parser.parse_args()
+    if (not 1 <= args.reads <= 10 or not 0 <= args.max_loss_percent <= 100 or
+            any(not 1 <= rate <= 200 for rate in args.pps)):
+        parser.error("reads must be 1..10, pps 1..200, loss limit 0..100")
+    if args.report.exists() or args.log.resolve() == args.report.resolve():
+        parser.error("report must be a new path distinct from the serial log")
+    report = {"result": "INCOMPLETE", "baseline": [], "loads": []}
+    link = serial.Serial(port=None, baudrate=115200, timeout=.05,
+                         write_timeout=10, exclusive=True)
+    link.dtr = link.rts = False
+    link.port = args.port
+    with args.log.open("xb") as log, args.report.open("x") as output:
+        link.open()
+        session = Session(link, log)
+        load = None
+        try:
+            if args.reset:
+                import sys
+                sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+                from board_reset import reset_board
+                reset_board(link)
+            else:
+                link.write(b"\x03\r")
+            boot = session.until(b"> ")
+            # Suppress Home during its 1.5 s grace period, before any wait.
+            link.write(b"\x03\r")
+            session.until(b"> ")
+            version = re.search(rb"App version:\s+(\S+)", boot)
+            report["firmware_boot_version"] = version[1].decode() if version else "running shell"
+            deadline = time.monotonic() + 90
+            while "imedict" in session.command("ps"):
+                if time.monotonic() > deadline:
+                    raise TimeoutError("waiting for dictionary reader")
+                time.sleep(.1)
+            time.sleep(2)
+            if "active=1" not in session.command("sdroot"):
+                raise RuntimeError("SD root is not active")
+            wifi = session.command("wifi status")
+            address = re.search(r"IPv4\s+:\s+(\d+\.\d+\.\d+\.\d+)", wifi)
+            if not address:
+                raise RuntimeError("Tab5 is not connected to Wi-Fi")
+            target = str(ipaddress.IPv4Address(address[1]))
+            listing = session.command("ls /assets/quake/id1/pak0.pak")
+            if "18689235" not in listing:
+                raise RuntimeError("expected existing 18 MiB PAK is missing")
+
+            def verify_pak():
+                session.command("sdroot io-reset")
+                started = time.monotonic()
+                link.write(b"crc32 /assets/quake/id1/pak0.pak\r")
+                receipt = session.until(b"> ", 180)
+                elapsed = time.monotonic() - started
+                if not re.search(rb"CRC32 74e3b084 18689235 bytes\b", receipt):
+                    raise RuntimeError(f"PAK CRC mismatch or read failure: {receipt[-800:]!r}")
+                result = {"seconds": round(elapsed, 3), "bytes": 18689235, "crc32": "74e3b084",
+                          "kib_per_second": round(18689235 / 1024 / elapsed, 1)}
+                print("PAK " + json.dumps(result), flush=True)
+                return result
+
+            for _ in range(args.reads):
+                report["baseline"].append(verify_pak())
+            session.command("mem trim")
+            free_before, _, _ = memory(session.command("mem"))
+            report["trimmed_psram_before_kib"] = free_before
+            for rate in args.pps:
+                load = PingLoad(target, rate)
+                load.phase = "idle"
+                load.start()
+                time.sleep(3)
+                if load.error:
+                    raise load.error
+                if sum(len(stats["rtt_ms"]) for stats in load.phases.values()) < 2:
+                    raise RuntimeError("no verified ICMP reachability to attached Tab5")
+                pak = []
+                load.phase = "pak"
+                for _ in range(args.reads):
+                    pak.append(verify_pak())
+                load.phase = "font"
+                link.write(b"fontbench 24\r")
+                session.until(b"FONTBENCH ", 60)
+                font = session.until(b"\n").decode(errors="replace")
+                if not re.search(r"24 px: .*font=4667380 resident=0", font):
+                    raise RuntimeError("font benchmark receipt missing")
+                link.write(b"q")
+                session.until(b"> ")
+                load.phase = "write"
+                link.write(b"write\r")
+                session.until(b"write: BIZ UD 24px outline", 60)
+                for keys, marker in ((b"\x1bOS", b"write: outline 28px"),
+                                     (b"\x14", b"write: layout horizontal"),
+                                     (b"\x14", b"write: layout vertical")):
+                    link.write(keys)
+                    session.until(marker)
+                link.write(b"\x11")
+                session.until(b"> ")
+                summary = load.finish()
+                load = None
+                summary["pak"] = pak
+                summary["font_receipt"] = font.strip()
+                report["loads"].append(summary)
+                print("NETWORK " + json.dumps(summary), flush=True)
+            session.command("mem trim")
+            free_after, cache, atlas = memory(session.command("mem"))
+            report["trimmed_psram_after_kib"] = free_after
+            if cache or atlas or abs(free_after - free_before) > 32:
+                raise RuntimeError("PSRAM cleanup drift after concurrent I/O")
+            failures = []
+            for summary in report["loads"]:
+                if summary["invalid_replies"]:
+                    failures.append("invalid ICMP reply payload/checksum")
+                for phase, stats in summary["phases"].items():
+                    if stats["sent"] < 2 or stats["loss_percent"] > args.max_loss_percent:
+                        failures.append(f"{summary['pps']} pps {phase}: {stats['loss_percent']}% loss")
+            if failures:
+                raise RuntimeError("; ".join(failures))
+            report["result"] = "PASS"
+            print("SD/WIFI COEXISTENCE DEVICE PASS", flush=True)
+        except Exception as exc:
+            report["result"] = "FAIL"
+            report["error"] = str(exc)
+            raise
+        finally:
+            if load and load.thread:
+                try:
+                    report["interrupted_load"] = load.finish()
+                except Exception as exc:
+                    report["load_cleanup_error"] = str(exc)
+            link.close()
+            json.dump(report, output, indent=2)
+            output.write("\n")
+
+
+if __name__ == "__main__":
+    main()
