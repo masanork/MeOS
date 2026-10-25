@@ -11,3 +11,6 @@ SRC=drivers/ime
 "$OUT/romaji_test"
 "${CC:-cc}" $CFLAGS -Ikernel/include -o "$OUT/ime_test" tools/ime/host_ime_test.c $SRC/ime.c $SRC/conv.c $SRC/romaji.c $SRC/ime_dict.c $SRC/ime_mini_dict.c
 "$OUT/ime_test" "$@"
+"${CC:-cc}" $CFLAGS -fsanitize=address,undefined -fno-omit-frame-pointer -Ikernel/include \
+    -o "$OUT/loader_test" tools/ime/loader_test.c $SRC/ime_flash.c $SRC/ime_dict.c
+"$OUT/loader_test"
