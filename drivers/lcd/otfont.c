@@ -18,6 +18,7 @@
 #define OTFONT_MAX_GLYPH 64u
 #define OTFONT_CELL_BYTES ((OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH)/2u)
 #define OTFONT_CACHE_SLOTS 384u
+#define OTFONT_STREAM_CACHE (64u*1024u)
 
 typedef struct {
     uint32_t glyph,stamp;
@@ -28,12 +29,15 @@ typedef struct {
 
 typedef struct {
     struct FT_MemoryRec_ memory;
+    struct FT_StreamRec_ stream;
     FT_Library library;
     FT_Face face;
-    uint8_t *font_data,*cells;
+    uint8_t *stream_cache,*cells;
     uint16_t *scratch;
     cache_entry *entries;
-    uint32_t font_bytes,load_ms,stamp,hits,misses;
+    int font_fd;
+    uint32_t font_bytes,stream_base,stream_length,load_ms,stamp,hits,misses;
+    uint32_t io_bytes,io_reads;
     uint64_t raster_us;
     unsigned pixel_size,users;
 } outline_font;
@@ -54,25 +58,63 @@ static void *ft_realloc(FT_Memory memory,long current,long requested,void *block
     kfree(block);return next;
 }
 
-static bool load_file(const char *path) {
+static bool fill_stream_cache(uint32_t offset) {
+    uint32_t base=offset&~(OTFONT_STREAM_CACHE-1u);
+    uint32_t length=s_font.font_bytes-base;if(length>OTFONT_STREAM_CACHE)length=OTFONT_STREAM_CACHE;
+    if(vfs_seek(s_font.font_fd,(int32_t)base,FS_SEEK_SET)!=(int)base)return false;
+    uint32_t done=0;
+    while(done<length) {
+        int n=vfs_read(s_font.font_fd,s_font.stream_cache+done,length-done);
+        if(n<=0)return false;
+        done+=(uint32_t)n;
+    }
+    s_font.stream_base=base;s_font.stream_length=length;
+    s_font.io_bytes+=length;s_font.io_reads++;return true;
+}
+
+static unsigned long stream_read(FT_Stream stream,unsigned long offset,
+                                 unsigned char *buffer,unsigned long count) {
+    (void)stream;
+    if(offset>s_font.font_bytes||count>s_font.font_bytes-offset)return 0;
+    if(!count)return 0;
+    unsigned long done=0;
+    while(done<count) {
+        uint32_t at=(uint32_t)(offset+done);
+        if(!s_font.stream_length||at<s_font.stream_base||at>=s_font.stream_base+s_font.stream_length) {
+            if(!fill_stream_cache(at))break;
+        }
+        uint32_t in_page=at-s_font.stream_base;
+        uint32_t available=s_font.stream_length-in_page;
+        unsigned long chunk=count-done;if(chunk>available)chunk=available;
+        memcpy(buffer+done,s_font.stream_cache+in_page,chunk);done+=chunk;
+    }
+    return done;
+}
+
+static void stream_close(FT_Stream stream) {
+    int fd=(int)stream->descriptor.value;
+    if(fd>=0)vfs_close(fd);
+    stream->descriptor.value=-1;s_font.font_fd=-1;
+}
+
+static bool open_stream(const char *path) {
     vfs_info_t st;if(vfs_stat(path,&st)<0||st.type!=FS_TYPE_FILE||!st.size||st.size>OTFONT_MAX_FILE)return false;
     int fd=vfs_open(path,VFS_O_READ);if(fd<0)return false;
-    s_font.font_data=kmalloc_psram(st.size);if(!s_font.font_data){vfs_close(fd);return false;}
-    uint32_t done=0;
-    while(done<st.size) {
-        uint32_t chunk=st.size-done;if(chunk>4096)chunk=4096;
-        int n=vfs_read(fd,s_font.font_data+done,chunk);if(n!=(int)chunk)break;done+=chunk;
-    }
-    vfs_close(fd);s_font.font_bytes=done;
-    if(done==st.size)return true;
-    kfree(s_font.font_data);s_font.font_data=0;s_font.font_bytes=0;return false;
+    s_font.stream_cache=kmalloc_psram(OTFONT_STREAM_CACHE);
+    if(!s_font.stream_cache){vfs_close(fd);return false;}
+    s_font.font_fd=fd;s_font.font_bytes=st.size;
+    memset(&s_font.stream,0,sizeof s_font.stream);
+    s_font.stream.size=st.size;s_font.stream.descriptor.value=fd;
+    s_font.stream.read=stream_read;s_font.stream.close=stream_close;
+    return true;
 }
 
 static void release_all(void) {
     if(s_font.face)FT_Done_Face(s_font.face);
+    else if(s_font.font_fd>=0)vfs_close(s_font.font_fd);
     if(s_font.library)FT_Done_Library(s_font.library);
-    kfree(s_font.font_data);kfree(s_font.cells);kfree(s_font.entries);kfree(s_font.scratch);
-    memset(&s_font,0,sizeof s_font);
+    kfree(s_font.stream_cache);kfree(s_font.cells);kfree(s_font.entries);kfree(s_font.scratch);
+    memset(&s_font,0,sizeof s_font);s_font.font_fd=-1;
 }
 
 bool otfont_begin(const char *path,unsigned pixel_size) {
@@ -83,11 +125,13 @@ bool otfont_begin(const char *path,unsigned pixel_size) {
         s_font.users++;return true;
     }
     uint64_t started=hal_time_now_us();
-    if(!load_file(path))goto fail;
+    s_font.font_fd=-1;
+    if(!open_stream(path))goto fail;
     s_font.memory.user=0;s_font.memory.alloc=ft_alloc;s_font.memory.free=ft_free;s_font.memory.realloc=ft_realloc;
     if(FT_New_Library(&s_font.memory,&s_font.library))goto fail;
     FT_Add_Default_Modules(s_font.library);
-    if(FT_New_Memory_Face(s_font.library,s_font.font_data,(FT_Long)s_font.font_bytes,0,&s_font.face))goto fail;
+    FT_Open_Args args;memset(&args,0,sizeof args);args.flags=FT_OPEN_STREAM;args.stream=&s_font.stream;
+    if(FT_Open_Face(s_font.library,&args,0,&s_font.face))goto fail;
     if(FT_Select_Charmap(s_font.face,FT_ENCODING_UNICODE)||FT_Set_Pixel_Sizes(s_font.face,0,pixel_size))goto fail;
     s_font.entries=kmalloc_psram(sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
     s_font.cells=kmalloc_psram(OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS);
@@ -96,9 +140,9 @@ bool otfont_begin(const char *path,unsigned pixel_size) {
     memset(s_font.entries,0,sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
     s_font.pixel_size=pixel_size;s_font.users=1;
     s_font.load_ms=(uint32_t)((hal_time_now_us()-started)/1000u);
-    kprintf("otfont: loaded %u-byte OpenType face at %u px in %u ms; cache %u KiB\n",
-            s_font.font_bytes,pixel_size,s_font.load_ms,
-            (unsigned)((OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS)/1024u));
+    kprintf("otfont: opened %u-byte OpenType face at %u px in %u ms; read %u KiB/%u ops; cache %u KiB\n",
+            s_font.font_bytes,pixel_size,s_font.load_ms,s_font.io_bytes/1024u,s_font.io_reads,
+            (unsigned)((OTFONT_STREAM_CACHE+OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS)/1024u));
     return true;
 fail:
     release_all();return false;
@@ -173,7 +217,9 @@ void otfont_get_stats(otfont_stats *out) {
     if(!out)return;
     out->font_bytes=s_font.font_bytes;out->load_ms=s_font.load_ms;
     out->glyph_hits=s_font.hits;out->glyph_misses=s_font.misses;out->raster_us=s_font.raster_us;
-    out->cache_bytes=s_font.entries?sizeof(cache_entry)*OTFONT_CACHE_SLOTS+OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS+OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH*sizeof(uint16_t):0;
+    out->io_bytes=s_font.io_bytes;out->io_reads=s_font.io_reads;
+    out->cache_bytes=s_font.entries?OTFONT_STREAM_CACHE+sizeof(cache_entry)*OTFONT_CACHE_SLOTS+
+        OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS+OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH*sizeof(uint16_t):0;
 }
 #endif
 

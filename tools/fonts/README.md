@@ -129,9 +129,10 @@ sequence and IVS shaping is not implemented by this first simple renderer.
 `/assets/fonts/BIZUDGothic-Regular.ttf`. The experiment keeps the production
 atlas unchanged. It loads the pinned BIZ UD face into PSRAM, uses FreeType's
 hinted grayscale renderer, quantizes each result to the same 4-bit coverage as
-the atlas, and retains up to 384 glyphs in a bounded PSRAM cache. Serial output
-reports face-load, cold draw, warm draw, raster and cache figures. Press Q to
-return. Provision the currently pinned source without committing the cache:
+the atlas, reads font tables on demand through a 64 KiB VFS stream cache, and
+retains up to 384 glyphs in a bounded PSRAM cache. Serial output reports face
+open, actual SD bytes/reads, cold draw, warm draw, raster and cache figures.
+Press Q to return. Provision the currently pinned source without committing the cache:
 
 ```sh
 python3 tools/push_file.py --port /dev/cu.usbmodemXXXX \
@@ -141,10 +142,10 @@ python3 tools/fonts/outline_device_test.py /dev/cu.usbmodemXXXX \
   --size 24 --leave-open
 ```
 
-This first measurement deliberately uses an in-memory face so that rendering
-quality and cache behavior can be qualified independently. A VFS-backed
-FreeType stream is the next step if the renderer passes; it avoids reading the
-whole TTF before the first page. The experimental path accepts only this
+The first device measurement used an in-memory face to qualify rendering and
+cache behavior independently; it took about nine seconds to read the complete
+4.45 MiB file. The current VFS-backed stream avoids that unconditional read and
+keeps only one 64 KiB source window. The experimental path accepts only this
 operator-provisioned asset and is not yet an arbitrary-font loader.
 
 FreeType is resolved as the pinned Espressif component in `dependencies.lock`

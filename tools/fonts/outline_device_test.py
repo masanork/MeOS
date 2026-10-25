@@ -60,12 +60,14 @@ def main():
         if "\n" not in receipt:
             result += read_until(b"\n", 10)
         pattern = (r"FONTBENCH (\d+) px: load=(\d+) ms first=(\d+) us warm=(\d+) us "
-                   r"misses=(\d+) hits=(\d+) raster=(\d+) us font=(\d+) cache=(\d+)")
+                   r"misses=(\d+) hits=(\d+) raster=(\d+) us font=(\d+) cache=(\d+) "
+                   r"io=(\d+) reads=(\d+)")
         match = re.search(pattern, result)
         if not match:
             raise RuntimeError(f"benchmark receipt missing: {result!r}")
         values = list(map(int, match.groups()))
-        if values[0] != args.size or values[4] == 0 or values[5] == 0 or values[7] != 4667380:
+        if (values[0] != args.size or values[4] == 0 or values[5] == 0 or
+                values[7] != 4667380 or values[9] == 0 or values[10] == 0):
             raise RuntimeError(f"invalid benchmark counters: {values}")
         time.sleep(2)
         link.reset_input_buffer()
@@ -78,6 +80,7 @@ def main():
               f"{values[0]}px load {values[1]} ms; first {values[2]} us; "
               f"warm {values[3]} us; raster {values[6]} us; "
               f"miss/hit {values[4]}/{values[5]}; cache {values[8] // 1024} KiB; "
+              f"I/O {values[9] // 1024} KiB/{values[10]} reads; "
               f"PSRAM restored to {after} KiB")
         if args.leave_open:
             link.write(f"fontbench {args.size}\r".encode())

@@ -8,12 +8,14 @@ typedef struct {
     uint32_t load_ms;
     uint32_t glyph_hits;
     uint32_t glyph_misses;
+    uint32_t io_bytes;
+    uint32_t io_reads;
     uint64_t raster_us;
     size_t cache_bytes;
 } otfont_stats;
 
-/* Experimental runtime OpenType renderer.  The face and bounded 4-bit glyph
- * cache live in PSRAM; callers still own display serialization. */
+/* Experimental runtime OpenType renderer.  A bounded VFS stream cache and the
+ * 4-bit glyph cache live in PSRAM; callers still own display serialization. */
 bool otfont_begin(const char *path, unsigned pixel_size);
 void otfont_end(void);
 int otfont_width(uint32_t cp);

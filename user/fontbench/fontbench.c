@@ -50,13 +50,13 @@ bool fontbench_run(unsigned pixel_size) {
     ksnprintf(line,sizeof line,"%upx  初回描画 %u ms / 温間描画 %u ms / miss %u hit %u",
               pixel_size,first_us/1000u,warm_us/1000u,st.glyph_misses,st.glyph_hits);
     bizud_text(LEFT,536,line,RIGHT,ACCENT,BG);
-    ksnprintf(line,sizeof line,"TTF %u KiB (%u ms) / glyph cache %u KiB / Qで戻る",
-              st.font_bytes/1024u,st.load_ms,(unsigned)(st.cache_bytes/1024u));
+    ksnprintf(line,sizeof line,"TTF %u KiB / read %u KiB (%u ms) / cache %u KiB / Qで戻る",
+              st.font_bytes/1024u,st.io_bytes/1024u,st.load_ms,(unsigned)(st.cache_bytes/1024u));
     bizud_text(LEFT,578,line,RIGHT,FG,BG);
     display_present(0,0,DISPLAY_WIDTH,DISPLAY_HEIGHT);display_set_target(0);
-    kprintf("FONTBENCH %u px: load=%u ms first=%u us warm=%u us misses=%u hits=%u raster=%u us font=%u cache=%u\n",
+    kprintf("FONTBENCH %u px: load=%u ms first=%u us warm=%u us misses=%u hits=%u raster=%u us font=%u cache=%u io=%u reads=%u\n",
             pixel_size,st.load_ms,first_us,warm_us,st.glyph_misses,st.glyph_hits,
-            (uint32_t)st.raster_us,st.font_bytes,(uint32_t)st.cache_bytes);
+            (uint32_t)st.raster_us,st.font_bytes,(uint32_t)st.cache_bytes,st.io_bytes,st.io_reads);
     for(;;){int key=dq_pollkey();if(key=='q'||key=='Q'||key==DQK_ESC||key==3)break;task_sleep(10);}
 done:
     display_set_target(0);if(outline)otfont_end();if(atlas)bizud_end();
