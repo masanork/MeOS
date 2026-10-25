@@ -420,7 +420,7 @@ the largest listed contributor. Host scheduler tests cover ongoing/same-task
 intervals, snapshots, reclaim and the 32-bit time boundary; stack tests verify
 counter reset on TCB reuse. Foundation CI runs these tests.
 
-## 512x300 baseline configuration (device measurement pending)
+## 512x300 baseline configuration
 
 The default remains 320x200 -> 960x720. A separate build selects 512x300 ->
 1024x600, centered at (128,60), with narrower control rails outside the viewport:
@@ -465,8 +465,21 @@ changes, rows above 255, untouched rails/margins and input routing. The high
 engine completed 1,200 ASan host steps; the low 130-frame image remains exactly
 `88b7f83db7da86e371452ed78ddefd1788701f5c356f6380cb30dd5296a6c06a`.
 Both native builds, Doom host checks and the clean-source simulator pass.
-`hires-host-2026-10-25.json` records these preparation results. No new firmware
-has been flashed: the device is reserved by a parallel SD/Wi-Fi qualification
-session, and the user requested waiting until it finishes. Native high-resolution
-FPS and physical display/audio acceptance remain pending; host speed is not a
-Tab5 baseline or a like-for-like comparison to Espressif's reported frame rate.
+`hires-host-2026-10-25.json` records these preparation results.
+
+Physical Tab5 measurements on 2026-10-26 use source `f4e9ddb`, CPU 360 MHz,
+128 KiB L2 cache, the existing 600 KiB surface cache and effect audio. Full-view
+969-frame demo1 returned **10.7 / 10.7 FPS on CPU** and **5.7 / 5.7 FPS on DMA**.
+The static start view (~23 FPS DMA) is not representative of the demo. The
+high-resolution DMA path spends roughly 130 ms/frame in transfer during moving
+intervals; it is slower than CPU here. The 150 KiB indexed image exceeds the
+128 KiB cache, making column traversal/cache behavior a next investigation,
+not a proven sole cause. No renderer/cache/compiler optimization was applied
+while measuring. The earlier 320x200 DMA result was 32.0 FPS; its different
+pixel count and viewport prevent a same-workload performance comparison.
+
+Static CPU/DMA comparisons match the independent reference (`a4258a41`), and
+moving DMA comparisons report zero mismatches. Stack guards remain intact;
+normal exits report zero audio underruns/errors. Physical display, sound and
+controls still require user acceptance for this resolution. Detailed image
+identity and measurements are in `hires-device-2026-10-26.json`.

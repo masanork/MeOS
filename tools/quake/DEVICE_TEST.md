@@ -221,3 +221,26 @@ sampled stack guards remained intact. No constant-30-FPS claim is made. The
 measured image predates the final PR rebase onto newer network/storage commits;
 its identity, counters and explicit remaining physical gates are recorded in
 `dma-device-2026-10-25.json`. CPU remains the default path.
+
+## 512x300 baseline — 2026-10-26
+
+Source `f4e9ddb` was installed to OTA slot 0 only, preserving the factory image,
+other OTA slot and SD data. CPU 360 MHz, 128 KiB L2, 600 KiB surface cache and
+effect audio were held fixed. Full-view `timedemo demo1;toggleconsole` produced:
+
+| Mode | Run 1 | Run 2 | Frames per run |
+| --- | --- | --- | --- |
+| CPU | 90.4 s / 10.7 FPS | 90.3 s / 10.7 FPS | 969 |
+| Exact DMA | 168.7 s / 5.7 FPS | 168.7 s / 5.7 FPS | 969 |
+
+Static CPU/DMA references match `a4258a41`; moving DMA has zero pixel
+mismatches. Sampled stack guards pass; both measured-mode exits report zero
+audio underruns/errors and normal app relaunch succeeds. Human visual/audio
+and control acceptance at this resolution remains pending. The final app is
+CPU E1M1 at 512x300, expanded to 1024x600 at (128,60).
+
+The prior 320x200 DMA result was 32.0 FPS. This high-resolution adaptation
+exposes a transfer bottleneck: moving DMA intervals spend about 130 ms/frame
+in transfer, versus about 60 ms for CPU. Cache behavior of column traversal
+with a 150 KiB source and 128 KiB L2 is a follow-up hypothesis, not an isolated
+cause. See `hires-device-2026-10-26.json` for image identity and raw run values.
