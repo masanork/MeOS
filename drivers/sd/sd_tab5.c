@@ -166,3 +166,9 @@ out:
     return &s_bd;
 }
 void sdcard_status(sdcard_status_t *out) { spi_bus_lock(); *out = s; spi_bus_unlock(); }
+bool sdcard_get_io_stats(sdcard_io_stats_t *out, bool reset)
+{
+    (void)reset;
+    if (out) *out = (sdcard_io_stats_t){0};
+    return false;
+}
