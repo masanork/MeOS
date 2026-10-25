@@ -109,6 +109,7 @@ class IntegrityTests(unittest.TestCase):
         for invalid in ("\n".join(lines[:-1]), receipt + "\n" + lines[0],
                         receipt.replace("peak_bytes=1465", ""),
                         receipt.replace("peak_scheduled_us=800", "peak_scheduled_us=1001"),
+                        receipt.replace("peak_finish_us=600", "peak_finish_us=601"),
                         receipt.replace("calls=5", "calls=5 calls=6")):
             with self.assertRaises(RuntimeError):
                 wifi_bus_stats(invalid)

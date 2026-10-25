@@ -75,6 +75,9 @@ def wifi_bus_stats(receipt):
             raise RuntimeError("duplicate/incomplete Wi-Fi bus diagnostic row")
         if values["peak_scheduled_us"] > values["max_hold_us"]:
             raise RuntimeError("Wi-Fi scheduled time exceeds paired lock occupancy")
+        if label != "CMD52" and values["max_hold_us"] < 0xffffffff:
+            if sum(values[k] for k in ("peak_prepare_us", "peak_dma_us", "peak_finish_us")) != values["max_hold_us"]:
+                raise RuntimeError("Wi-Fi peak stages do not match paired lock occupancy")
         rows[label] = values
     if set(rows) != {"SDIO READ", "SDIO WRITE", "CMD52"}:
         raise RuntimeError("Wi-Fi bus diagnostic rows missing")
