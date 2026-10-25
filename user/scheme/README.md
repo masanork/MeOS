@@ -143,4 +143,7 @@ evaluates `(sqrt 81)`, and checks the REPL result frame.
 
 Write and Scheme share an idle BIZ UD atlas cache. The first editor reads it
 from microSD; subsequent editor launches reuse it. `mem trim` explicitly
-reclaims the cache, and Home does so before starting a non-editor application.
+reclaims that cache and the optional 1,170 KiB SD asset-read cache. The next
+asset read makes one attempt to recreate its cache; editor allocation pressure
+can also reclaim it before retrying. Home trims BIZ UD before starting a
+non-editor application.

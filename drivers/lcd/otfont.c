@@ -7,6 +7,7 @@
 #include <m5os/hal_time.h>
 #include <m5os/kmalloc.h>
 #include <m5os/kprintf.h>
+#include <m5os/sdroot.h>
 #include <m5os/vfs.h>
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -62,8 +63,14 @@ typedef struct {
 
 static outline_font s_font;
 
+static void *font_alloc(size_t bytes) {
+    void *p=kmalloc_psram(bytes);
+    if(!p&&bizud_trim())p=kmalloc_psram(bytes);
+    if(!p&&sdroot_asset_cache_trim())p=kmalloc_psram(bytes);
+    return p;
+}
 static void *ft_alloc(FT_Memory memory,long size) {
-    (void)memory;return size>0?kmalloc_psram((size_t)size):0;
+    (void)memory;return size>0?font_alloc((size_t)size):0;
 }
 static void ft_free(FT_Memory memory,void *block) {
     (void)memory;kfree(block);
@@ -71,7 +78,7 @@ static void ft_free(FT_Memory memory,void *block) {
 static void *ft_realloc(FT_Memory memory,long current,long requested,void *block) {
     (void)memory;
     if(requested<=0){kfree(block);return 0;}
-    void *next=kmalloc_psram((size_t)requested);if(!next)return 0;
+    void *next=font_alloc((size_t)requested);if(!next)return 0;
     if(block&&current>0)memcpy(next,block,(size_t)(current<requested?current:requested));
     kfree(block);return next;
 }
@@ -128,7 +135,7 @@ static void stream_close(FT_Stream stream) {
 static bool open_stream(const char *path) {
     vfs_info_t st;if(vfs_stat(path,&st)<0||st.type!=FS_TYPE_FILE||!st.size||st.size>OTFONT_MAX_FILE)return false;
     int fd=vfs_open(path,VFS_O_READ);if(fd<0)return false;
-    s_font.stream_cache=kmalloc_psram(OTFONT_STREAM_CACHE);
+    s_font.stream_cache=font_alloc(OTFONT_STREAM_CACHE);
     if(!s_font.stream_cache){vfs_close(fd);return false;}
     s_font.font_fd=fd;s_font.font_bytes=st.size;
     memset(&s_font.stream,0,sizeof s_font.stream);
@@ -139,7 +146,7 @@ static bool open_stream(const char *path) {
 
 static bool open_resident(const char *path,uint32_t bytes)
 {
-    s_font.font_data=kmalloc_psram(bytes);if(!s_font.font_data)return false;
+    s_font.font_data=font_alloc(bytes);if(!s_font.font_data)return false;
     int fd=vfs_open(path,VFS_O_READ);if(fd<0)return false;
     uint32_t done=0;
     while(done<bytes) {
@@ -184,10 +191,10 @@ static bool begin(const char *path,unsigned pixel_size,bool prefer_resident) {
         if(FT_Open_Face(s_font.library,&args,0,&s_font.face))goto fail;
     }
     if(FT_Select_Charmap(s_font.face,FT_ENCODING_UNICODE)||FT_Set_Pixel_Sizes(s_font.face,0,pixel_size))goto fail;
-    s_font.entries=kmalloc_psram(sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
-    s_font.metrics=kmalloc_psram(sizeof(metric_entry)*OTFONT_METRIC_SLOTS);
-    s_font.cells=kmalloc_psram(OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS);
-    s_font.scratch=kmalloc_psram(OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH*sizeof(uint16_t));
+    s_font.entries=font_alloc(sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
+    s_font.metrics=font_alloc(sizeof(metric_entry)*OTFONT_METRIC_SLOTS);
+    s_font.cells=font_alloc(OTFONT_CELL_BYTES*OTFONT_CACHE_SLOTS);
+    s_font.scratch=font_alloc(OTFONT_MAX_GLYPH*OTFONT_MAX_GLYPH*sizeof(uint16_t));
     if(!s_font.entries||!s_font.metrics||!s_font.cells||!s_font.scratch)goto fail;
     memset(s_font.entries,0,sizeof(cache_entry)*OTFONT_CACHE_SLOTS);
     memset(s_font.metrics,0,sizeof(metric_entry)*OTFONT_METRIC_SLOTS);

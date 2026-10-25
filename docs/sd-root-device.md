@@ -162,6 +162,12 @@ The cache is an optional 1,170 KiB PSRAM allocation, separate from buffers that
 are required to mount the root. If it cannot be allocated, `/assets` continues
 with direct I/O. `sdroot io-reset` clears the cache and counters; `sdroot` reports
 logical reads, adjacency, hits/misses and physical requests for diagnosis.
+`mem trim` waits for the current bounded asset read, releases the cache and arms
+one lazy allocation attempt for the next read. If PSRAM is still constrained,
+that read and later reads stay on direct I/O instead of retrying every chunk;
+another `mem trim` or `/assets` remount rearms a single attempt. Write, Scheme and
+the outline renderer also release the cache after a failed PSRAM allocation
+before retrying their required allocation.
 
 On the same Tab5 and card, a cold Write layout of a temporary document containing
 900 distinct CJK characters fell from 9.947 s immediately before caching to

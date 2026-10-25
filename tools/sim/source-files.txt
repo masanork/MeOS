@@ -28,6 +28,7 @@ kernel/include/m5os/ime.h
 kernel/include/m5os/kmalloc.h
 kernel/include/m5os/kprintf.h
 kernel/include/m5os/number.h
+kernel/include/m5os/sdroot.h
 kernel/include/m5os/task.h
 kernel/include/m5os/types.h
 kernel/include/m5os/vfs.h

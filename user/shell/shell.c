@@ -434,6 +434,10 @@ static int cmd_mem(int argc, char **argv)
         SH_PRINTF("BIZ UD cache: %s (%u KB released)\n",
                   bytes ? "trimmed" : bizud_cache_users() ? "busy" : "empty",
                   (uint32_t)(bytes / 1024u));
+        bytes = sdroot_asset_cache_trim();
+        SH_PRINTF("SD asset cache: %s (%u KB released)\n",
+                  bytes ? "trimmed" : sdroot_active() ? "empty" : "unavailable",
+                  (uint32_t)(bytes / 1024u));
     } else
 #endif
     if (argc != 1) {
@@ -452,6 +456,7 @@ static int cmd_mem(int argc, char **argv)
 #if M5OS_BOARD_TAB5
     SH_PRINTF("BIZ UD   %u KB cached   %u active user(s)\n",
               (uint32_t)(bizud_cache_bytes() / 1024u), bizud_cache_users());
+    SH_PRINTF("SD asset %u KB cached\n",(uint32_t)(sdroot_asset_cache_bytes()/1024u));
 #endif
     return 0;
 }
@@ -1298,7 +1303,7 @@ static const command_t s_commands[] = {
     { "ls",      cmd_ls,      "ls [PATH]       list a directory (/dev lists devices)" },
     { "cat",     cmd_cat,     "cat FILE...     print files" },
     { "echo",    cmd_echo,    "echo TEXT [> FILE | >> FILE]" },
-    { "mem",     cmd_mem,     "mem [trim]     heap usage / release idle font cache" },
+    { "mem",     cmd_mem,     "mem [trim]     heap usage / release idle caches" },
     { "uptime",  cmd_uptime,  "time since boot" },
     { "run",     cmd_run,     "run [APP]       start an application (no argument: list them)" },
     { "put",     cmd_put,     "put PATH        receive a file as base64 (see tools/m5ex_push.py)" },

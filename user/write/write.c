@@ -12,6 +12,7 @@
 #include <m5os/ime.h>
 #include <m5os/kmalloc.h>
 #include <m5os/kprintf.h>
+#include <m5os/sdroot.h>
 #include <m5os/task.h>
 #include <m5os/vfs.h>
 #include <string.h>
@@ -38,6 +39,7 @@ typedef struct {
 static void *editor_alloc(size_t bytes) {
     void *p=kmalloc_psram(bytes);
     if(!p&&bizud_trim())p=kmalloc_psram(bytes);
+    if(!p&&sdroot_asset_cache_trim())p=kmalloc_psram(bytes);
     return p;
 }
 static int header_baseline(writer *w) {return (int)w->font_px+6;}
