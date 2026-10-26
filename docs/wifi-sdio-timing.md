@@ -156,16 +156,30 @@ returned from 23,135 to 23,119 KiB free PSRAM within the unchanged 32 KiB limit.
 Firmware `f8cd1b7` adds the same wait measurements to native SD. It builds and
 passes host adapter/parser tests; its 1,777,056-byte image has SHA-256
 `d8713e1ac07fa0ff5dabde6ebd19e229c438ace37c2f4b678f451df8a90a02bc`.
-The image was written and hash-verified in measurement slot OTA1. It has **not**
-run the final workload: the USB serial device disappeared before activation,
-and the activation failed before reading the partition table. The subsequent
-harness invocation also failed to open serial and produced no measurements.
+The image was written and hash-verified in measurement slot OTA1. During the
+first attempt, USB serial disappeared before activation; activation failed
+before reading the partition table, and the subsequent harness could not open
+serial. That interruption remains in the receipt's history.
 
 Fresh preflight had identified original MeOS `333a366` in OTA0 at `0x410000`,
 with the expected A/B map and active native SD root. OTA0, factory, bootloader
-and partition table were preserved. The last successful selection operation
-chose original OTA0 before writing the final OTA1 image; only OTA1 and selection
-metadata were modified. No SD format or asset mutation command was issued.
-USB reconnection is required for final native-SD measurements and a fresh
-readback of the restored OTA0 boot. The PR remains a draft until those gates
-are complete; the absence of final data is not presented as a passing result.
+and partition table were preserved. Original OTA0 was selected before the final
+OTA1 install. Only OTA1 and selection metadata were modified. No SD format or
+asset mutation command was issued.
+
+After USB reconnection, a fresh boot verified original `333a366` on OTA0 and
+active SD root. `verify_flash` matched the stored OTA1 image to the final binary,
+then activation succeeded and `f8cd1b7` booted on OTA1. The dictionary loaded
+5,354,161 bytes with its stack guard OK. The final uniform harness nevertheless
+stopped **before any workload**: the saved AP was unavailable (disconnect
+reason 201, `NO_AP_FOUND`). A scan found four other networks and no saved AP;
+no SSID or credentials were changed. The failed prerequisite report is retained
+separately from the earlier passing measurements.
+
+An offline SD/graphics attempt was then prepared, but USB serial disappeared
+again before it could open the port; it generated no device measurements.
+**The last successful selection is now measurement OTA1.** Original OTA0 is
+preserved, but reselecting it and confirming its boot remain pending USB
+reconnection. Final paired native-SD/network measurements also need an available
+2.4 GHz AP reachable from the test host. The PR remains a draft; neither an
+unstarted workload nor the missing restoration check is presented as passing.

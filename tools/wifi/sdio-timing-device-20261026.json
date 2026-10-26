@@ -1,7 +1,7 @@
 {
   "date": "2026-10-26",
   "result": "PARTIAL",
-  "scope": "Three earlier firmware/workload runs pass; final both-sided wait profiling is not yet physically qualified because USB disappeared.",
+  "scope": "Earlier transfer/Wi-Fi-wait trials pass; the final image now boots, but its workload is blocked by an unavailable saved AP and then USB loss. Original OTA0 restoration is pending.",
   "board": "M5Stack Tab5, ESP32-P4 revision 1.3",
   "configuration": {
     "sdkconfig_sha256": "2aaa7f1e3484ca57df92e655093a677af58e392832f033d2cf418421ed03654f",
@@ -28,7 +28,8 @@
       "source_commit": "f8cd1b74f42c8a3bc3b568a14e9b33da998c9e86",
       "bytes": 1777056,
       "sha256": "d8713e1ac07fa0ff5dabde6ebd19e229c438ace37c2f4b678f451df8a90a02bc",
-      "physical_workload": "NOT_RUN"
+      "physical_workload": "NOT_RUN: Wi-Fi prerequisite failed before workload",
+      "boot_verified": true
     }
   },
   "summary": {
@@ -1886,6 +1887,44 @@
     ],
     "new_backup_taken": false,
     "backup_omission_previously_authorized": true,
+    "last_successful_selection": "OTA1 for final qualification after verified original OTA0 boot",
+    "last_successful_selection_log_sha256": "e2313aadb93bde3742d4bc69ef0d776f01cefd385b5bc926574c0c4f40650a1f",
+    "latest_ota_1_write_verified": true,
+    "latest_install_log_sha256": "90808ed5bdcd18f8406aa89d87021bba2f6716b9beda18161a1eaded28fb0576",
+    "final_activation": "PASS after USB reconnection; f8cd1b7 boot verified at 0x7f0000",
+    "failed_activation_log_sha256": "6ca5f8334b21ba5ee896e50bad71c180851c4ae85a54ba247fb76e3029f157c7",
+    "final_workload": "NOT_RUN: saved AP not found (reason 201), then USB serial absent again",
+    "failed_workload_output_sha256": "0eae689905bf388e70d75006a7592931cc10a7a445bff162372eeeb571737f24",
+    "boot_readback_after_last_selection": "VERIFIED: f8cd1b7 on OTA1",
+    "sd_reformatted": false,
+    "original_ota0_readback_after_reconnection": "VERIFIED: 333a366 at 0x410000, active native SD root",
+    "reconnect_preflight_serial_log_sha256": "35351375a08dadd0db7d20083bbc40ac7edb4e18a875f33a5d725ccd4d0621b0",
+    "reconnect_image_verify_log_sha256": "c8907e4144b814aafcb4f53d40d57c9f676c6cf4baa378bca6ceb7ff5234c757",
+    "restore_original_ota0": "PENDING_USB_RECONNECTION"
+  },
+  "limitations": [
+    "CMD52 counts were zero after each reset; no postboot CMD52 performance qualification is claimed.",
+    "The two idle phases lost 1/69 and 3/69 replies; all workload phases had zero loss. Idle RTT spikes are retained and not attributed to the controller.",
+    "The first firmware has transfer-stage rows only; the second adds Wi-Fi wait rows. Neither has final native-SD wait breakdowns.",
+    "Driver hold timing excludes ownership-to-driver-entry and counter/unlock edges, so it does not bound total ownership duration.",
+    "The largest Wi-Fi waits were mostly before ownership grant with initial owner PID 8 (shell); that identifies an ownership interval, not proof of slow SD wire transfer.",
+    "The final native-SD image booted and loaded the dictionary, but its workload stopped at the Wi-Fi prerequisite. Later offline measurement could not start because USB serial disappeared again. Restoration of original OTA0 remains pending.",
+    "Instrumentation overhead is not calibrated. This measures one board/card and does not qualify write performance, power loss, boot speed or a latency improvement.",
+    "Raw serial transcripts may contain network identity; only their hashes and sanitized reports are published."
+  ],
+  "prior_usb_interruption": {
+    "original_boot_version": "333a366",
+    "original_boot_slot": "ota_0 at 0x410000",
+    "preflight_serial_log_sha256": "b4cd02e85414d45f1154e79e0a2415d9fdbab9f9d17fb99322bb869c0ce86681",
+    "otadata_before_log_sha256": "041cb94bc19c1052ab2d262edaa93d6306b0db6b59e25362c5e674ff709f79b3",
+    "original_ota_0_and_factory_applications_modified": false,
+    "bootloader_or_partition_table_modified": false,
+    "changed_regions": [
+      "measurement OTA1 at 0x7f0000",
+      "boot selection at 0x400000"
+    ],
+    "new_backup_taken": false,
+    "backup_omission_previously_authorized": true,
     "last_successful_selection": "OTA0 before final OTA1 install",
     "last_successful_selection_log_sha256": "9de9ac2ebbd610eac9e1d170ee0aa0c92cd7c906bf228df883373136be4b4c6e",
     "latest_ota_1_write_verified": true,
@@ -1897,14 +1936,38 @@
     "boot_readback_after_last_selection": "PENDING_USB_RECONNECTION",
     "sd_reformatted": false
   },
-  "limitations": [
-    "CMD52 counts were zero after each reset; no postboot CMD52 performance qualification is claimed.",
-    "The two idle phases lost 1/69 and 3/69 replies; all workload phases had zero loss. Idle RTT spikes are retained and not attributed to the controller.",
-    "The first firmware has transfer-stage rows only; the second adds Wi-Fi wait rows. Neither has final native-SD wait breakdowns.",
-    "Driver hold timing excludes ownership-to-driver-entry and counter/unlock edges, so it does not bound total ownership duration.",
-    "The largest Wi-Fi waits were mostly before ownership grant with initial owner PID 8 (shell); that identifies an ownership interval, not proof of slow SD wire transfer.",
-    "Native-SD handoff/resume instrumentation is built and host-tested, but the final image was not activated and its physical workload never started.",
-    "Instrumentation overhead is not calibrated. This measures one board/card and does not qualify write performance, power loss, boot speed or a latency improvement.",
-    "Raw serial transcripts may contain network identity; only their hashes and sanitized reports are published."
-  ]
+  "reconnection": {
+    "preflight_log_sha256": "35351375a08dadd0db7d20083bbc40ac7edb4e18a875f33a5d725ccd4d0621b0",
+    "image_verify_log_sha256": "c8907e4144b814aafcb4f53d40d57c9f676c6cf4baa378bca6ceb7ff5234c757",
+    "activation_log_sha256": "e2313aadb93bde3742d4bc69ef0d776f01cefd385b5bc926574c0c4f40650a1f",
+    "final_firmware_attempt": {
+      "result": "FAILED_PREREQUISITE",
+      "report": {
+        "result": "FAIL",
+        "baseline": [],
+        "loads": [],
+        "settle_seconds": 60,
+        "firmware_boot_version": "f8cd1b7",
+        "host_clock": {
+          "monotonic_seconds": 81.568,
+          "wall_seconds": 81.569
+        },
+        "error": "Tab5 is not connected to Wi-Fi"
+      },
+      "report_sha256": "04ff9b49b89e5db86929e786f116d8bec29ef3c81f3d908ccc13031ea1393dad",
+      "serial_log_sha256": "bac8610c5986865989a7214893463522b97b7fe780bab51333877ca0099d46bc"
+    },
+    "wifi_scan": {
+      "result": "saved AP absent",
+      "networks_found": 4,
+      "disconnect_reason": 201,
+      "ssid_or_credentials_changed": false,
+      "serial_log_sha256": "a1237f9dea21329abca6a597c938cd1b613fbf97366dbd66c18ddcd6d457c759"
+    },
+    "offline_attempt": {
+      "result": "NOT_STARTED",
+      "reason": "USB serial absent again",
+      "output_sha256": "b26105e10a70e58559ccb168d20859f98b877651048fdf67bcadba195d5a7317"
+    }
+  }
 }
