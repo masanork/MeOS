@@ -644,3 +644,64 @@ measure FPS and the diagnostic depth-span/world times, then verify display,
 controls, audio and normal quit/relaunch on Tab5. Host timing cannot establish
 a cache-layout benefit on ESP32-P4. The headless harness supports `--zpad` for
 repeatable color/depth comparisons without redistributing game data.
+
+## Quiet physical renderer profiling — 2026-10-26
+
+`M5OS_AUDIO_QUIET=1` adds a separate `-quiet` build/config suffix after any
+profile/pitch suffix. It selects ES8388 DAC attenuation 191 (-95.5 dB, one step
+above the -96 dB endpoint), with the normal PCM mixer and DMA still running.
+Both DAC registers are read back while the amp is off; any mismatch aborts
+audio initialization before amp enable. Normal builds retain the original
+-18 dB setup; normal `audio_open` unlinked machine-text bytes match the prior
+build (1,368 bytes). The quiet option does not implement a runtime volume API.
+
+```sh
+M5OS_QUAKE_RESOLUTION=512x300 M5OS_AUDIO_QUIET=1 sh tools/quake/build.sh
+M5OS_QUAKE_RESOLUTION=512x300 M5OS_AUDIO_QUIET=1 M5OS_QUAKE_DETAIL_PROFILE=1 sh tools/quake/build.sh
+```
+
+Tab5 sound-enabled full-view demo1, 969 frames, fresh game startup each repeat:
+
+| Build | Run 1 | Run 2 |
+| --- | --- | --- |
+| Normal, quiet | 52.3 s / 18.5 FPS | 52.4 s / 18.5 FPS |
+| Detailed timers, quiet | 52.5 s / 18.4 FPS | 52.6 s / 18.4 FPS |
+
+The observed diagnostic-image duration difference is about 0.4%, including
+possible code-layout/scheduling effects; it is not an isolated timer-cost
+measurement. All four exits report zero audio underruns/errors and positive
+nonzero PCM. Sampled stack peaks are 29,920 and 29,888 / 49,152 bytes, guards OK.
+
+Medians over 18 steady 100-completed-frame diagnostic intervals:
+
+| Scope | ms/frame | Nesting |
+| --- | ---: | --- |
+| Display transfer/staging/cache maintenance | 14.81 | Separate adapter scope |
+| World edges | 28.72 | Includes cache and span scopes below |
+| Surface cache | 3.75 | Includes surface build |
+| Surface build | 3.37 | Includes lightmap |
+| Lightmap | 0.21 | Nested in build |
+| Perspective texture spans | 11.84 | Inside world edges |
+| Depth spans | 6.00 | Inside world edges |
+| Entities | 2.78 | Separate outer scope |
+| View model | 1.99 | Separate outer scope |
+
+Do not sum nested scopes or treat these interval medians as exclusive CPU
+time/full-run means. The measurements prioritize texture/depth spans over
+unmeasured cache-capacity changes. Warp/sky/water timers were zero in the
+selected steady intervals; this does not qualify those paths.
+
+Initial USB-only resets left DMA2D's clock enabled, so ownership guards
+retained CPU rendering. Those CPU fallback runs are excluded. An esptool
+watchdog reset followed by an early game start restored exact DMA without
+bypassing ownership checks. Startup rejection reasons now distinguish request/
+alignment rejection, existing module clock, and source/self-test allocation
+failures. Do not accept a DMA benchmark without its offscreen PASS and
+`dma-exact` interval reports; audio startup/readback and nonzero PCM are also
+required.
+
+A quiet zpad32 image was written and verified, but the USB device disappeared
+after its reset before a monitor/game benchmark could start. Zpad32/64 timings
+remain unmeasured; USB reconnection is required to continue. No faster pitch
+is selected. See `quiet-profile-device-2026-10-26.json` for exact firmware
+identities, raw intervals and incomplete physical qualification.

@@ -285,3 +285,27 @@ source allocation is permanent kernel-owned internal memory, not app-owned.
 Detailed evidence and incomplete qualification are recorded in
 `dma-batch-device-2026-10-26.json`. Human display/audio acceptance remains
 separate from automated pixel checks and PCM counters.
+
+## Quiet renderer profile — 2026-10-26 (partial)
+
+Quiet normal/profile images select DAC attenuation 191 (-95.5 dB), read back
+both channels before amp enable, and retain effect mixing/DMA. Default gain
+remains -18 dB. Full-view demo1 returns normal 18.5 / 18.5 FPS (52.3 / 52.4 s),
+diagnostic 18.4 / 18.4 FPS (52.5 / 52.6 s), 969 frames each. Audio exits have
+zero underruns/errors and positive PCM. Stack guards pass at sampled peaks
+29,920 / 49,152 and 29,888 / 49,152 bytes.
+
+Steady diagnostic interval medians: transfer 14.81 ms, world edges 28.72 ms
+(inclusive), texture spans 11.84 ms, depth spans 6.00 ms, cache 3.75 ms
+(includes build 3.37 ms, including lightmap 0.21 ms). Nested values must not
+be added; all times include preemption/IRQs.
+
+Ownership guards rejected DMA after USB-only resets with an existing module
+clock; CPU fallback runs are excluded. An esptool watchdog reset restored a
+claimable module, after which fresh normal game exits and USB resets retained
+working DMA. Do not reset/take an actively owned module to force a benchmark.
+
+Zpad32 was flashed, but USB enumeration disappeared before its first monitored
+boot. Both Z-pitch performance comparisons, final display/control/listening
+acceptance and pitch selection remain pending reconnection. The prepared
+images remain quiet. Evidence: `quiet-profile-device-2026-10-26.json`.
