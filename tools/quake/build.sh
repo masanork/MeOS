@@ -27,6 +27,13 @@ case "${M5OS_QUAKE_ZPAD:-0}" in
      if [ ! -f "$QUAKE_CONFIG" ] && [ -f "$ZPAD_BASE_CONFIG" ]; then cp "$ZPAD_BASE_CONFIG" "$QUAKE_CONFIG"; fi ;;
   *) echo "unsupported M5OS_QUAKE_ZPAD" >&2; exit 2 ;;
 esac
+case "${M5OS_AUDIO_QUIET:-0}" in
+  0) ;;
+  1) QUIET_BASE_CONFIG=$QUAKE_CONFIG
+     QUAKE_BUILD=$QUAKE_BUILD-quiet; QUAKE_CONFIG=$QUAKE_CONFIG-quiet
+     if [ ! -f "$QUAKE_CONFIG" ] && [ -f "$QUIET_BASE_CONFIG" ]; then cp "$QUIET_BASE_CONFIG" "$QUAKE_CONFIG"; fi ;;
+  *) echo "unsupported M5OS_AUDIO_QUIET" >&2; exit 2 ;;
+esac
 . tools/env.sh
 [ $# -gt 0 ] || set -- build
 exec idf.py -B "$QUAKE_BUILD" -DSDKCONFIG="$QUAKE_CONFIG" -DIDF_TARGET=esp32p4 "$@"
