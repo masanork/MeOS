@@ -600,7 +600,7 @@ hash `bfc101a42954ef9a`. Device timing is pending coordinated access: the first
 flash attempt could not lock USB while a Wi-Fi/SD coexistence test was running;
 it stopped before reading/writing the partition.
 
-## Experimental depth-buffer pitch (host-qualified only)
+## Experimental depth-buffer pitch
 
 The default remains zero padding. Optional high-resolution experiments add
 32 or 64 **shorts** to each depth row, changing its byte pitch from 1,024 to
@@ -700,8 +700,21 @@ failures. Do not accept a DMA benchmark without its offscreen PASS and
 `dma-exact` interval reports; audio startup/readback and nonzero PCM are also
 required.
 
-A quiet zpad32 image was written and verified, but the USB device disappeared
-after its reset before a monitor/game benchmark could start. Zpad32/64 timings
-remain unmeasured; USB reconnection is required to continue. No faster pitch
-is selected. See `quiet-profile-device-2026-10-26.json` for exact firmware
-identities, raw intervals and incomplete physical qualification.
+After USB reconnection, quiet zpad32 completed full-view demo1 in 51.6 / 51.7 s
+(18.8 / 18.7 FPS); zpad64 completed it in 51.7 / 51.8 s (18.7 / 18.7 FPS).
+Each run rendered 969 frames with exact DMA, verified quiet DAC settings,
+positive PCM and zero audio underruns/errors. Sampled stack peaks were
+29,952 and 29,888 / 49,152 bytes, with all sampled guards intact.
+
+Relative to the earlier quiet normal pair (52.3 / 52.4 s), the observed mean
+duration reductions are 1.34% / 1.15%. These are small sequential observations,
+not an interleaved A/B result. Three later normal-image starts failed audio
+stage 4 (internal PCM buffer allocation), including one after a full watchdog
+reset, so none were accepted as new benchmark results. This startup/resource
+issue also occurred on a later zpad32 start and remains unresolved; it is not
+confined to the normal image. Default Z padding stays zero; zpad32 uses less extra
+PSRAM (19,200 vs 38,400 bytes) for similar observed performance.
+
+See `quiet-profile-device-2026-10-26.json` for exact firmware identities,
+intervals and qualification limits. Final visual/control/listening acceptance
+is separate from DMA self-tests and PCM counters.

@@ -1,7 +1,7 @@
 {
   "date": "2026-10-26",
   "production_source_commit": "58f037c46be066152ad845bd18e820f0b18e96c1",
-  "qualification": "Physical normal/profile runs complete; Z-pitch comparison pending USB reconnection.",
+  "qualification": "Physical normal/profile and both Z-pitch timedemos complete. Final visual/control/listening acceptance remains manual; later baseline reruns excluded after audio allocation failure.",
   "device": "ESP32-P4 rev1.3 Tab5, MAC e8:f6:0a:e2:e8:9c",
   "resolution": [
     512,
@@ -28,7 +28,7 @@
       "detail": false,
       "quiet": true,
       "sha256": "71ac9349e89e305d5b7721d5c1c293ecb74b7a5b294e2ef6cd4308e083b4c32a",
-      "bytes": 2018160,
+      "bytes": 2018384,
       "source": "58f037c"
     },
     "profile": {
@@ -37,7 +37,7 @@
       "detail": true,
       "quiet": true,
       "sha256": "d4a3a92564ccfd8741bf25d94594a47503a663cad381fb176242fe848e1cbea6",
-      "bytes": 2019168,
+      "bytes": 2019408,
       "source": "58f037c"
     },
     "z32": {
@@ -46,7 +46,7 @@
       "detail": false,
       "quiet": true,
       "sha256": "a0d24356b218cc5075b60bbbdd1b656ab8dcc299b34d01366e0e1a8efe2f3e15",
-      "bytes": 2018256,
+      "bytes": 2018480,
       "source": "58f037c"
     },
     "z64": {
@@ -55,7 +55,7 @@
       "detail": false,
       "quiet": true,
       "sha256": "46a48a3bb8e0fbfac15e7354c8b88fdeebabd75f7c55eedcc6c5e2ba35bf33b1",
-      "bytes": 2018224,
+      "bytes": 2018448,
       "source": "58f037c"
     }
   },
@@ -516,7 +516,118 @@
   ],
   "observed_diagnostic_duration_difference_percent": 0.3820439350525451,
   "zpad_runs": {
-    "32": null,
-    "64": null
+    "32": {
+      "runs": [
+        {
+          "frames": 969,
+          "seconds": 51.6,
+          "fps": 18.8
+        },
+        {
+          "frames": 969,
+          "seconds": 51.7,
+          "fps": 18.7
+        }
+      ],
+      "audio_exit": [
+        {
+          "blocks": 3204,
+          "errors": 0
+        },
+        {
+          "blocks": 3215,
+          "errors": 0
+        }
+      ],
+      "pcm_exit": [
+        {
+          "frames": 1640448,
+          "nonzero_frames": 1235454
+        },
+        {
+          "frames": 1646080,
+          "nonzero_frames": 1238020
+        }
+      ],
+      "stack": {
+        "maximum_sampled_bytes": 29952,
+        "capacity": 49152,
+        "all_sampled_guards_ok": true
+      },
+      "z_pitch_pixels": 544,
+      "extra_psram_bytes": 19200,
+      "quiet_readback_and_dma_self_test_per_start": true
+    },
+    "64": {
+      "runs": [
+        {
+          "frames": 969,
+          "seconds": 51.7,
+          "fps": 18.7
+        },
+        {
+          "frames": 969,
+          "seconds": 51.8,
+          "fps": 18.7
+        }
+      ],
+      "audio_exit": [
+        {
+          "blocks": 3205,
+          "errors": 0
+        },
+        {
+          "blocks": 3212,
+          "errors": 0
+        }
+      ],
+      "pcm_exit": [
+        {
+          "frames": 1640960,
+          "nonzero_frames": 1239425
+        },
+        {
+          "frames": 1644544,
+          "nonzero_frames": 1240043
+        }
+      ],
+      "stack": {
+        "maximum_sampled_bytes": 29888,
+        "capacity": 49152,
+        "all_sampled_guards_ok": true
+      },
+      "z_pitch_pixels": 576,
+      "extra_psram_bytes": 38400,
+      "quiet_readback_and_dma_self_test_per_start": true
+    }
+  },
+  "zpad_comparison": {
+    "order": [
+      "normal x2",
+      "profile x2",
+      "USB reconnect",
+      "zpad32 x2",
+      "zpad64 x2",
+      "excluded normal restarts"
+    ],
+    "relative_duration_reduction_percent_vs_earlier_normal": {
+      "32": 1.337153772683864,
+      "64": 1.146131805157596
+    },
+    "interpretation": "Small observed differences, not an interleaved baseline/candidate experiment. Default Z padding remains zero. Candidate32 has lower memory cost and marginally shorter durations than candidate64.",
+    "excluded_baseline_rechecks": {
+      "count": 3,
+      "reason": "audio initialization stage 4: internal PCM buffer allocation failed; no new benchmark accepted",
+      "full_watchdog_reset_also_reproduced": true
+    },
+    "final_device_intent": "quiet zpad32; not a new timedemo, audio initialization must be checked per start",
+    "subsequent_candidate_restart_audio_failure": "Quiet zpad32 final startup also failed audio stage 4; issue is not confined to the normal image.",
+    "final_device_state": {
+      "image": "zpad32 quiet",
+      "playable_signon": true,
+      "exact_dma_self_test_pass": true,
+      "audio": "initialization stage 4 failed; silent, no new benchmark accepted",
+      "serial_released_without_reset": true
+    }
   }
 }
