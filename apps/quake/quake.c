@@ -336,6 +336,10 @@ void quake_main(void *arg) {
         Cbuf_AddText("bind w +forward\nbind s +back\nbind a +moveleft\nbind d +moveright\nbind f +attack\nbind e \"impulse 10\"\nbind / \"impulse 10\"\nbind UPARROW +forward\nbind DOWNARROW +back\nbind LEFTARROW +left\nbind RIGHTARROW +right\n+mlook\n");
         frames=0;profile_frames=0;began=profile_at=hal_time_now_us();
         kprintf("quake: %ux%u -> %ux%u at %u,%u; Host_Init complete\n",QV_WIDTH,QV_HEIGHT,QV_OUT_WIDTH,QV_OUT_HEIGHT,QV_X,QV_Y);
+#if M5OS_QUAKE_HIGHRES && M5OS_QUAKE_ZPAD
+        kprintf("quake: experimental Z pitch %u pixels (+%u bytes PSRAM)\n",QV_Z_PITCH,
+            (unsigned)((QV_Z_PITCH-QV_WIDTH)*QV_HEIGHT*2));
+#endif
         profile_reset();uint64_t last=hal_time_now_us();
         for(;;){
             uint64_t now=hal_time_now_us();unsigned before=frames;

@@ -77,6 +77,9 @@ idf_component_register(SRCS
 target_compile_options(${COMPONENT_LIB} PRIVATE -O3 -fno-tree-vectorize -fno-strict-aliasing -fstack-usage -fno-builtin -msmall-data-limit=0 -w
     -include ${CMAKE_CURRENT_LIST_DIR}/compat.h)
 target_compile_definitions(${COMPONENT_LIB} PRIVATE MEOS_QUAKE_PROFILE=1)
+if("$ENV{M5OS_QUAKE_ZPAD}" MATCHES "^(32|64)$")
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE M5OS_QUAKE_ZPAD=$ENV{M5OS_QUAKE_ZPAD})
+endif()
 if("$ENV{M5OS_QUAKE_DETAIL_PROFILE}" STREQUAL "1")
     target_compile_definitions(${COMPONENT_LIB} PRIVATE MEOS_QUAKE_DETAIL_PROFILE=1)
 endif()

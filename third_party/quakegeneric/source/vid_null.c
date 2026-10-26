@@ -48,7 +48,11 @@ void	VID_ShiftPalette (unsigned char *palette)
 
 void	VID_Init (unsigned char *palette)
 {
+#if defined(M5OS_QUAKE_ZPAD) && M5OS_QUAKE_HIGHRES
+	zbuffer = calloc(QV_Z_PITCH*BASEHEIGHT, sizeof(short));
+#else
 	zbuffer = calloc(BASEWIDTH*BASEHEIGHT, sizeof(short));
+#endif
 	vid_buffer[0] = calloc(BASEWIDTH*BASEHEIGHT, sizeof(byte));
 	vid_buffer[1] = calloc(BASEWIDTH*BASEHEIGHT, sizeof(byte));
 	vid.maxwarpwidth = vid.width = vid.conwidth = BASEWIDTH;
