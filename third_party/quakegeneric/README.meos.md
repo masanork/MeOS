@@ -43,3 +43,9 @@ Optional `MEOS_QUAKE_DETAIL_PROFILE` scopes around renderer calls report
 inclusive wall-time breakdowns for world, entities, cache/lightmap generation
 and span drawing. Normal builds compile these macros out; they do not change
 renderer math, cache replacement or game state. See `tools/quake/README.md`.
+
+An optional `M5OS_QUAKE_ZPAD` experiment (default 0; high-resolution 32/64)
+changes only depth-buffer allocation and scalar depth row/table pitch. Visible
+color packing and arithmetic are unchanged. Host color/depth equivalence and
+padding canaries pass; native performance qualification remains deferred.
+See `tools/quake/README.md` and `zpad-host-2026-10-26.json`.

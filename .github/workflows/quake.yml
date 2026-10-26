@@ -12,16 +12,19 @@ jobs:
           persist-credentials: false
       - run: sh tools/quake/host_test.sh
   firmware:
-    name: firmware (${{ matrix.resolution }}${{ matrix.detail == '1' && ', profile' || '' }})
+    name: firmware (${{ matrix.resolution }}${{ matrix.detail == '1' && ', profile' || '' }}${{ matrix.zpad != '0' && format(', zpad{0}', matrix.zpad) || '' }})
     strategy:
       matrix:
         include:
-          - {resolution: '320x200', detail: '0'}
-          - {resolution: '512x300', detail: '0'}
-          - {resolution: '512x300', detail: '1'}
+          - {resolution: '320x200', detail: '0', zpad: '0'}
+          - {resolution: '512x300', detail: '0', zpad: '0'}
+          - {resolution: '512x300', detail: '1', zpad: '0'}
+          - {resolution: '512x300', detail: '0', zpad: '32'}
+          - {resolution: '512x300', detail: '1', zpad: '64'}
     env:
       M5OS_QUAKE_RESOLUTION: ${{ matrix.resolution }}
       M5OS_QUAKE_DETAIL_PROFILE: ${{ matrix.detail }}
+      M5OS_QUAKE_ZPAD: ${{ matrix.zpad }}
     runs-on: ubuntu-24.04
     container: espressif/idf:v5.4.4
     timeout-minutes: 30
@@ -38,5 +41,6 @@ jobs:
             *) BUILD=build-quake ;;
           esac
           if [ "$M5OS_QUAKE_DETAIL_PROFILE" = 1 ]; then BUILD="$BUILD-profile"; fi
+          if [ "$M5OS_QUAKE_ZPAD" != 0 ]; then BUILD="$BUILD-zpad$M5OS_QUAKE_ZPAD"; fi
           python3 tools/quake/check_stack.py "$BUILD"
       # No PAK files, hardware flash, release upload or game-data redistribution.

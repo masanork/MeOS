@@ -18,6 +18,11 @@ uint32_t quake_owner=17;char quake_basedir[96]="/sd";
 static jmp_buf done;
 static unsigned frames;
 static uint64_t render_hash=UINT64_C(14695981039346656037);
+static uint64_t depth_hash=UINT64_C(14695981039346656037);
+extern short *d_pzbuffer;
+extern unsigned int d_zwidth;
+static unsigned depth_frames,padding_checks;
+static int padding_ready;
 static unsigned hashed_frames;
 static const char *data_root,*image_path;
 static unsigned char pal[768];
@@ -40,12 +45,28 @@ void QG_Quit(void){quake_exit(0);}
 void QG_SetPalette(unsigned char p[768]){memcpy(pal,p,768);}
 void QG_DrawFrame(void *pixels){
  frames++;
+ if(d_pzbuffer&&d_zwidth){
+  if(d_zwidth!=QV_Z_PITCH)quake_exit(1);
+  for(unsigned y=0;y<QV_HEIGHT;y++)for(unsigned x=QV_WIDTH;x<QV_Z_PITCH;x++){
+   short *z=d_pzbuffer+y*QV_Z_PITCH+x;
+   if(*z!=(padding_ready?(short)0x5a7f:0))quake_exit(1);
+   *z=(short)0x5a7f;
+  }
+  padding_ready=1;padding_checks++;
+ }
  /* Startup consoles contain the selected cache-size text. Compare gameplay
   * only, after signon and console animation have finished. */
  if(cls.signon==SIGNONS&&!scr_con_current){
   hashed_frames++;
   for(unsigned i=0;i<QV_PIXELS;i++)render_hash=(render_hash^((unsigned char *)pixels)[i])*UINT64_C(1099511628211);
   for(unsigned i=0;i<768;i++)render_hash=(render_hash^pal[i])*UINT64_C(1099511628211);
+  if(!d_pzbuffer||d_zwidth!=QV_Z_PITCH)quake_exit(1);
+  depth_frames++;
+  for(unsigned y=0;y<QV_HEIGHT;y++)for(unsigned x=0;x<QV_WIDTH;x++){
+   uint16_t z=(uint16_t)d_pzbuffer[y*QV_Z_PITCH+x];
+   depth_hash=(depth_hash^(z&255))*UINT64_C(1099511628211);
+   depth_hash=(depth_hash^(z>>8))*UINT64_C(1099511628211);
+  }
  }
  if(frames==20){FILE *f=fopen(image_path,"wb");if(!f)quake_exit(1);fprintf(f,"P6\n%d %d\n255\n",QV_WIDTH,QV_HEIGHT);for(unsigned i=0;i<QV_PIXELS;i++)fwrite(pal+((unsigned char *)pixels)[i]*3,1,3,f);fclose(f);}
 }
@@ -76,5 +97,7 @@ int main(int argc,char **argv){
  (unsigned long long)profile.cache[QC_PIXELS],(unsigned long long)profile.cache[QC_BYTES],
  (unsigned long long)profile.cache[QC_DYNAMIC],(unsigned long long)profile.cache[QC_TEXTURE],(unsigned long long)profile.cache[QC_LIGHTSTYLE]);
  printf("HEADLESS render hash: %016llx (%u gameplay frames)\n",(unsigned long long)render_hash,hashed_frames);
+ printf("HEADLESS depth hash: %016llx (%u gameplay frames), pitch=%u padding checks=%u\n",
+ (unsigned long long)depth_hash,depth_frames,QV_Z_PITCH,padding_checks);
  printf("HEADLESS frames=%u\n",frames);return frames>=20?0:1;
 }

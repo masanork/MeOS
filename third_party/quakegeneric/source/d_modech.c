@@ -49,8 +49,11 @@ void D_ViewChanged (void)
 	if (yscale > xscale)
 		scale_for_mip = yscale;
 
-	d_zrowbytes = vid.width * 2;
 	d_zwidth = vid.width;
+#if defined(M5OS_QUAKE_ZPAD) && M5OS_QUAKE_HIGHRES
+	d_zwidth += M5OS_QUAKE_ZPAD;
+#endif
+	d_zrowbytes = d_zwidth * 2;
 
 	d_pix_min = r_refdef.vrect.width / 320;
 	if (d_pix_min < 1)
