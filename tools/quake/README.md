@@ -599,3 +599,48 @@ The diagnostic 1,200-step run also matches the previous 1,181-frame gameplay
 hash `bfc101a42954ef9a`. Device timing is pending coordinated access: the first
 flash attempt could not lock USB while a Wi-Fi/SD coexistence test was running;
 it stopped before reading/writing the partition.
+
+## Experimental depth-buffer pitch (host-qualified only)
+
+The default remains zero padding. Optional high-resolution experiments add
+32 or 64 **shorts** to each depth row, changing its byte pitch from 1,024 to
+1,088 or 1,152. The visible indexed image stays packed at 512x300. This tests
+a cache-layout hypothesis; no hardware speedup has been measured. Additional
+PSRAM is 19,200 or 38,400 bytes through the existing private allocation path;
+internal heap/audio allocation is unchanged.
+
+```sh
+M5OS_QUAKE_RESOLUTION=512x300 M5OS_QUAKE_ZPAD=32 sh tools/quake/build.sh
+M5OS_QUAKE_RESOLUTION=512x300 M5OS_QUAKE_ZPAD=64 M5OS_QUAKE_DETAIL_PROFILE=1 sh tools/quake/build.sh
+```
+
+Outputs/configs gain `-zpad32` or `-zpad64` after any `-profile` suffix. Base
+configs are copied on first use, so normal outputs/configs stay separate.
+Unsupported values and nonzero padding in a native 320x200 build are rejected.
+The engine and adapter share the selected pitch, and startup identifies the
+experimental depth stride. CI retains existing normal/profile builds and adds
+both candidate combinations.
+
+Only allocation and the scalar depth row/table setup change. All compiled
+depth consumers use `d_zwidth` or `zspantable`; the legacy recursive line path
+inside `#if 0` is not supported. No rendering arithmetic or DMA layout changes.
+
+Five ASan real-engine runs (1,200 steps each) compare high-resolution padding
+0/32/64 and low-resolution 0/64. At 512x300 all three match the 1,181-frame
+color hash `bfc101a42954ef9a`, logical-depth hash `45a556bc1aa2751f`, frame-20
+image and surface-cache events. Every presentation validates
+the depth pitch; padded variants also check initially zero then canary-filled
+columns, for 1,210 guard invocations per run. Low-resolution logical
+stride remains 320 and its color/depth hashes also match.
+
+Native default `VID_Init` and `D_ViewChanged` unlinked machine-text bytes match
+the previous unpadded build. Both candidate native builds and stack checks,
+Quake/Doom host suites and the clean-source simulator pass. Exact identities
+and scope limits are in `zpad-host-2026-10-26.json`.
+
+No device access or flash was attempted for these candidates. Keep padding
+disabled until controlled sound-enabled, console-closed demo1 A/B runs can
+measure FPS and the diagnostic depth-span/world times, then verify display,
+controls, audio and normal quit/relaunch on Tab5. Host timing cannot establish
+a cache-layout benefit on ESP32-P4. The headless harness supports `--zpad` for
+repeatable color/depth comparisons without redistributing game data.
