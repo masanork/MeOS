@@ -906,6 +906,33 @@ static int cmd_wifi(int argc, char **argv)
                   d.icmp_requests,d.icmp_replies,d.icmp_reply_failures);
         SH_PRINTF("WIFI TIME poll_gap_us=%u poll_duration_us=%u bus_wait_us=%u\n",
                   d.poll_max_gap_us,d.poll_max_duration_us,d.bus_max_wait_us);
+        /* A complete timing row is larger than the normal 160-byte shell
+         * buffer. Keep each row in one bounded console write. */
+        char timing_line[512]; int timing_length;
+        for (unsigned i = 0; i < 2; i++) {
+            const wifi_sdio_diagnostics_t *b = &d.sdio[i];
+            timing_length = ksnprintf(timing_line,sizeof timing_line,"WIFI SDIO %s calls=%u errors=%u pre_idle_timeouts=%u post_idle_timeouts=%u wait_ms=%u prepare_ms=%u dma_ms=%u finish_ms=%u hold_ms=%u scheduled_ms=%u max_wait_us=%u max_hold_us=%u peak_prepare_us=%u peak_dma_us=%u peak_finish_us=%u peak_scheduled_us=%u peak_bytes=%u\n",
+                      i ? "WRITE" : "READ", b->calls,b->errors,b->pre_idle_timeouts,b->post_idle_timeouts,
+                      (uint32_t)(b->wait_us/1000u),(uint32_t)(b->prepare_us/1000u),(uint32_t)(b->dma_us/1000u),
+                      (uint32_t)(b->finish_us/1000u),(uint32_t)(b->hold_us/1000u),(uint32_t)(b->scheduled_us/1000u),
+                      b->max_wait_us,b->max_hold_us,b->peak_prepare_us,b->peak_dma_us,b->peak_finish_us,
+                      b->peak_scheduled_us,b->peak_bytes);
+            if (timing_length > 0 && (size_t)timing_length < sizeof timing_line)
+                sh_write(timing_line,(size_t)timing_length);
+            else sh_puts("wifi: diagnostic formatting overflow\n");
+            timing_length = ksnprintf(timing_line,sizeof timing_line,"WIFI WAIT %s max_wait_us=%u blocked_us=%u ready_us=%u other_us=%u owner_pid=%u contended=%u profiled=%u\n",
+                      i ? "WRITE" : "READ",b->max_wait_us,b->wait_peak_blocked_us,b->wait_peak_ready_us,
+                      b->wait_peak_other_us,b->wait_peak_owner_pid,b->wait_peak_contended,b->wait_peak_profiled);
+            if (timing_length > 0 && (size_t)timing_length < sizeof timing_line)
+                sh_write(timing_line,(size_t)timing_length);
+            else sh_puts("wifi: diagnostic formatting overflow\n");
+        }
+        timing_length = ksnprintf(timing_line,sizeof timing_line,"WIFI CMD52 calls=%u errors=%u hold_ms=%u scheduled_ms=%u max_hold_us=%u peak_scheduled_us=%u\n",
+                  d.cmd52.calls,d.cmd52.errors,(uint32_t)(d.cmd52.hold_us/1000u),
+                  (uint32_t)(d.cmd52.scheduled_us/1000u),d.cmd52.max_hold_us,d.cmd52.peak_scheduled_us);
+        if (timing_length > 0 && (size_t)timing_length < sizeof timing_line)
+            sh_write(timing_line,(size_t)timing_length);
+        else sh_puts("wifi: diagnostic formatting overflow\n");
         return 0;
     }
 #if M5OS_HAS_KEYBOARD

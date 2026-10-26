@@ -52,6 +52,7 @@ typedef struct task {
     size_t        stack_size;  /* usable bytes, excludes the low-end guard */
     bool          stack_guard_failed; /* latched until this TCB is reused */
     uint64_t      runtime_us;   /* scheduled wall time; includes ISR/kernel work */
+    uint64_t      mutex_granted_us; /* optional timed wait; UINT64_MAX disables */
 } task_t;
 
 /* Create a task; returns its pid (>0) or -1. */

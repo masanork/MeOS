@@ -3,10 +3,10 @@ set -eu
 cd "$(dirname "$0")/../.."
 OUT=$(mktemp -d "${TMPDIR:-/tmp}/meos-foundations.XXXXXX")
 trap 'rm -rf "$OUT"' EXIT
-for TEST in crash pi cleanup app time health; do
+for TEST in crash pi mutex_time cleanup app time health; do
     case "$TEST" in
         crash) SRC=kernel/lib/crash_record.c ;;
-        pi) SRC=kernel/ipc/mutex.c ;;
+        pi|mutex_time) SRC=kernel/ipc/mutex.c ;;
         cleanup) SRC=kernel/app/cleanup.c ;;
         app) SRC='kernel/app/app.c kernel/app/cleanup.c' ;;
         time) SRC='kernel/lib/utc.c kernel/lib/wall_time.c drivers/rtc/rtc_tab5.c' ;;

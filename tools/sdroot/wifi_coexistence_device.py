@@ -45,19 +45,62 @@ def checksum(data):
     return total ^ 65535
 
 
-def sd_io_stats(receipt):
+def sd_io_stats(receipt, require_wait=False):
     rows = {"read": {}, "write": {}}
     required = {"calls", "blocks", "errors", "wait_ms", "prepare_ms", "dma_ms",
                 "finish_ms", "hold_ms", "max_wait_us", "max_prepare_us",
                 "max_dma_us", "max_finish_us", "max_hold_us", "max_polls"}
+    if require_wait:
+        required |= {"wait_blocked_us", "wait_ready_us", "wait_other_us", "wait_owner_pid", "wait_contended", "wait_profiled"}
     for direction, limit, fields in re.findall(r"SDMMC (READ|WRITE) max_blocks=(\d+) ([^\n]+)", receipt):
         key = direction.lower()
         values = {name: int(value) for name, value in re.findall(r"([a-z_]+)=(\d+)", fields)}
         if limit in rows[key] or not required.issubset(values):
             raise RuntimeError("duplicate/incomplete SDMMC diagnostic row")
+        if require_wait:
+            if values["max_wait_us"] < 0xffffffff and sum(values[k] for k in ("wait_blocked_us", "wait_ready_us", "wait_other_us")) != values["max_wait_us"]:
+                raise RuntimeError("SDMMC wait parts do not match paired maximum")
+            if values["wait_contended"] > 1 or values["wait_profiled"] > 1 or (values["wait_contended"] and not values["wait_profiled"]):
+                raise RuntimeError("invalid SDMMC wait profiling flags")
+            if not values["wait_contended"] and (values["wait_blocked_us"] or values["wait_ready_us"] or values["wait_owner_pid"]):
+                raise RuntimeError("uncontended SDMMC wait has blocked/ready time")
         rows[key][limit] = values
     if any(set(table) != {"1", "8", "32", "128"} for table in rows.values()):
         raise RuntimeError("SDMMC diagnostic classes missing")
+    return rows
+
+
+def wifi_bus_stats(receipt):
+    common = {"calls", "errors", "hold_ms", "scheduled_ms", "max_hold_us", "peak_scheduled_us"}
+    transfer = common | {"pre_idle_timeouts", "post_idle_timeouts", "wait_ms", "prepare_ms",
+                         "dma_ms", "finish_ms", "max_wait_us", "peak_prepare_us", "peak_dma_us",
+                         "peak_finish_us", "peak_bytes"}
+    waiting = {"max_wait_us", "blocked_us", "ready_us", "other_us", "owner_pid", "contended", "profiled"}
+    rows = {}
+    for label, fields in re.findall(r"WIFI (SDIO READ|SDIO WRITE|WAIT READ|WAIT WRITE|CMD52) ([^\n]+)", receipt):
+        pairs = re.findall(r"([a-z_]+)=(\d+)", fields)
+        values = {name: int(value) for name, value in pairs}
+        required = waiting if label.startswith("WAIT ") else common if label == "CMD52" else transfer
+        if label in rows or len(pairs) != len(values) or not required.issubset(values):
+            raise RuntimeError("duplicate/incomplete Wi-Fi bus diagnostic row")
+        if not label.startswith("WAIT ") and values["peak_scheduled_us"] > values["max_hold_us"]:
+            raise RuntimeError("Wi-Fi scheduled time exceeds paired lock occupancy")
+        if label.startswith("SDIO ") and values["max_hold_us"] < 0xffffffff:
+            if sum(values[k] for k in ("peak_prepare_us", "peak_dma_us", "peak_finish_us")) != values["max_hold_us"]:
+                raise RuntimeError("Wi-Fi peak stages do not match paired lock occupancy")
+        rows[label] = values
+    if set(rows) != {"SDIO READ", "SDIO WRITE", "WAIT READ", "WAIT WRITE", "CMD52"}:
+        raise RuntimeError("Wi-Fi bus diagnostic rows missing")
+    for op in ("READ", "WRITE"):
+        w = rows["WAIT " + op]
+        if w["max_wait_us"] != rows["SDIO " + op]["max_wait_us"]:
+            raise RuntimeError("Wi-Fi wait peak does not match paired SDIO row")
+        if w["max_wait_us"] < 0xffffffff and sum(w[k] for k in ("blocked_us", "ready_us", "other_us")) != w["max_wait_us"]:
+            raise RuntimeError("Wi-Fi wait parts do not match paired maximum")
+        if w["contended"] > 1 or w["profiled"] > 1 or (w["contended"] and not w["profiled"]):
+            raise RuntimeError("invalid Wi-Fi wait profiling flags")
+        if not w["contended"] and (w["blocked_us"] or w["ready_us"] or w["owner_pid"]):
+            raise RuntimeError("uncontended Wi-Fi wait has blocked/ready time")
     return rows
 
 
@@ -190,6 +233,8 @@ def main():
                         help="record wifi stats counters on firmware that supports them")
     parser.add_argument("--sd-diagnostics", action="store_true",
                         help="record native SDMMC stage timings outside traffic phases")
+    parser.add_argument("--bus-diagnostics", action="store_true",
+                        help="require complete Wi-Fi SDIO/CMD52 timing rows with --diagnostics")
     parser.add_argument("--reset", action="store_true", help="reset the board, discarding unsaved RAM")
     parser.add_argument("--settle-seconds", type=int, default=0,
                         help="hold the serial connection open before measurements for background services")
@@ -197,6 +242,8 @@ def main():
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
+    if args.bus_diagnostics and not args.diagnostics:
+        parser.error("--bus-diagnostics requires --diagnostics")
     if (not 1 <= args.reads <= 10 or not 0 <= args.max_loss_percent <= 100 or
             not 0 <= args.settle_seconds <= 120 or
             not 1 <= args.burst_packets <= 16 or
@@ -282,21 +329,23 @@ def main():
 
             for _ in range(args.reads):
                 if args.sd_diagnostics:
-                    sd_io_stats(session.command("sd stats reset"))
+                    sd_io_stats(session.command("sd stats reset"), args.bus_diagnostics)
                 sample = verify_pak()
                 if args.sd_diagnostics:
-                    sample["sd_io"] = sd_io_stats(session.command("sd stats"))
+                    sample["sd_io"] = sd_io_stats(session.command("sd stats"), args.bus_diagnostics)
                 report["baseline"].append(sample)
             session.command("mem trim")
             free_before, _, _ = memory(session.command("mem"))
             report["trimmed_psram_before_kib"] = free_before
             for rate in args.pps:
                 if args.sd_diagnostics:
-                    sd_io_stats(session.command("sd stats reset"))
+                    sd_io_stats(session.command("sd stats reset"), args.bus_diagnostics)
                 if args.diagnostics:
                     receipt = session.command("wifi stats reset")
                     if "WIFI RX" not in receipt:
                         raise RuntimeError("Wi-Fi diagnostic firmware missing")
+                    if args.bus_diagnostics:
+                        wifi_bus_stats(receipt)
                 load = PingLoad(target, rate, burst_packets=args.burst_packets)
                 load.phase = "idle"
                 load.start()
@@ -339,8 +388,10 @@ def main():
                     if "icmp_requests" not in diag or "rx_partials" not in diag:
                         raise RuntimeError("Wi-Fi diagnostic receipt incomplete")
                     summary["device_diagnostics"] = diag
+                    if args.bus_diagnostics:
+                        summary["wifi_bus"] = wifi_bus_stats(receipt)
                 if args.sd_diagnostics:
-                    summary["sd_io"] = sd_io_stats(session.command("sd stats"))
+                    summary["sd_io"] = sd_io_stats(session.command("sd stats"), args.bus_diagnostics)
                 summary["pak"] = pak
                 summary["font_receipt"] = font.strip()
                 report["loads"].append(summary)
@@ -357,6 +408,8 @@ def main():
                     if any(row["errors"] for row in direction.values()):
                         failures.append("native SDMMC transfer error")
             for summary in report["loads"]:
+                if any(row.get("errors", 0) for row in summary.get("wifi_bus", {}).values()):
+                    failures.append("Wi-Fi bus command error")
                 if summary["invalid_replies"]:
                     failures.append("invalid ICMP reply payload/checksum")
                 diag = summary.get("device_diagnostics", {})

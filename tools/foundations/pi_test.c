@@ -9,6 +9,7 @@ task_t g_tasks[TASK_MAX];
 static task_t *current;
 static unsigned depth;
 static jmp_buf blocked;
+uint64_t hal_time_now_us(void) { assert(0 && "unprofiled mutex read the clock");return 0; }
 task_t *task_current(void) { return current; }
 uint32_t arch_irq_disable(void) { return depth++; }
 void arch_irq_restore(uint32_t old) { assert(depth==old+1); depth=old; }
@@ -22,7 +23,7 @@ static void block_on(task_t *t,mutex_t *m) {
     depth=0; /* simulate saved blocked task context; test subsequent independent events */
 }
 static void init(task_t *t,unsigned id,unsigned prio) {
-    *t=(task_t){.id=id,.priority=prio,.base_priority=prio,.state=TASK_RUNNABLE};
+    *t=(task_t){.id=id,.priority=prio,.base_priority=prio,.state=TASK_RUNNABLE,.mutex_granted_us=UINT64_MAX};
 }
 int main(void) {
     task_t *low=&g_tasks[1],*middle=&g_tasks[2],*high=&g_tasks[3],*other=&g_tasks[4];

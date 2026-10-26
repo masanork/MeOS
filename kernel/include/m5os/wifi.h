@@ -77,6 +77,20 @@ bool wifi_disconnect(void);
 /* Read current Wi-Fi status snapshot. */
 void wifi_get_status(wifi_status_t *out);
 
+/* Wall-time intervals include preemption. Peak fields belong to the same
+ * maximum-hold transfer; scheduled time also includes IRQ/kernel work. */
+typedef struct {
+    uint32_t calls, errors, pre_idle_timeouts, post_idle_timeouts;
+    uint64_t wait_us, prepare_us, dma_us, finish_us, hold_us, scheduled_us;
+    uint32_t max_wait_us, max_hold_us;
+    uint32_t wait_peak_blocked_us, wait_peak_ready_us, wait_peak_other_us;
+    uint32_t wait_peak_owner_pid, wait_peak_contended, wait_peak_profiled;
+    uint32_t peak_prepare_us, peak_dma_us, peak_finish_us, peak_scheduled_us, peak_bytes;
+} wifi_sdio_diagnostics_t;
+typedef struct {
+    uint32_t calls, errors, max_hold_us, peak_scheduled_us;
+    uint64_t hold_us, scheduled_us;
+} wifi_cmd52_diagnostics_t;
 /* Transport counters only; reset preserves pending RX fragments and protocol state. */
 typedef struct {
     uint32_t rx_frames, rx_partials, rx_bad_headers, rx_max_pending;
@@ -84,6 +98,8 @@ typedef struct {
     uint32_t tx_no_credit, tx_io_errors;
     uint32_t icmp_requests, icmp_replies, icmp_reply_failures;
     uint32_t poll_max_gap_us, poll_max_duration_us, bus_max_wait_us;
+    wifi_sdio_diagnostics_t sdio[2]; /* read, write */
+    wifi_cmd52_diagnostics_t cmd52;
 } wifi_diagnostics_t;
 void wifi_get_diagnostics(wifi_diagnostics_t *out);
 void wifi_reset_diagnostics(void);

@@ -73,6 +73,7 @@ int task_create_for_app(const char *name, void (*entry)(void *), void *arg, uint
         t->wait_timed_out = false;
         t->wakeup_us  = 0;
         t->runtime_us = 0;
+        t->mutex_granted_us = UINT64_MAX;
         t->sp         = arch_task_stack_init((uint8_t *)t->stack_base + TASK_STACK_GUARD_BYTES,
                                               t->stack_size, entry, arg);
         t->state      = TASK_RUNNABLE;            /* last: now visible to the scheduler */

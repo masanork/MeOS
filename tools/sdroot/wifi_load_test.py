@@ -3,7 +3,7 @@
 import struct
 import unittest
 
-from wifi_coexistence_device import PingLoad, checksum, MeasurementInvalid, validate_clock, sd_io_stats
+from wifi_coexistence_device import PingLoad, checksum, MeasurementInvalid, validate_clock, sd_io_stats, wifi_bus_stats
 
 
 def reply(load, index):
@@ -97,6 +97,33 @@ class IntegrityTests(unittest.TestCase):
         for invalid in ("\n".join(lines[:-1]), text + "\n" + lines[0], text.replace("max_polls=50", "")):
             with self.assertRaises(RuntimeError):
                 sd_io_stats(invalid)
+        waiting = "wait_blocked_us=40 wait_ready_us=50 wait_other_us=10 wait_owner_pid=3 wait_contended=1 wait_profiled=1"
+        full = "\n".join(line + " " + waiting for line in lines)
+        self.assertEqual(sd_io_stats(full, True)["read"]["128"]["wait_ready_us"], 50)
+        for invalid in (text, full.replace("wait_ready_us=50", "wait_ready_us=51"), full.replace("wait_contended=1", "wait_contended=0")):
+            with self.assertRaises(RuntimeError):
+                sd_io_stats(invalid, True)
+
+    def test_wifi_bus_receipts_require_all_rows_and_paired_peaks(self):
+        common = "calls=5 errors=0 hold_ms=4 scheduled_ms=3 max_hold_us=1000 peak_scheduled_us=800"
+        extra = "pre_idle_timeouts=0 post_idle_timeouts=0 wait_ms=1 prepare_ms=1 dma_ms=2 finish_ms=1 " \
+                "max_wait_us=200 peak_prepare_us=100 peak_dma_us=300 peak_finish_us=600 peak_bytes=1465"
+        lines = [f"WIFI SDIO {op} {common} {extra}" for op in ("READ", "WRITE")]
+        lines.append(f"WIFI CMD52 {common}")
+        lines.extend(f"WIFI WAIT {op} max_wait_us=200 blocked_us=100 ready_us=80 other_us=20 owner_pid=8 contended=1 profiled=1"
+                     for op in ("READ", "WRITE"))
+        receipt = "\n".join(lines)
+        self.assertEqual(wifi_bus_stats(receipt)["SDIO READ"]["peak_bytes"], 1465)
+        for invalid in ("\n".join(lines[:-1]), receipt + "\n" + lines[0],
+                        receipt.replace("peak_bytes=1465", ""),
+                        receipt.replace("peak_scheduled_us=800", "peak_scheduled_us=1001"),
+                        receipt.replace("peak_finish_us=600", "peak_finish_us=601"),
+                        receipt.replace("blocked_us=100", "blocked_us=101"),
+                        receipt.replace("contended=1", "contended=0"),
+                        receipt.replace("profiled=1", "profiled=0"),
+                        receipt.replace("calls=5", "calls=5 calls=6")):
+            with self.assertRaises(RuntimeError):
+                wifi_bus_stats(invalid)
 
 
 if __name__ == "__main__":

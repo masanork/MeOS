@@ -128,9 +128,13 @@ static wifi_sdio_rx_t s_rx_stream;
 static uint8_t      s_tx_packet_buf[2048];
 static wifi_diagnostics_t s_diag;
 static uint64_t s_last_rx_poll;
+static uint32_t bounded_us(uint64_t elapsed)
+{
+    return elapsed > UINT32_MAX ? UINT32_MAX : (uint32_t)elapsed;
+}
 static void record_max_us(uint32_t *value, uint64_t elapsed)
 {
-    uint32_t bounded = elapsed > UINT32_MAX ? UINT32_MAX : (uint32_t)elapsed;
+    uint32_t bounded = bounded_us(elapsed);
     if (bounded > *value) *value = bounded;
 }
 
@@ -370,11 +374,16 @@ static bool sdio_cmd52_locked(bool is_write, uint8_t fn, uint32_t addr,
     return true;
 }
 
+typedef struct {
+    uint64_t command_at, dma_done_at;
+    bool launched, pre_idle_timeout, post_idle_timeout;
+} sdio_stages_t;
+
 static bool sdio_cmd53_locked(bool is_write, uint8_t fn, uint32_t addr,
-                              bool block_mode, void *buf, size_t len)
+                              bool block_mode, void *buf, size_t len, sdio_stages_t *stages)
 {
     if (len == 0 || len > sizeof(s_dma_buf)) return false;
-    if (!sdmmc_wait_idle(200000u)) return false;
+    if (!sdmmc_wait_idle(200000u)) { stages->pre_idle_timeout = true; return false; }
 
     size_t block_size = block_mode ? SDIO_BLOCK_SIZE : len;
     size_t count      = block_mode ? (len / SDIO_BLOCK_SIZE) : (len == 512u ? 0u : len);
@@ -447,6 +456,8 @@ static bool sdio_cmd53_locked(bool is_write, uint8_t fn, uint32_t addr,
     cmd.use_hold_reg = 1;
     cmd.start_command = 1;
 
+    stages->command_at = hal_time_now_us();
+    stages->launched = true;
     SDMMC.cmd = cmd;
 
     uint32_t err_mask = SDMMC_LL_EVENT_RTO | SDMMC_LL_EVENT_DTO | SDMMC_LL_EVENT_HTO |
@@ -470,10 +481,13 @@ static bool sdio_cmd53_locked(bool is_write, uint8_t fn, uint32_t addr,
         esp_rom_delay_us(1);
     }
 
+    stages->dma_done_at = hal_time_now_us();
     sdmmc_ll_stop_dma(&SDMMC);
     SDMMC.rintsts.val = 0xFFFFFFFFu;
     SDMMC.idsts.val   = 0xFFFFFFFFu;
-    sdmmc_wait_idle(50000u);
+    /* Preserve the existing transfer result: this cleanup wait has always
+     * been observational, independently of the completed R5/DMA result. */
+    stages->post_idle_timeout = !sdmmc_wait_idle(50000u);
 
     if (ok && !is_write) {
         esp_cache_msync(s_dma_buf, sync_len, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
@@ -486,7 +500,16 @@ static bool sdio_cmd52(bool is_write, uint8_t fn, uint32_t addr,
                        uint8_t in_val, uint8_t *out_val)
 {
     sdmmc_bus_lock();
+    uint64_t held = hal_time_now_us(), scheduled = task_current_runtime_us();
     bool ok = sdio_cmd52_locked(is_write, fn, addr, in_val, out_val);
+    uint64_t ran = task_current_runtime_us() - scheduled;
+    uint64_t hold = hal_time_now_us() - held;
+    if (ran > hold) ran = hold;
+    wifi_cmd52_diagnostics_t *d = &s_diag.cmd52;
+    d->calls++; d->errors += !ok; d->hold_us += hold; d->scheduled_us += ran;
+    if (hold > d->max_hold_us) {
+        d->max_hold_us = bounded_us(hold); d->peak_scheduled_us = bounded_us(ran);
+    }
     sdmmc_bus_unlock();
     return ok;
 }
@@ -495,9 +518,42 @@ static bool sdio_cmd53(bool is_write, uint8_t fn, uint32_t addr,
                        bool block_mode, void *buf, size_t len)
 {
     uint64_t before = hal_time_now_us();
-    sdmmc_bus_lock();
-    record_max_us(&s_diag.bus_max_wait_us, hal_time_now_us() - before);
-    bool ok = sdio_cmd53_locked(is_write, fn, addr, block_mode, buf, len);
+    mutex_wait_info_t waiting;
+    sdmmc_bus_lock_timed(&waiting);
+    uint64_t held = hal_time_now_us(), scheduled = task_current_runtime_us();
+    uint64_t wait = held - before;
+    record_max_us(&s_diag.bus_max_wait_us, wait);
+    sdio_stages_t stages = {0};
+    bool ok = sdio_cmd53_locked(is_write, fn, addr, block_mode, buf, len, &stages);
+    uint64_t ran = task_current_runtime_us() - scheduled;
+    uint64_t done = hal_time_now_us(), hold = done - held;
+    if (ran > hold) ran = hold;
+    uint64_t prepare = stages.launched ? stages.command_at - held : hold;
+    uint64_t dma = stages.launched ? stages.dma_done_at - stages.command_at : 0;
+    uint64_t finish = stages.launched ? done - stages.dma_done_at : 0;
+    wifi_sdio_diagnostics_t *d = &s_diag.sdio[is_write ? 1 : 0];
+    d->calls++; d->errors += !ok;
+    d->pre_idle_timeouts += stages.pre_idle_timeout;
+    d->post_idle_timeouts += stages.post_idle_timeout;
+    d->wait_us += wait; d->prepare_us += prepare; d->dma_us += dma;
+    d->finish_us += finish; d->hold_us += hold; d->scheduled_us += ran;
+    if (wait > d->max_wait_us) {
+        uint64_t blocked = waiting.profiled && waiting.contended ? waiting.granted_us - waiting.entered_us : 0;
+        uint64_t ready = waiting.profiled && waiting.contended ? waiting.resumed_us - waiting.granted_us : 0;
+        uint64_t parts = blocked + ready;
+        d->max_wait_us = bounded_us(wait);
+        d->wait_peak_blocked_us = bounded_us(blocked);
+        d->wait_peak_ready_us = bounded_us(ready);
+        d->wait_peak_other_us = bounded_us(wait >= parts ? wait - parts : 0);
+        d->wait_peak_owner_pid = waiting.owner_pid;
+        d->wait_peak_contended = waiting.contended;
+        d->wait_peak_profiled = waiting.profiled;
+    }
+    if (hold > d->max_hold_us) {
+        d->max_hold_us = bounded_us(hold); d->peak_scheduled_us = bounded_us(ran);
+        d->peak_prepare_us = bounded_us(prepare); d->peak_dma_us = bounded_us(dma);
+        d->peak_finish_us = bounded_us(finish); d->peak_bytes = (uint32_t)len;
+    }
     sdmmc_bus_unlock();
     return ok;
 }

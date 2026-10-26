@@ -12,4 +12,8 @@ static bool can_block(void) { return sched_started() && arch_irq_enabled(); }
 void spi_bus_lock(void)   { if (can_block()) mutex_lock(&s_spi_bus); }
 void spi_bus_unlock(void) { if (can_block()) mutex_unlock(&s_spi_bus); }
 void sdmmc_bus_lock(void)   { if (can_block()) mutex_lock(&s_sdmmc_bus); }
+void sdmmc_bus_lock_timed(mutex_wait_info_t *out) {
+    if (can_block()) mutex_lock_timed(&s_sdmmc_bus,out);
+    else if (out) *out=(mutex_wait_info_t){0};
+}
 void sdmmc_bus_unlock(void) { if (can_block()) mutex_unlock(&s_sdmmc_bus); }

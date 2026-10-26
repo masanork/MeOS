@@ -189,6 +189,7 @@ void sched_init(void)
     idle->priority = TASK_PRIO_IDLE;
     s_current = idle;
     idle->runtime_us=0;
+    idle->mutex_granted_us=UINT64_MAX;
     s_accounted_at=hal_time_now_us();
 }
 

@@ -38,12 +38,14 @@ int shell_sd(int argc, char **argv)
         const unsigned limit[] = {1,8,32,128};
         for (unsigned write = 0; write < 2; write++) for (unsigned i = 0; i < SDCARD_IO_CLASSES; i++) {
             const sdcard_io_class_t *c = write ? &io.write[i] : &io.read[i];
-            kprintf("SDMMC %s max_blocks=%u calls=%u blocks=%u errors=%u wait_ms=%u prepare_ms=%u dma_ms=%u finish_ms=%u hold_ms=%u max_wait_us=%u max_prepare_us=%u max_dma_us=%u max_finish_us=%u max_hold_us=%u max_polls=%u\n",
+            kprintf("SDMMC %s max_blocks=%u calls=%u blocks=%u errors=%u wait_ms=%u prepare_ms=%u dma_ms=%u finish_ms=%u hold_ms=%u max_wait_us=%u max_prepare_us=%u max_dma_us=%u max_finish_us=%u max_hold_us=%u max_polls=%u wait_blocked_us=%u wait_ready_us=%u wait_other_us=%u wait_owner_pid=%u wait_contended=%u wait_profiled=%u\n",
                     write ? "WRITE" : "READ", limit[i], c->calls, c->blocks, c->errors,
                     (uint32_t)(c->wait_us/1000u), (uint32_t)(c->prepare_us/1000u),
                     (uint32_t)(c->dma_us/1000u), (uint32_t)(c->finish_us/1000u),
                     (uint32_t)(c->hold_us/1000u), c->max_wait_us, c->max_prepare_us,
-                    c->max_dma_us, c->max_finish_us, c->max_hold_us, c->max_polls);
+                    c->max_dma_us, c->max_finish_us, c->max_hold_us, c->max_polls,
+                    c->wait_blocked_us,c->wait_ready_us,c->wait_other_us,
+                    c->wait_owner_pid,c->wait_contended,c->wait_profiled);
         }
         return 0;
     }

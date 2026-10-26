@@ -1,0 +1,1973 @@
+{
+  "date": "2026-10-26",
+  "result": "PARTIAL",
+  "scope": "Earlier transfer/Wi-Fi-wait trials pass; the final image now boots, but its workload is blocked by an unavailable saved AP and then USB loss. Original OTA0 restoration is pending.",
+  "board": "M5Stack Tab5, ESP32-P4 revision 1.3",
+  "configuration": {
+    "sdkconfig_sha256": "2aaa7f1e3484ca57df92e655093a677af58e392832f033d2cf418421ed03654f",
+    "cpu_mhz": 360,
+    "psram_mhz": 200,
+    "sd_transport": "native SDMMC 4-bit at 20000 kHz",
+    "card_sectors": 30867456,
+    "persistent_sd_root": true,
+    "settle_seconds_per_run": 60,
+    "host_idle_sleep_prevented": "caffeinate -i for each workload"
+  },
+  "firmwares": {
+    "transfer_stages": {
+      "source_commit": "6f3e60e94177a6518bc141e81f46d4a1fc17ca51",
+      "bytes": 1775888,
+      "sha256": "509c337ff56368a75d9d206344486dc5a5df9f6a6870a4aa2c2e958dc475df62"
+    },
+    "wifi_wait": {
+      "source_commit": "00f5469df77a0c6162fe5287999ca0656092b192",
+      "bytes": 1776608,
+      "sha256": "8d6cdc367cdfd9a4f3b69adb41082fdc9b92877a72f353fb2db52de429db56de"
+    },
+    "both_wait": {
+      "source_commit": "f8cd1b74f42c8a3bc3b568a14e9b33da998c9e86",
+      "bytes": 1777056,
+      "sha256": "d8713e1ac07fa0ff5dabde6ebd19e229c438ace37c2f4b678f451df8a90a02bc",
+      "physical_workload": "NOT_RUN: Wi-Fi prerequisite failed before workload",
+      "boot_verified": true
+    }
+  },
+  "summary": {
+    "matching_crc_reads": 8,
+    "crc32": "74e3b084",
+    "crc_payload_bytes": 18689235,
+    "all_loaded_phases_zero_loss": true,
+    "idle_losses": [
+      {
+        "trial": "transfer_stages",
+        "pps": 25,
+        "sent": 69,
+        "received": 68,
+        "loss_percent": 1.449
+      },
+      {
+        "trial": "wifi_wait_uniform",
+        "pps": 25,
+        "sent": 69,
+        "received": 66,
+        "loss_percent": 4.348
+      }
+    ],
+    "native_sd_errors": 0,
+    "wifi_bus_command_errors": 0,
+    "sdio_pre_idle_timeouts": 0,
+    "sdio_post_idle_timeouts": 0,
+    "all_cmd52_counts_zero_in_postreset_windows": true,
+    "trimmed_psram_free_before_kib": 23135,
+    "trimmed_psram_free_after_kib": 23119,
+    "trimmed_psram_drop_kib": 16,
+    "memory_allowance_kib": 32,
+    "latency_improvement_claimed": false
+  },
+  "trials": [
+    {
+      "label": "transfer_stages",
+      "source_commit": "6f3e60e94177a6518bc141e81f46d4a1fc17ca51",
+      "report_sha256": "6b89a97a61e45991b977e1a4eba75c54d27b6010e4e88a1f51a989f3631dd647",
+      "serial_log_sha256": "8c4557746b14bbd360b3159e5a34e409ea6e0d5ab9e024b4793177fb9d26e19c",
+      "report": {
+        "result": "PASS",
+        "baseline": [
+          {
+            "seconds": 11.484,
+            "host_seconds": 11.523,
+            "wall_seconds": 11.523,
+            "device_ms": 11484,
+            "bytes": 18689235,
+            "crc32": "74e3b084",
+            "kib_per_second": 1589.3,
+            "sd_io": {
+              "read": {
+                "1": {
+                  "calls": 306,
+                  "blocks": 306,
+                  "errors": 0,
+                  "wait_ms": 22,
+                  "prepare_ms": 10,
+                  "dma_ms": 232,
+                  "finish_ms": 10,
+                  "hold_ms": 254,
+                  "max_wait_us": 9488,
+                  "max_prepare_us": 52,
+                  "max_dma_us": 10963,
+                  "max_finish_us": 758,
+                  "max_hold_us": 11032,
+                  "max_polls": 1043
+                },
+                "8": {
+                  "calls": 8,
+                  "blocks": 62,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 8,
+                  "finish_ms": 1,
+                  "hold_ms": 9,
+                  "max_wait_us": 2,
+                  "max_prepare_us": 30,
+                  "max_dma_us": 1091,
+                  "max_finish_us": 193,
+                  "max_hold_us": 1276,
+                  "max_polls": 912
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 286,
+                  "blocks": 36608,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 13,
+                  "dma_ms": 2229,
+                  "finish_ms": 895,
+                  "hold_ms": 3139,
+                  "max_wait_us": 8,
+                  "max_prepare_us": 59,
+                  "max_dma_us": 14480,
+                  "max_finish_us": 13560,
+                  "max_hold_us": 21373,
+                  "max_polls": 6682
+                }
+              },
+              "write": {
+                "1": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "8": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                }
+              }
+            }
+          }
+        ],
+        "loads": [
+          {
+            "pps": 25,
+            "payload_bytes": 1400,
+            "burst_packets": 1,
+            "invalid_replies": 0,
+            "phases": {
+              "idle": {
+                "sent": 69,
+                "received": 68,
+                "loss_percent": 1.449,
+                "rtt_median_ms": 22.145,
+                "rtt_p95_ms": 887.256
+              },
+              "pak": {
+                "sent": 262,
+                "received": 262,
+                "loss_percent": 0,
+                "rtt_median_ms": 17.884,
+                "rtt_p95_ms": 38.43
+              },
+              "font": {
+                "sent": 58,
+                "received": 58,
+                "loss_percent": 0,
+                "rtt_median_ms": 19.005,
+                "rtt_p95_ms": 55.651
+              },
+              "write": {
+                "sent": 32,
+                "received": 32,
+                "loss_percent": 0,
+                "rtt_median_ms": 20.38,
+                "rtt_p95_ms": 183.986
+              }
+            },
+            "device_diagnostics": {
+              "rx_frames": 632,
+              "rx_partials": 0,
+              "rx_bad": 0,
+              "rx_max_pending": 4460,
+              "rx_reg_errors": 0,
+              "rx_io_errors": 0,
+              "rx_plan_errors": 0,
+              "tx_no_credit": 0,
+              "tx_io_errors": 0,
+              "icmp_requests": 421,
+              "icmp_replies": 421,
+              "icmp_failures": 0,
+              "time_poll_gap_us": 250002,
+              "time_poll_duration_us": 232892,
+              "time_bus_wait_us": 70986
+            },
+            "wifi_bus": {
+              "SDIO READ": {
+                "calls": 2555,
+                "errors": 0,
+                "pre_idle_timeouts": 0,
+                "post_idle_timeouts": 0,
+                "wait_ms": 1867,
+                "prepare_ms": 69,
+                "dma_ms": 125,
+                "finish_ms": 28,
+                "hold_ms": 224,
+                "scheduled_ms": 219,
+                "max_wait_us": 70986,
+                "max_hold_us": 677,
+                "peak_prepare_us": 66,
+                "peak_dma_us": 518,
+                "peak_finish_us": 93,
+                "peak_scheduled_us": 675,
+                "peak_bytes": 4608
+              },
+              "SDIO WRITE": {
+                "calls": 1405,
+                "errors": 0,
+                "pre_idle_timeouts": 0,
+                "post_idle_timeouts": 0,
+                "wait_ms": 512,
+                "prepare_ms": 40,
+                "dma_ms": 80,
+                "finish_ms": 18,
+                "hold_ms": 139,
+                "scheduled_ms": 137,
+                "max_wait_us": 32823,
+                "max_hold_us": 303,
+                "peak_prepare_us": 96,
+                "peak_dma_us": 167,
+                "peak_finish_us": 40,
+                "peak_scheduled_us": 300,
+                "peak_bytes": 1536
+              },
+              "CMD52": {
+                "calls": 0,
+                "errors": 0,
+                "hold_ms": 0,
+                "scheduled_ms": 0,
+                "max_hold_us": 0,
+                "peak_scheduled_us": 0
+              }
+            },
+            "sd_io": {
+              "read": {
+                "1": {
+                  "calls": 524,
+                  "blocks": 524,
+                  "errors": 0,
+                  "wait_ms": 169,
+                  "prepare_ms": 18,
+                  "dma_ms": 402,
+                  "finish_ms": 16,
+                  "hold_ms": 439,
+                  "max_wait_us": 9988,
+                  "max_prepare_us": 60,
+                  "max_dma_us": 10753,
+                  "max_finish_us": 885,
+                  "max_hold_us": 10819,
+                  "max_polls": 1031
+                },
+                "8": {
+                  "calls": 70,
+                  "blocks": 447,
+                  "errors": 0,
+                  "wait_ms": 25,
+                  "prepare_ms": 2,
+                  "dma_ms": 84,
+                  "finish_ms": 9,
+                  "hold_ms": 96,
+                  "max_wait_us": 9161,
+                  "max_prepare_us": 61,
+                  "max_dma_us": 10764,
+                  "max_finish_us": 202,
+                  "max_hold_us": 11001,
+                  "max_polls": 1255
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 395,
+                  "blocks": 50560,
+                  "errors": 0,
+                  "wait_ms": 115,
+                  "prepare_ms": 28,
+                  "dma_ms": 3105,
+                  "finish_ms": 1310,
+                  "hold_ms": 4446,
+                  "max_wait_us": 67588,
+                  "max_prepare_us": 10370,
+                  "max_dma_us": 15933,
+                  "max_finish_us": 13162,
+                  "max_hold_us": 23094,
+                  "max_polls": 7024
+                }
+              },
+              "write": {
+                "1": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "8": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                }
+              }
+            },
+            "pak": [
+              {
+                "seconds": 11.335,
+                "host_seconds": 11.426,
+                "wall_seconds": 11.426,
+                "device_ms": 11335,
+                "bytes": 18689235,
+                "crc32": "74e3b084",
+                "kib_per_second": 1610.2
+              }
+            ],
+            "font_receipt": "24 px: load=246 ms metric=66331 us first=317600 us warm=6864 us misses=52 hits=72 raster=304198 us font=4667380 resident=0 cache=1082368 io=718836 reads=44 metrics=61/152"
+          },
+          {
+            "pps": 100,
+            "payload_bytes": 1400,
+            "burst_packets": 1,
+            "invalid_replies": 0,
+            "phases": {
+              "idle": {
+                "sent": 262,
+                "received": 262,
+                "loss_percent": 0,
+                "rtt_median_ms": 15.492,
+                "rtt_p95_ms": 24.191
+              },
+              "pak": {
+                "sent": 955,
+                "received": 955,
+                "loss_percent": 0,
+                "rtt_median_ms": 16.122,
+                "rtt_p95_ms": 35.58
+              },
+              "font": {
+                "sent": 216,
+                "received": 216,
+                "loss_percent": 0,
+                "rtt_median_ms": 22.263,
+                "rtt_p95_ms": 73.454
+              },
+              "write": {
+                "sent": 124,
+                "received": 124,
+                "loss_percent": 0,
+                "rtt_median_ms": 19.13,
+                "rtt_p95_ms": 125.903
+              }
+            },
+            "device_diagnostics": {
+              "rx_frames": 1836,
+              "rx_partials": 1,
+              "rx_bad": 0,
+              "rx_max_pending": 14540,
+              "rx_reg_errors": 0,
+              "rx_io_errors": 0,
+              "rx_plan_errors": 0,
+              "tx_no_credit": 0,
+              "tx_io_errors": 0,
+              "icmp_requests": 1557,
+              "icmp_replies": 1557,
+              "icmp_failures": 0,
+              "time_poll_gap_us": 240291,
+              "time_poll_duration_us": 222642,
+              "time_bus_wait_us": 79110
+            },
+            "wifi_bus": {
+              "SDIO READ": {
+                "calls": 5470,
+                "errors": 0,
+                "pre_idle_timeouts": 0,
+                "post_idle_timeouts": 0,
+                "wait_ms": 2124,
+                "prepare_ms": 151,
+                "dma_ms": 401,
+                "finish_ms": 75,
+                "hold_ms": 629,
+                "scheduled_ms": 577,
+                "max_wait_us": 31348,
+                "max_hold_us": 11132,
+                "peak_prepare_us": 20,
+                "peak_dma_us": 11061,
+                "peak_finish_us": 51,
+                "peak_scheduled_us": 375,
+                "peak_bytes": 2560
+              },
+              "SDIO WRITE": {
+                "calls": 3942,
+                "errors": 0,
+                "pre_idle_timeouts": 0,
+                "post_idle_timeouts": 0,
+                "wait_ms": 626,
+                "prepare_ms": 132,
+                "dma_ms": 339,
+                "finish_ms": 76,
+                "hold_ms": 548,
+                "scheduled_ms": 465,
+                "max_wait_us": 79110,
+                "max_hold_us": 11019,
+                "peak_prepare_us": 46,
+                "peak_dma_us": 167,
+                "peak_finish_us": 10806,
+                "peak_scheduled_us": 272,
+                "peak_bytes": 1536
+              },
+              "CMD52": {
+                "calls": 0,
+                "errors": 0,
+                "hold_ms": 0,
+                "scheduled_ms": 0,
+                "max_hold_us": 0,
+                "peak_scheduled_us": 0
+              }
+            },
+            "sd_io": {
+              "read": {
+                "1": {
+                  "calls": 524,
+                  "blocks": 524,
+                  "errors": 0,
+                  "wait_ms": 252,
+                  "prepare_ms": 18,
+                  "dma_ms": 384,
+                  "finish_ms": 16,
+                  "hold_ms": 420,
+                  "max_wait_us": 10051,
+                  "max_prepare_us": 62,
+                  "max_dma_us": 1613,
+                  "max_finish_us": 599,
+                  "max_hold_us": 1679,
+                  "max_polls": 1033
+                },
+                "8": {
+                  "calls": 70,
+                  "blocks": 447,
+                  "errors": 0,
+                  "wait_ms": 54,
+                  "prepare_ms": 2,
+                  "dma_ms": 83,
+                  "finish_ms": 9,
+                  "hold_ms": 95,
+                  "max_wait_us": 9538,
+                  "max_prepare_us": 60,
+                  "max_dma_us": 10605,
+                  "max_finish_us": 206,
+                  "max_hold_us": 10837,
+                  "max_polls": 1241
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 395,
+                  "blocks": 50560,
+                  "errors": 0,
+                  "wait_ms": 37,
+                  "prepare_ms": 17,
+                  "dma_ms": 3078,
+                  "finish_ms": 1357,
+                  "hold_ms": 4456,
+                  "max_wait_us": 6549,
+                  "max_prepare_us": 66,
+                  "max_dma_us": 15947,
+                  "max_finish_us": 63232,
+                  "max_hold_us": 71050,
+                  "max_polls": 7002
+                }
+              },
+              "write": {
+                "1": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "8": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                }
+              }
+            },
+            "pak": [
+              {
+                "seconds": 11.028,
+                "host_seconds": 11.127,
+                "wall_seconds": 11.127,
+                "device_ms": 11028,
+                "bytes": 18689235,
+                "crc32": "74e3b084",
+                "kib_per_second": 1655
+              }
+            ],
+            "font_receipt": "24 px: load=261 ms metric=64313 us first=337403 us warm=9931 us misses=52 hits=72 raster=325522 us font=4667380 resident=0 cache=1082368 io=718836 reads=44 metrics=61/152"
+          }
+        ],
+        "settle_seconds": 60,
+        "firmware_boot_version": "6f3e60e",
+        "host_clock": {
+          "monotonic_seconds": 133.489,
+          "wall_seconds": 133.49
+        },
+        "last_read_timing": {
+          "seconds": 11.028,
+          "host_seconds": 11.127,
+          "wall_seconds": 11.127,
+          "device_ms": 11028,
+          "bytes": 18689235,
+          "crc32": "74e3b084",
+          "kib_per_second": 1655
+        },
+        "trimmed_psram_before_kib": 23135,
+        "trimmed_psram_after_kib": 23119
+      }
+    },
+    {
+      "label": "wifi_wait_uniform",
+      "source_commit": "00f5469df77a0c6162fe5287999ca0656092b192",
+      "report_sha256": "8a31df97ff4e95aa66a58d4d0e8b78425a5bf259c41766ae03623159e5895a22",
+      "serial_log_sha256": "a7b30c6747db79cf8bbb273fc14313753a75c4957b174540bb5b49d0515903fa",
+      "report": {
+        "result": "PASS",
+        "baseline": [
+          {
+            "seconds": 11.445,
+            "host_seconds": 11.532,
+            "wall_seconds": 11.533,
+            "device_ms": 11445,
+            "bytes": 18689235,
+            "crc32": "74e3b084",
+            "kib_per_second": 1594.7,
+            "sd_io": {
+              "read": {
+                "1": {
+                  "calls": 306,
+                  "blocks": 306,
+                  "errors": 0,
+                  "wait_ms": 42,
+                  "prepare_ms": 12,
+                  "dma_ms": 225,
+                  "finish_ms": 9,
+                  "hold_ms": 247,
+                  "max_wait_us": 10610,
+                  "max_prepare_us": 886,
+                  "max_dma_us": 1458,
+                  "max_finish_us": 34,
+                  "max_hold_us": 1621,
+                  "max_polls": 1049
+                },
+                "8": {
+                  "calls": 8,
+                  "blocks": 62,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 18,
+                  "finish_ms": 11,
+                  "hold_ms": 29,
+                  "max_wait_us": 232,
+                  "max_prepare_us": 31,
+                  "max_dma_us": 11128,
+                  "max_finish_us": 10155,
+                  "max_hold_us": 11363,
+                  "max_polls": 915
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 286,
+                  "blocks": 36608,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 14,
+                  "dma_ms": 2234,
+                  "finish_ms": 881,
+                  "hold_ms": 3132,
+                  "max_wait_us": 10,
+                  "max_prepare_us": 65,
+                  "max_dma_us": 16883,
+                  "max_finish_us": 3971,
+                  "max_hold_us": 19696,
+                  "max_polls": 6668
+                }
+              },
+              "write": {
+                "1": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "8": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                }
+              }
+            }
+          }
+        ],
+        "loads": [
+          {
+            "pps": 25,
+            "payload_bytes": 1400,
+            "burst_packets": 1,
+            "invalid_replies": 0,
+            "phases": {
+              "idle": {
+                "sent": 69,
+                "received": 66,
+                "loss_percent": 4.348,
+                "rtt_median_ms": 19.793,
+                "rtt_p95_ms": 363.121
+              },
+              "pak": {
+                "sent": 261,
+                "received": 261,
+                "loss_percent": 0,
+                "rtt_median_ms": 17,
+                "rtt_p95_ms": 38.37
+              },
+              "font": {
+                "sent": 56,
+                "received": 56,
+                "loss_percent": 0,
+                "rtt_median_ms": 17.13,
+                "rtt_p95_ms": 60.615
+              },
+              "write": {
+                "sent": 31,
+                "received": 31,
+                "loss_percent": 0,
+                "rtt_median_ms": 21.738,
+                "rtt_p95_ms": 81.304
+              }
+            },
+            "device_diagnostics": {
+              "rx_frames": 664,
+              "rx_partials": 0,
+              "rx_bad": 0,
+              "rx_max_pending": 3724,
+              "rx_reg_errors": 0,
+              "rx_io_errors": 0,
+              "rx_plan_errors": 0,
+              "tx_no_credit": 0,
+              "tx_io_errors": 0,
+              "icmp_requests": 417,
+              "icmp_replies": 417,
+              "icmp_failures": 0,
+              "time_poll_gap_us": 140046,
+              "time_poll_duration_us": 129667,
+              "time_bus_wait_us": 68596
+            },
+            "wifi_bus": {
+              "SDIO READ": {
+                "calls": 2541,
+                "errors": 0,
+                "pre_idle_timeouts": 0,
+                "post_idle_timeouts": 0,
+                "wait_ms": 1805,
+                "prepare_ms": 69,
+                "dma_ms": 126,
+                "finish_ms": 28,
+                "hold_ms": 224,
+                "scheduled_ms": 219,
+                "max_wait_us": 20279,
+                "max_hold_us": 583,
+                "peak_prepare_us": 20,
+                "peak_dma_us": 485,
+                "peak_finish_us": 78,
+                "peak_scheduled_us": 581,
+                "peak_bytes": 4096
+              },
+              "WAIT READ": {
+                "max_wait_us": 20279,
+                "blocked_us": 9664,
+                "ready_us": 10608,
+                "other_us": 7,
+                "owner_pid": 8,
+                "contended": 1,
+                "profiled": 1
+              },
+              "SDIO WRITE": {
+                "calls": 1388,
+                "errors": 0,
+                "pre_idle_timeouts": 0,
+                "post_idle_timeouts": 0,
+                "wait_ms": 548,
+                "prepare_ms": 40,
+                "dma_ms": 79,
+                "finish_ms": 29,
+                "hold_ms": 149,
+                "scheduled_ms": 136,
+                "max_wait_us": 68596,
+                "max_hold_us": 10986,
+                "peak_prepare_us": 46,
+                "peak_dma_us": 168,
+                "peak_finish_us": 10772,
+                "peak_scheduled_us": 251,
+                "peak_bytes": 1536
+              },
+              "WAIT WRITE": {
+                "max_wait_us": 68596,
+                "blocked_us": 68407,
+                "ready_us": 186,
+                "other_us": 3,
+                "owner_pid": 8,
+                "contended": 1,
+                "profiled": 1
+              },
+              "CMD52": {
+                "calls": 0,
+                "errors": 0,
+                "hold_ms": 0,
+                "scheduled_ms": 0,
+                "max_hold_us": 0,
+                "peak_scheduled_us": 0
+              }
+            },
+            "sd_io": {
+              "read": {
+                "1": {
+                  "calls": 524,
+                  "blocks": 524,
+                  "errors": 0,
+                  "wait_ms": 208,
+                  "prepare_ms": 30,
+                  "dma_ms": 391,
+                  "finish_ms": 16,
+                  "hold_ms": 439,
+                  "max_wait_us": 9978,
+                  "max_prepare_us": 10347,
+                  "max_dma_us": 10542,
+                  "max_finish_us": 583,
+                  "max_hold_us": 11085,
+                  "max_polls": 1041
+                },
+                "8": {
+                  "calls": 70,
+                  "blocks": 447,
+                  "errors": 0,
+                  "wait_ms": 117,
+                  "prepare_ms": 2,
+                  "dma_ms": 84,
+                  "finish_ms": 9,
+                  "hold_ms": 96,
+                  "max_wait_us": 67199,
+                  "max_prepare_us": 60,
+                  "max_dma_us": 10177,
+                  "max_finish_us": 204,
+                  "max_hold_us": 10414,
+                  "max_polls": 1245
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 395,
+                  "blocks": 50560,
+                  "errors": 0,
+                  "wait_ms": 14,
+                  "prepare_ms": 21,
+                  "dma_ms": 3091,
+                  "finish_ms": 1271,
+                  "hold_ms": 4385,
+                  "max_wait_us": 1001,
+                  "max_prepare_us": 3079,
+                  "max_dma_us": 17608,
+                  "max_finish_us": 4177,
+                  "max_hold_us": 20519,
+                  "max_polls": 6929
+                }
+              },
+              "write": {
+                "1": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "8": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                }
+              }
+            },
+            "pak": [
+              {
+                "seconds": 11.235,
+                "host_seconds": 11.343,
+                "wall_seconds": 11.343,
+                "device_ms": 11235,
+                "bytes": 18689235,
+                "crc32": "74e3b084",
+                "kib_per_second": 1624.5
+              }
+            ],
+            "font_receipt": "24 px: load=248 ms metric=65260 us first=320115 us warm=7150 us misses=52 hits=72 raster=309990 us font=4667380 resident=0 cache=1082368 io=718836 reads=44 metrics=61/152"
+          },
+          {
+            "pps": 100,
+            "payload_bytes": 1400,
+            "burst_packets": 1,
+            "invalid_replies": 0,
+            "phases": {
+              "idle": {
+                "sent": 263,
+                "received": 263,
+                "loss_percent": 0,
+                "rtt_median_ms": 16.098,
+                "rtt_p95_ms": 26.274
+              },
+              "pak": {
+                "sent": 962,
+                "received": 962,
+                "loss_percent": 0,
+                "rtt_median_ms": 16.513,
+                "rtt_p95_ms": 35.307
+              },
+              "font": {
+                "sent": 225,
+                "received": 225,
+                "loss_percent": 0,
+                "rtt_median_ms": 21.525,
+                "rtt_p95_ms": 60.695
+              },
+              "write": {
+                "sent": 125,
+                "received": 125,
+                "loss_percent": 0,
+                "rtt_median_ms": 18.571,
+                "rtt_p95_ms": 107.421
+              }
+            },
+            "device_diagnostics": {
+              "rx_frames": 1812,
+              "rx_partials": 3,
+              "rx_bad": 0,
+              "rx_max_pending": 12086,
+              "rx_reg_errors": 0,
+              "rx_io_errors": 0,
+              "rx_plan_errors": 0,
+              "tx_no_credit": 0,
+              "tx_io_errors": 0,
+              "icmp_requests": 1575,
+              "icmp_replies": 1575,
+              "icmp_failures": 0,
+              "time_poll_gap_us": 200266,
+              "time_poll_duration_us": 186778,
+              "time_bus_wait_us": 69566
+            },
+            "wifi_bus": {
+              "SDIO READ": {
+                "calls": 5560,
+                "errors": 0,
+                "pre_idle_timeouts": 0,
+                "post_idle_timeouts": 0,
+                "wait_ms": 2057,
+                "prepare_ms": 153,
+                "dma_ms": 427,
+                "finish_ms": 87,
+                "hold_ms": 668,
+                "scheduled_ms": 582,
+                "max_wait_us": 69566,
+                "max_hold_us": 10977,
+                "peak_prepare_us": 20,
+                "peak_dma_us": 10922,
+                "peak_finish_us": 35,
+                "peak_scheduled_us": 264,
+                "peak_bytes": 1536
+              },
+              "WAIT READ": {
+                "max_wait_us": 69566,
+                "blocked_us": 68981,
+                "ready_us": 575,
+                "other_us": 10,
+                "owner_pid": 8,
+                "contended": 1,
+                "profiled": 1
+              },
+              "SDIO WRITE": {
+                "calls": 3996,
+                "errors": 0,
+                "pre_idle_timeouts": 0,
+                "post_idle_timeouts": 0,
+                "wait_ms": 583,
+                "prepare_ms": 134,
+                "dma_ms": 319,
+                "finish_ms": 75,
+                "hold_ms": 529,
+                "scheduled_ms": 471,
+                "max_wait_us": 18735,
+                "max_hold_us": 11000,
+                "peak_prepare_us": 10792,
+                "peak_dma_us": 168,
+                "peak_finish_us": 40,
+                "peak_scheduled_us": 288,
+                "peak_bytes": 1536
+              },
+              "WAIT WRITE": {
+                "max_wait_us": 18735,
+                "blocked_us": 10479,
+                "ready_us": 8253,
+                "other_us": 3,
+                "owner_pid": 8,
+                "contended": 1,
+                "profiled": 1
+              },
+              "CMD52": {
+                "calls": 0,
+                "errors": 0,
+                "hold_ms": 0,
+                "scheduled_ms": 0,
+                "max_hold_us": 0,
+                "peak_scheduled_us": 0
+              }
+            },
+            "sd_io": {
+              "read": {
+                "1": {
+                  "calls": 524,
+                  "blocks": 524,
+                  "errors": 0,
+                  "wait_ms": 334,
+                  "prepare_ms": 19,
+                  "dma_ms": 405,
+                  "finish_ms": 16,
+                  "hold_ms": 442,
+                  "max_wait_us": 69263,
+                  "max_prepare_us": 710,
+                  "max_dma_us": 11028,
+                  "max_finish_us": 889,
+                  "max_hold_us": 11091,
+                  "max_polls": 1038
+                },
+                "8": {
+                  "calls": 70,
+                  "blocks": 447,
+                  "errors": 0,
+                  "wait_ms": 63,
+                  "prepare_ms": 2,
+                  "dma_ms": 84,
+                  "finish_ms": 19,
+                  "hold_ms": 107,
+                  "max_wait_us": 10445,
+                  "max_prepare_us": 60,
+                  "max_dma_us": 11513,
+                  "max_finish_us": 10483,
+                  "max_hold_us": 11744,
+                  "max_polls": 1227
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 395,
+                  "blocks": 50560,
+                  "errors": 0,
+                  "wait_ms": 15,
+                  "prepare_ms": 18,
+                  "dma_ms": 3085,
+                  "finish_ms": 1278,
+                  "hold_ms": 4383,
+                  "max_wait_us": 1781,
+                  "max_prepare_us": 64,
+                  "max_dma_us": 15180,
+                  "max_finish_us": 13186,
+                  "max_hold_us": 21009,
+                  "max_polls": 7013
+                }
+              },
+              "write": {
+                "1": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "8": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                }
+              }
+            },
+            "pak": [
+              {
+                "seconds": 11.011,
+                "host_seconds": 11.111,
+                "wall_seconds": 11.111,
+                "device_ms": 11011,
+                "bytes": 18689235,
+                "crc32": "74e3b084",
+                "kib_per_second": 1657.5
+              }
+            ],
+            "font_receipt": "24 px: load=258 ms metric=65378 us first=339745 us warm=7157 us misses=52 hits=72 raster=330272 us font=4667380 resident=0 cache=1082368 io=718836 reads=44 metrics=61/152"
+          }
+        ],
+        "settle_seconds": 60,
+        "firmware_boot_version": "00f5469",
+        "host_clock": {
+          "monotonic_seconds": 133.529,
+          "wall_seconds": 133.53
+        },
+        "last_read_timing": {
+          "seconds": 11.011,
+          "host_seconds": 11.111,
+          "wall_seconds": 11.111,
+          "device_ms": 11011,
+          "bytes": 18689235,
+          "crc32": "74e3b084",
+          "kib_per_second": 1657.5
+        },
+        "trimmed_psram_before_kib": 23135,
+        "trimmed_psram_after_kib": 23119
+      }
+    },
+    {
+      "label": "wifi_wait_burst",
+      "source_commit": "00f5469df77a0c6162fe5287999ca0656092b192",
+      "report_sha256": "72f2d15bd94bd9882b94d8aea3e23ac31fe93eb7127e4f417b57862fea49920f",
+      "serial_log_sha256": "5709bd4bfd53d7dd732803cb3783fc070c590698fe91bb8f113b76aa4e8235e2",
+      "report": {
+        "result": "PASS",
+        "baseline": [
+          {
+            "seconds": 11.467,
+            "host_seconds": 11.504,
+            "wall_seconds": 11.504,
+            "device_ms": 11467,
+            "bytes": 18689235,
+            "crc32": "74e3b084",
+            "kib_per_second": 1591.6,
+            "sd_io": {
+              "read": {
+                "1": {
+                  "calls": 306,
+                  "blocks": 306,
+                  "errors": 0,
+                  "wait_ms": 22,
+                  "prepare_ms": 11,
+                  "dma_ms": 232,
+                  "finish_ms": 9,
+                  "hold_ms": 255,
+                  "max_wait_us": 9421,
+                  "max_prepare_us": 593,
+                  "max_dma_us": 11013,
+                  "max_finish_us": 586,
+                  "max_hold_us": 11072,
+                  "max_polls": 1051
+                },
+                "8": {
+                  "calls": 8,
+                  "blocks": 62,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 8,
+                  "finish_ms": 1,
+                  "hold_ms": 9,
+                  "max_wait_us": 122,
+                  "max_prepare_us": 30,
+                  "max_dma_us": 1083,
+                  "max_finish_us": 194,
+                  "max_hold_us": 1257,
+                  "max_polls": 915
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 286,
+                  "blocks": 36608,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 14,
+                  "dma_ms": 2229,
+                  "finish_ms": 891,
+                  "hold_ms": 3136,
+                  "max_wait_us": 13,
+                  "max_prepare_us": 60,
+                  "max_dma_us": 16464,
+                  "max_finish_us": 13271,
+                  "max_hold_us": 21062,
+                  "max_polls": 6672
+                }
+              },
+              "write": {
+                "1": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "8": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                }
+              }
+            }
+          }
+        ],
+        "loads": [
+          {
+            "pps": 100,
+            "payload_bytes": 1400,
+            "burst_packets": 12,
+            "invalid_replies": 0,
+            "phases": {
+              "idle": {
+                "sent": 300,
+                "received": 300,
+                "loss_percent": 0,
+                "rtt_median_ms": 23.19,
+                "rtt_p95_ms": 32.33
+              },
+              "pak": {
+                "sent": 1188,
+                "received": 1188,
+                "loss_percent": 0,
+                "rtt_median_ms": 23.367,
+                "rtt_p95_ms": 43.379
+              },
+              "font": {
+                "sent": 252,
+                "received": 252,
+                "loss_percent": 0,
+                "rtt_median_ms": 39.825,
+                "rtt_p95_ms": 451.178
+              },
+              "write": {
+                "sent": 144,
+                "received": 144,
+                "loss_percent": 0,
+                "rtt_median_ms": 185.229,
+                "rtt_p95_ms": 377.615
+              }
+            },
+            "device_diagnostics": {
+              "rx_frames": 2138,
+              "rx_partials": 275,
+              "rx_bad": 0,
+              "rx_max_pending": 27626,
+              "rx_reg_errors": 0,
+              "rx_io_errors": 0,
+              "rx_plan_errors": 0,
+              "tx_no_credit": 0,
+              "tx_io_errors": 0,
+              "icmp_requests": 1884,
+              "icmp_replies": 1884,
+              "icmp_failures": 0,
+              "time_poll_gap_us": 150009,
+              "time_poll_duration_us": 135962,
+              "time_bus_wait_us": 83583
+            },
+            "wifi_bus": {
+              "SDIO READ": {
+                "calls": 4562,
+                "errors": 0,
+                "pre_idle_timeouts": 0,
+                "post_idle_timeouts": 0,
+                "wait_ms": 2144,
+                "prepare_ms": 120,
+                "dma_ms": 407,
+                "finish_ms": 77,
+                "hold_ms": 605,
+                "scheduled_ms": 556,
+                "max_wait_us": 83583,
+                "max_hold_us": 11389,
+                "peak_prepare_us": 20,
+                "peak_dma_us": 11229,
+                "peak_finish_us": 140,
+                "peak_scheduled_us": 914,
+                "peak_bytes": 7680
+              },
+              "WAIT READ": {
+                "max_wait_us": 83583,
+                "blocked_us": 82428,
+                "ready_us": 1152,
+                "other_us": 3,
+                "owner_pid": 8,
+                "contended": 1,
+                "profiled": 1
+              },
+              "SDIO WRITE": {
+                "calls": 2884,
+                "errors": 0,
+                "pre_idle_timeouts": 0,
+                "post_idle_timeouts": 0,
+                "wait_ms": 161,
+                "prepare_ms": 128,
+                "dma_ms": 416,
+                "finish_ms": 85,
+                "hold_ms": 630,
+                "scheduled_ms": 503,
+                "max_wait_us": 20270,
+                "max_hold_us": 11021,
+                "peak_prepare_us": 10813,
+                "peak_dma_us": 167,
+                "peak_finish_us": 41,
+                "peak_scheduled_us": 267,
+                "peak_bytes": 1536
+              },
+              "WAIT WRITE": {
+                "max_wait_us": 20270,
+                "blocked_us": 11737,
+                "ready_us": 8523,
+                "other_us": 10,
+                "owner_pid": 8,
+                "contended": 1,
+                "profiled": 1
+              },
+              "CMD52": {
+                "calls": 0,
+                "errors": 0,
+                "hold_ms": 0,
+                "scheduled_ms": 0,
+                "max_hold_us": 0,
+                "peak_scheduled_us": 0
+              }
+            },
+            "sd_io": {
+              "read": {
+                "1": {
+                  "calls": 524,
+                  "blocks": 524,
+                  "errors": 0,
+                  "wait_ms": 157,
+                  "prepare_ms": 21,
+                  "dma_ms": 412,
+                  "finish_ms": 16,
+                  "hold_ms": 451,
+                  "max_wait_us": 10448,
+                  "max_prepare_us": 959,
+                  "max_dma_us": 11581,
+                  "max_finish_us": 600,
+                  "max_hold_us": 11651,
+                  "max_polls": 1072
+                },
+                "8": {
+                  "calls": 70,
+                  "blocks": 447,
+                  "errors": 0,
+                  "wait_ms": 17,
+                  "prepare_ms": 2,
+                  "dma_ms": 83,
+                  "finish_ms": 9,
+                  "hold_ms": 96,
+                  "max_wait_us": 8788,
+                  "max_prepare_us": 62,
+                  "max_dma_us": 10374,
+                  "max_finish_us": 716,
+                  "max_hold_us": 10603,
+                  "max_polls": 1261
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 395,
+                  "blocks": 50560,
+                  "errors": 0,
+                  "wait_ms": 33,
+                  "prepare_ms": 19,
+                  "dma_ms": 3169,
+                  "finish_ms": 1369,
+                  "hold_ms": 4558,
+                  "max_wait_us": 8651,
+                  "max_prepare_us": 894,
+                  "max_dma_us": 69184,
+                  "max_finish_us": 13663,
+                  "max_hold_us": 82828,
+                  "max_polls": 6948
+                }
+              },
+              "write": {
+                "1": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "8": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "32": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                },
+                "128": {
+                  "calls": 0,
+                  "blocks": 0,
+                  "errors": 0,
+                  "wait_ms": 0,
+                  "prepare_ms": 0,
+                  "dma_ms": 0,
+                  "finish_ms": 0,
+                  "hold_ms": 0,
+                  "max_wait_us": 0,
+                  "max_prepare_us": 0,
+                  "max_dma_us": 0,
+                  "max_finish_us": 0,
+                  "max_hold_us": 0,
+                  "max_polls": 0
+                }
+              }
+            },
+            "pak": [
+              {
+                "seconds": 12.286,
+                "host_seconds": 12.323,
+                "wall_seconds": 12.323,
+                "device_ms": 12286,
+                "bytes": 18689235,
+                "crc32": "74e3b084",
+                "kib_per_second": 1485.5
+              }
+            ],
+            "font_receipt": "24 px: load=252 ms metric=62319 us first=309800 us warm=6965 us misses=52 hits=72 raster=299977 us font=4667380 resident=0 cache=1082368 io=718836 reads=44 metrics=61/152"
+          }
+        ],
+        "settle_seconds": 60,
+        "firmware_boot_version": "00f5469",
+        "host_clock": {
+          "monotonic_seconds": 114.175,
+          "wall_seconds": 114.175
+        },
+        "last_read_timing": {
+          "seconds": 12.286,
+          "host_seconds": 12.323,
+          "wall_seconds": 12.323,
+          "device_ms": 12286,
+          "bytes": 18689235,
+          "crc32": "74e3b084",
+          "kib_per_second": 1485.5
+        },
+        "trimmed_psram_before_kib": 23135,
+        "trimmed_psram_after_kib": 23119
+      }
+    }
+  ],
+  "handoff": {
+    "original_boot_version": "333a366",
+    "original_boot_slot": "ota_0 at 0x410000",
+    "preflight_serial_log_sha256": "b4cd02e85414d45f1154e79e0a2415d9fdbab9f9d17fb99322bb869c0ce86681",
+    "otadata_before_log_sha256": "041cb94bc19c1052ab2d262edaa93d6306b0db6b59e25362c5e674ff709f79b3",
+    "original_ota_0_and_factory_applications_modified": false,
+    "bootloader_or_partition_table_modified": false,
+    "changed_regions": [
+      "measurement OTA1 at 0x7f0000",
+      "boot selection at 0x400000"
+    ],
+    "new_backup_taken": false,
+    "backup_omission_previously_authorized": true,
+    "last_successful_selection": "OTA1 for final qualification after verified original OTA0 boot",
+    "last_successful_selection_log_sha256": "e2313aadb93bde3742d4bc69ef0d776f01cefd385b5bc926574c0c4f40650a1f",
+    "latest_ota_1_write_verified": true,
+    "latest_install_log_sha256": "90808ed5bdcd18f8406aa89d87021bba2f6716b9beda18161a1eaded28fb0576",
+    "final_activation": "PASS after USB reconnection; f8cd1b7 boot verified at 0x7f0000",
+    "failed_activation_log_sha256": "6ca5f8334b21ba5ee896e50bad71c180851c4ae85a54ba247fb76e3029f157c7",
+    "final_workload": "NOT_RUN: saved AP not found (reason 201), then USB serial absent again",
+    "failed_workload_output_sha256": "0eae689905bf388e70d75006a7592931cc10a7a445bff162372eeeb571737f24",
+    "boot_readback_after_last_selection": "VERIFIED: f8cd1b7 on OTA1",
+    "sd_reformatted": false,
+    "original_ota0_readback_after_reconnection": "VERIFIED: 333a366 at 0x410000, active native SD root",
+    "reconnect_preflight_serial_log_sha256": "35351375a08dadd0db7d20083bbc40ac7edb4e18a875f33a5d725ccd4d0621b0",
+    "reconnect_image_verify_log_sha256": "c8907e4144b814aafcb4f53d40d57c9f676c6cf4baa378bca6ceb7ff5234c757",
+    "restore_original_ota0": "PENDING_USB_RECONNECTION"
+  },
+  "limitations": [
+    "CMD52 counts were zero after each reset; no postboot CMD52 performance qualification is claimed.",
+    "The two idle phases lost 1/69 and 3/69 replies; all workload phases had zero loss. Idle RTT spikes are retained and not attributed to the controller.",
+    "The first firmware has transfer-stage rows only; the second adds Wi-Fi wait rows. Neither has final native-SD wait breakdowns.",
+    "Driver hold timing excludes ownership-to-driver-entry and counter/unlock edges, so it does not bound total ownership duration.",
+    "The largest Wi-Fi waits were mostly before ownership grant with initial owner PID 8 (shell); that identifies an ownership interval, not proof of slow SD wire transfer.",
+    "The final native-SD image booted and loaded the dictionary, but its workload stopped at the Wi-Fi prerequisite. Later offline measurement could not start because USB serial disappeared again. Restoration of original OTA0 remains pending.",
+    "Instrumentation overhead is not calibrated. This measures one board/card and does not qualify write performance, power loss, boot speed or a latency improvement.",
+    "Raw serial transcripts may contain network identity; only their hashes and sanitized reports are published."
+  ],
+  "prior_usb_interruption": {
+    "original_boot_version": "333a366",
+    "original_boot_slot": "ota_0 at 0x410000",
+    "preflight_serial_log_sha256": "b4cd02e85414d45f1154e79e0a2415d9fdbab9f9d17fb99322bb869c0ce86681",
+    "otadata_before_log_sha256": "041cb94bc19c1052ab2d262edaa93d6306b0db6b59e25362c5e674ff709f79b3",
+    "original_ota_0_and_factory_applications_modified": false,
+    "bootloader_or_partition_table_modified": false,
+    "changed_regions": [
+      "measurement OTA1 at 0x7f0000",
+      "boot selection at 0x400000"
+    ],
+    "new_backup_taken": false,
+    "backup_omission_previously_authorized": true,
+    "last_successful_selection": "OTA0 before final OTA1 install",
+    "last_successful_selection_log_sha256": "9de9ac2ebbd610eac9e1d170ee0aa0c92cd7c906bf228df883373136be4b4c6e",
+    "latest_ota_1_write_verified": true,
+    "latest_install_log_sha256": "90808ed5bdcd18f8406aa89d87021bba2f6716b9beda18161a1eaded28fb0576",
+    "final_activation": "FAILED before partition-table read: /dev/cu.usbmodem101 absent",
+    "failed_activation_log_sha256": "6ca5f8334b21ba5ee896e50bad71c180851c4ae85a54ba247fb76e3029f157c7",
+    "final_workload": "NOT_STARTED: serial port absent",
+    "failed_workload_output_sha256": "0eae689905bf388e70d75006a7592931cc10a7a445bff162372eeeb571737f24",
+    "boot_readback_after_last_selection": "PENDING_USB_RECONNECTION",
+    "sd_reformatted": false
+  },
+  "reconnection": {
+    "preflight_log_sha256": "35351375a08dadd0db7d20083bbc40ac7edb4e18a875f33a5d725ccd4d0621b0",
+    "image_verify_log_sha256": "c8907e4144b814aafcb4f53d40d57c9f676c6cf4baa378bca6ceb7ff5234c757",
+    "activation_log_sha256": "e2313aadb93bde3742d4bc69ef0d776f01cefd385b5bc926574c0c4f40650a1f",
+    "final_firmware_attempt": {
+      "result": "FAILED_PREREQUISITE",
+      "report": {
+        "result": "FAIL",
+        "baseline": [],
+        "loads": [],
+        "settle_seconds": 60,
+        "firmware_boot_version": "f8cd1b7",
+        "host_clock": {
+          "monotonic_seconds": 81.568,
+          "wall_seconds": 81.569
+        },
+        "error": "Tab5 is not connected to Wi-Fi"
+      },
+      "report_sha256": "04ff9b49b89e5db86929e786f116d8bec29ef3c81f3d908ccc13031ea1393dad",
+      "serial_log_sha256": "bac8610c5986865989a7214893463522b97b7fe780bab51333877ca0099d46bc"
+    },
+    "wifi_scan": {
+      "result": "saved AP absent",
+      "networks_found": 4,
+      "disconnect_reason": 201,
+      "ssid_or_credentials_changed": false,
+      "serial_log_sha256": "a1237f9dea21329abca6a597c938cd1b613fbf97366dbd66c18ddcd6d457c759"
+    },
+    "offline_attempt": {
+      "result": "NOT_STARTED",
+      "reason": "USB serial absent again",
+      "output_sha256": "b26105e10a70e58559ccb168d20859f98b877651048fdf67bcadba195d5a7317"
+    }
+  }
+}
