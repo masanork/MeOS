@@ -99,17 +99,20 @@ static bool transfer_batch(unsigned bank,const column_span *spans,unsigned count
 }
 #endif
 bool tab5_dma_copy_begin(uint32_t who,uint16_t *framebuffer){
- if(!who||owner||disabled||!framebuffer||((uintptr_t)framebuffer&127u)||!clocks(true))return false;
+ if(!who||owner||disabled||!framebuffer||((uintptr_t)framebuffer&127u)){
+  kprintf("dma-copy: begin rejected who %u owner %u disabled %u fb alignment %u\n",who,owner,(unsigned)disabled,(unsigned)((uintptr_t)framebuffer&127u));return false;
+ }
+ if(!clocks(true)){kputs("dma-copy: existing DMA2D clock owner; CPU retained\n");return false;}
  owner=who;fb=framebuffer;dma2d_ll_hw_enable(hw,true);
 #if M5OS_QUAKE_HIGHRES
  /* Linked internal DRAM is tight. Allocate once from the kernel's internal
   * heap, with no app owner, so buffers remain alive even after a forced exit. */
  if(!source_raw)source_raw=kmalloc_internal(2*sizeof *source+127);
- if(!source_raw){tab5_dma_copy_end(who);return false;}
+ if(!source_raw){kputs("dma-copy: no internal memory for source banks\n");tab5_dma_copy_end(who);return false;}
  source=(void *)(((uintptr_t)source_raw+127)&~(uintptr_t)127);
 #endif
  if(!test_raw)test_raw=kmalloc_psram(4608+127);
- if(!test_raw){tab5_dma_copy_end(who);return false;}
+ if(!test_raw){kputs("dma-copy: no PSRAM for self-test\n");tab5_dma_copy_end(who);return false;}
  test=(uint16_t *)(((uintptr_t)test_raw+127)&~(uintptr_t)127);
 #if M5OS_QUAKE_HIGHRES
  uint16_t *probe=source[0][0];unsigned probe_pixels=600,probe_capacity=640;

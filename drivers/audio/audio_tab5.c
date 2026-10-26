@@ -26,6 +26,13 @@
 #define CH 2
 #define BLOCKS 8
 #define FRAMES 512
+/* Optional quiet bench image: ES8388 DAC attenuation uses 0.5 dB steps.
+ * Keep the normal -18 dB setting; 191 selects -95.5 dB without soft-muting. */
+#if M5OS_AUDIO_QUIET
+#define DAC_ATTENUATION 191
+#else
+#define DAC_ATTENUATION 36
+#endif
 typedef struct { dma_descriptor_t d; uint8_t pad[AUDIO_ALIGN-sizeof(dma_descriptor_t)]; } __attribute__((aligned(AUDIO_ALIGN))) cache_desc_t;
 _Static_assert(sizeof(cache_desc_t)==AUDIO_ALIGN,"one descriptor per hardware cache line");
 _Static_assert((FRAMES*4)%AUDIO_ALIGN==0,"PCM blocks must span complete cache lines");
@@ -156,12 +163,18 @@ bool audio_open(uint32_t owner, audio_render_t render, void *arg)
     static const uint8_t setup[][2] = {
         {25,0x24}, {0,0x80}, {0,0}, {0,0x0e}, {1,0}, {2,0x0a}, {3,0xff},
         {4,0xc0}, {5,0}, {6,0}, {7,0x7c}, {8,0}, {23,0x18}, {24,0},
-        {25,0x24}, {26,36}, {27,36}, {28,8}, {29,0}, {38,0},
+        {25,0x24}, {26,DAC_ATTENUATION}, {27,DAC_ATTENUATION}, {28,8}, {29,0}, {38,0},
         {39,0x90}, {42,0x90}, {43,8}, {45,0}, {46,0x1e}, {47,0x1e},
         {48,0x1e}, {49,0x1e}, {4,0x3c}
     };
     for (unsigned i = 0; i < sizeof setup / sizeof setup[0]; i++)
         { stage=100+setup[i][0]; if (!reg(setup[i][0], setup[i][1])) goto fail; }
+#if M5OS_AUDIO_QUIET
+    /* Verify attenuation while the amp is off, before any sound can start. */
+    uint8_t left,right;stage=5;
+    if (!hal_i2c_sys_read_regs(0x10,26,&left,1) || !hal_i2c_sys_read_regs(0x10,27,&right,1) ||
+        left!=DAC_ATTENUATION || right!=DAC_ATTENUATION) goto fail;
+#endif
     stage=3;
     if (!s_task) {
         if (task_create_for_app("audio", worker, NULL, 3, 4096, NULL) < 0) goto fail;
@@ -175,7 +188,12 @@ bool audio_open(uint32_t owner, audio_render_t render, void *arg)
     start_dma(); s_busy = true;
     task_sleep(30);
     if (!reg(25,0x20) || !amp(true)) { audio_close(owner); return false; }
-    kputs("audio: ES8388 24000Hz stereo, DMA TX2, -18dB\n"); return true;
+#if M5OS_AUDIO_QUIET
+    kputs("audio: ES8388 24000Hz stereo, DMA TX2, -95.5dB; L/R verified before amp enable\n");
+#else
+    kputs("audio: ES8388 24000Hz stereo, DMA TX2, -18dB\n");
+#endif
+    return true;
 fail:
     kprintf("audio: initialization failed at stage %u\n",stage);
     if (stage > 1) { amp(false); reg(25,0x24); reg(4,0xc0); reg(2,0xff); }

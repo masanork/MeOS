@@ -48,7 +48,7 @@ void arch_irq_restore(uint32_t flags){(void)flags;}
 void *kmalloc_psram(size_t n){return malloc(n);}
 void *kmalloc_internal(size_t n){if(fail_internal)return NULL;internal_allocations++;return malloc(n);}
 void kputs(const char *s){(void)s;}
-void kprintf(const char *fmt,...){(void)fmt;assert(!"Unexpected DMA fault");}
+void kprintf(const char *fmt,...){assert(!strstr(fmt,"stopped, status"));}
 int esp_cache_msync(void *p,size_t n,int flags){(void)flags;assert(!((uintptr_t)p&127u)&&!(n&127u));return 0;}
 static uint16_t actual[1280*720+128] __attribute__((aligned(128))),expected[1280*720+128],rgb[QV_PIXELS];
 static uint8_t pixels[QV_PIXELS] __attribute__((aligned(16))),previous[QV_PIXELS] __attribute__((aligned(16))),unchanged[QV_PIXELS];
