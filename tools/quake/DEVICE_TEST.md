@@ -286,7 +286,7 @@ Detailed evidence and incomplete qualification are recorded in
 `dma-batch-device-2026-10-26.json`. Human display/audio acceptance remains
 separate from automated pixel checks and PCM counters.
 
-## Quiet renderer profile — 2026-10-26 (partial)
+## Quiet renderer profile and Z-pitch comparison — 2026-10-26
 
 Quiet normal/profile images select DAC attenuation 191 (-95.5 dB), read back
 both channels before amp enable, and retain effect mixing/DMA. Default gain
@@ -305,7 +305,19 @@ clock; CPU fallback runs are excluded. An esptool watchdog reset restored a
 claimable module, after which fresh normal game exits and USB resets retained
 working DMA. Do not reset/take an actively owned module to force a benchmark.
 
-Zpad32 was flashed, but USB enumeration disappeared before its first monitored
-boot. Both Z-pitch performance comparisons, final display/control/listening
-acceptance and pitch selection remain pending reconnection. The prepared
-images remain quiet. Evidence: `quiet-profile-device-2026-10-26.json`.
+USB reconnection enabled both pitch candidates: zpad32 51.6 / 51.7 s
+(18.8 / 18.7 FPS), zpad64 51.7 / 51.8 s (18.7 / 18.7 FPS), 969 frames each.
+All four starts passed exact DMA and quiet DAC readback; all four exits had
+positive PCM and zero underruns/errors. Sampled stack guards passed at peaks
+29,952 / 49,152 (zpad32) and 29,888 / 49,152 bytes (zpad64).
+
+Observed mean duration reductions versus the earlier normal pair are 1.34%
+and 1.15%; the runs were sequential, not interleaved. Three later normal
+starts failed audio stage 4 (internal PCM allocation), including a watchdog
+reset, so no new normal benchmark was accepted. This allocation issue is an
+open qualification limit; a later zpad32 startup also reproduced it, so it is
+not confined to the normal image. Default padding remains zero. Final device image
+is quiet zpad32, playable with exact DMA, but its last startup failed audio
+allocation and is silent. Serial was released without resetting the screen.
+Manual display/control/listening acceptance
+remains separate. Evidence: `quiet-profile-device-2026-10-26.json`.
