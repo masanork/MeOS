@@ -24,8 +24,9 @@
 #include "sdkconfig.h"
 #define AUDIO_ALIGN CONFIG_CACHE_L2_CACHE_LINE_SIZE
 #define CH 2
-#define BLOCKS 8
-#define FRAMES 512
+#include "pcm_pool.h"
+#define BLOCKS AUDIO_PCM_BLOCKS
+#define FRAMES AUDIO_PCM_FRAMES
 /* Optional quiet bench image: ES8388 DAC attenuation uses 0.5 dB steps.
  * Keep the normal -18 dB setting; 191 selects -95.5 dB without soft-muting. */
 #if M5OS_AUDIO_QUIET
@@ -37,8 +38,7 @@ typedef struct { dma_descriptor_t d; uint8_t pad[AUDIO_ALIGN-sizeof(dma_descript
 _Static_assert(sizeof(cache_desc_t)==AUDIO_ALIGN,"one descriptor per hardware cache line");
 _Static_assert((FRAMES*4)%AUDIO_ALIGN==0,"PCM blocks must span complete cache lines");
 static cache_desc_t s_desc[BLOCKS];
-static int16_t *s_pcm;
-static void *s_allocation;
+static audio_pcm_pool_t s_pcm_pool;
 static mutex_t s_playback_lock = MUTEX_INIT;
 static const char s_resource_owner;
 static const peripheral_t s_resources[] = { PERIPHERAL_I2S0, PERIPHERAL_AHB_DMA_TX2 };
@@ -96,13 +96,13 @@ static bool hardware(void)
 static void start_dma(void)
 {
     s_next = 0;
-    memset(s_pcm, 0, BLOCKS * FRAMES * 4);
     for (unsigned i = 0; i < BLOCKS; i++) {
+        memset(s_pcm_pool.pcm[i], 0, AUDIO_PCM_BYTES);
+        esp_cache_msync(s_pcm_pool.pcm[i], AUDIO_PCM_BYTES, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
         s_desc[i].d = (dma_descriptor_t){ .dw0 = { .size = FRAMES * 4,
             .length = FRAMES * 4, .suc_eof = 1, .owner = 1 },
-            .buffer = s_pcm + i * FRAMES * 2, .next = &s_desc[(i + 1) % BLOCKS].d };
+            .buffer = s_pcm_pool.pcm[i], .next = &s_desc[(i + 1) % BLOCKS].d };
     }
-    esp_cache_msync(s_pcm, BLOCKS*FRAMES*4, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     esp_cache_msync(s_desc, sizeof s_desc, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
     __asm__ volatile("fence iorw,iorw" ::: "memory");
     ahb_dma_ll_tx_clear_interrupt_status(&AHB_DMA, CH, GDMA_LL_TX_EVENT_MASK);
@@ -127,9 +127,9 @@ static void worker(void *arg)
             esp_cache_msync(&s_desc[i], AUDIO_ALIGN, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
             volatile dma_descriptor_t *d = &s_desc[i].d;
             if (d->dw0.owner) break;
-            s_render(s_pcm + i * FRAMES * 2, FRAMES, s_arg);
+            s_render(s_pcm_pool.pcm[i], FRAMES, s_arg);
             __asm__ volatile("fence iorw,iorw" ::: "memory");
-            esp_cache_msync(s_pcm + i*FRAMES*2, FRAMES*4, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+            esp_cache_msync(s_pcm_pool.pcm[i], FRAMES*4, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
             d->dw0.owner = 1;
             esp_cache_msync(&s_desc[i], AUDIO_ALIGN, ESP_CACHE_MSYNC_FLAG_DIR_C2M); s_blocks++; s_next = (i + 1) % BLOCKS;
         }
@@ -181,9 +181,14 @@ bool audio_open(uint32_t owner, audio_render_t render, void *arg)
         s_task = true;
     }
     stage=4;
-    s_allocation = kmalloc_internal(BLOCKS * FRAMES * 4 + AUDIO_ALIGN-1);
-    if (!s_allocation) goto fail;
-    s_pcm = (int16_t *)(((uintptr_t)s_allocation+AUDIO_ALIGN-1)&~(uintptr_t)(AUDIO_ALIGN-1));
+    kmem_stats_t before;
+    kmem_internal_stats(&before);
+    int pcm_mode = audio_pcm_allocate(&s_pcm_pool);
+    if (pcm_mode != AUDIO_PCM_CONTIGUOUS)
+        kprintf("audio: PCM %s; internal before: free %u, largest %u bytes\n",
+                pcm_mode == AUDIO_PCM_SPLIT ? "8 split blocks" : "allocation failed",
+                (unsigned)before.free, (unsigned)before.largest_free);
+    if (pcm_mode == AUDIO_PCM_FAILED) goto fail;
     s_owner = owner; s_render = render; s_arg = arg; s_blocks = s_errors = 0;
     start_dma(); s_busy = true;
     task_sleep(30);
@@ -210,8 +215,10 @@ void audio_close(uint32_t owner)
     s_busy = false;
     release_hardware();
     s_render = NULL;
-    void *p = s_allocation; s_allocation = NULL; s_pcm = NULL; s_owner = 0; s_claimed = false;
-    arch_irq_restore(irq); kfree(p);
+    s_owner = 0;
+    arch_irq_restore(irq);
+    audio_pcm_release(&s_pcm_pool);
+    irq = arch_irq_disable(); s_claimed = false; arch_irq_restore(irq);
     mutex_unlock(&s_playback_lock);
     kprintf("audio: stopped, %u blocks, %u underruns/errors\n", s_blocks, s_errors);
 }

@@ -25,3 +25,6 @@ done
     -DM5OS_BOARD_TAB5=1 -Ikernel/include tools/hardware/board_test.c \
     hal/esp32p4/board_tab5.c -o "$OUT/board"
 "$OUT/board"
+
+# Shared Tab5 audio allocation: same ring capacity under internal-heap fragmentation.
+sh tools/audio/host_test.sh
